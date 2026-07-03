@@ -54,3 +54,22 @@ def test_config(tmp_path, test_cert_and_key) -> Config:
     (secrets / "homo.key").write_bytes(key_pem)
     (tmp_path / "data").mkdir()
     return Config(env="homo", home=tmp_path, cuit=None, key_passphrase=None)
+
+
+def seed_params(conn) -> None:
+    """Cache arca_params fresco con los códigos usados en los tests."""
+    from facturador import db
+
+    db.replace_params(conn, "moneda", [
+        {"code": "DOL", "description": "Dolar Estadounidense"},
+        {"code": "PES", "description": "Pesos Argentinos"},
+    ])
+    db.replace_params(conn, "pais", [{"code": "225", "description": "URUGUAY"}])
+    db.replace_params(conn, "cuit_pais", [
+        {"code": "55000002002", "description": "URUGUAY - Persona Juridica"},
+    ])
+    db.replace_params(conn, "idioma", [{"code": "1", "description": "Espanol"}])
+    db.replace_params(conn, "umed", [{"code": "7", "description": "unidades"}])
+    db.replace_params(conn, "cbte_tipo", [
+        {"code": "19", "description": "Facturas de Exportacion"},
+    ])

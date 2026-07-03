@@ -31,6 +31,7 @@ def test_no_existe_forma_de_mezclar_ambiente_y_certificado(tmp_path):
         "home",
         "cuit",
         "key_passphrase",
+        "punto_venta",
     }
 
 

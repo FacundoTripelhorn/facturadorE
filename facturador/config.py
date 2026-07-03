@@ -39,6 +39,7 @@ class Config:
     home: Path        # raíz de datos (secrets/, data/, backups/)
     cuit: int | None  # emisor; None => se extrae del certificado en runtime
     key_passphrase: str | None
+    punto_venta: int = 1  # en homo es libre; en prod, el PV RECE exclusivo
 
     @property
     def wsaa_url(self) -> str:
@@ -81,11 +82,16 @@ def load_config(env_file: str | Path | None = ".env") -> Config:
             raise ConfigError("ARCA_CUIT debe ser 11 dígitos sin guiones")
         cuit = int(cuit_raw)
 
+    punto_venta_raw = os.environ.get("ARCA_PUNTO_VTA", "1").strip()
+    if not punto_venta_raw.isdigit() or int(punto_venta_raw) < 1:
+        raise ConfigError("ARCA_PUNTO_VTA debe ser un entero >= 1")
+
     config = Config(
         env=env,
         home=home,
         cuit=cuit,
         key_passphrase=os.environ.get("ARCA_KEY_PASSPHRASE") or None,
+        punto_venta=int(punto_venta_raw),
     )
     validate_config(config)
     return config

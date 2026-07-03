@@ -1,0 +1,352 @@
+"""Fase 4 — API + máquina de estados.
+
+Cubre los tests exigidos por spike.md §4 fase 4: idempotencia de authorize,
+reproceso verificado, escaping XML con datos hostiles vía API, rechazo con
+errores legibles; más lock anti doble-submit, reconciliación de 'unknown' y
+chequeo de DB desactualizada.
+"""
+
+import datetime as dt
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from facturador import db, repo
+from facturador.api import create_app
+from facturador.wsaa import Ticket
+from facturador.wsfex import WsfexClient
+from tests.arca_fake import FakeArca
+from tests.conftest import seed_params
+
+
+class _FakeWsaa:
+    def get_ticket(self):
+        return Ticket(
+            token="tok==",
+            sign="sig==",
+            generation=dt.datetime.now(dt.timezone.utc),
+            expiration=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+            service="wsfex",
+            environment="homo",
+        )
+
+
+@pytest.fixture
+def arca() -> FakeArca:
+    return FakeArca()
+
+
+@pytest.fixture
+def api(test_config, arca, tmp_path):
+    conn = db.connect(tmp_path / "data" / "test.db")
+    seed_params(conn)
+    wsfex = WsfexClient(
+        test_config,
+        wsaa=_FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(config=test_config, conn=conn, wsfex=wsfex)
+    client = TestClient(app)
+    client.conn = conn  # para asserts directos sobre la DB
+    return client
+
+
+CLIENTE = {
+    "razon_social": "CLIENTE URUGUAY S.A.",
+    "domicilio": "Av. Siempreviva 123, Montevideo",
+    "pais_dst": 225,
+    "cuit_pais": 55000002002,
+    "id_impositivo": "RUT 219999830019",
+    "descripcion_default": "Servicios de desarrollo de software",
+    "is_default": True,
+}
+
+
+def _crear_cliente(api, **overrides):
+    r = api.post("/clients", json={**CLIENTE, **overrides})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def _crear_draft(api, **overrides):
+    r = api.post("/invoices", json={"imp_total": "1500.00", **overrides})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+# --- clientes ---
+
+
+def test_alta_de_cliente_valida_codigos_contra_arca_params(api):
+    r = api.post("/clients", json={**CLIENTE, "pais_dst": 999})
+    assert r.status_code == 422
+    assert "pais_dst" in r.json()["detail"]
+
+
+def test_cliente_default_es_unico(api):
+    primero = _crear_cliente(api)
+    _crear_cliente(api, razon_social="OTRO S.A.", is_default=True)
+    clientes = api.get("/clients").json()
+    defaults = [c for c in clientes if c["is_default"]]
+    assert len(defaults) == 1
+    assert defaults[0]["razon_social"] == "OTRO S.A."
+    assert primero["id"] != defaults[0]["id"]
+
+
+def test_editar_cliente_no_toca_facturas_autorizadas(api, arca):
+    cliente = _crear_cliente(api)
+    draft = _crear_draft(api)
+    api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    api.put(
+        f"/clients/{cliente['id']}",
+        json={**CLIENTE, "razon_social": "RENOMBRADO S.A."},
+    )
+    factura = api.get(f"/invoices/{draft['id']}").json()
+    assert factura["cliente"] == "CLIENTE URUGUAY S.A."  # snapshot intacto
+
+
+# --- creación de drafts ---
+
+
+def test_caso_feliz_semanal_solo_monto(api, arca):
+    """§0.1: con cliente default alcanza el monto; el resto se precarga."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    assert draft["status"] == "draft"
+    assert draft["cliente"] == CLIENTE["razon_social"]
+    assert draft["dst_cmp"] == 225
+    assert draft["moneda_id"] == "DOL"
+    assert draft["moneda_ctz"] == arca.ctz  # cotización ARCA automática
+    assert draft["fecha_cbte"] == dt.date.today().strftime("%Y%m%d")
+    assert draft["fecha_pago"] == draft["fecha_cbte"]
+    assert draft["incoterms"] == ""  # servicios
+    assert len(draft["items"]) == 1
+    item = draft["items"][0]
+    assert item["pro_ds"] == CLIENTE["descripcion_default"]
+    assert item["pro_qty"] == "1"
+    assert item["pro_umed"] == 7
+    assert item["pro_precio_uni"] == "1500.00"
+
+
+def test_sin_cliente_default_ni_client_id_es_conflicto(api):
+    r = api.post("/invoices", json={"imp_total": "100.00"})
+    assert r.status_code == 409
+
+
+def test_imp_total_distinto_de_items_es_error_de_dominio(api):
+    _crear_cliente(api)
+    r = api.post(
+        "/invoices",
+        json={
+            "imp_total": "100.00",
+            "items": [{"pro_ds": "Servicio", "pro_precio_uni": "99.00"}],
+        },
+    )
+    assert r.status_code == 422
+    assert "imp_total" in r.json()["detail"]
+
+
+def test_monto_invalido_rechazado_por_pydantic(api):
+    _crear_cliente(api)
+    r = api.post("/invoices", json={"imp_total": "-5"})
+    assert r.status_code == 422
+
+
+# --- authorize: caso feliz e idempotencia ---
+
+
+def test_authorize_asigna_numeracion_de_arca_y_guarda_cae(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 200, r.text
+    factura = r.json()
+    assert factura["status"] == "authorized"
+    assert factura["arca_id"] == 1          # FEXGetLast_ID + 1
+    assert factura["cbte_nro"] == 1         # FEXGetLast_CMP + 1
+    assert factura["cae"] == "76100000000001"
+    assert factura["cae_fch_vto"] == "20260713"
+    assert arca.calls["FEXAuthorize"] == 1
+    assert arca.calls["FEXGetCMP"] == 1     # verificación post-emisión
+
+
+def test_authorize_es_idempotente(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    primera = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true").json()
+    segunda = api.post(f"/invoices/{draft['id']}/authorize").json()
+    assert segunda["cae"] == primera["cae"]
+    assert arca.calls["FEXAuthorize"] == 1  # la segunda no tocó ARCA
+
+
+# --- rechazo con errores legibles ---
+
+
+def test_rechazo_deja_error_legible_y_no_permite_reintentar(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.authorize_mode = "reject"
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 200
+    factura = r.json()
+    assert factura["status"] == "rejected"
+    assert factura["cae"] is None
+    assert "1068" in factura["last_error"]
+    assert "Id_impositivo" in factura["last_error"]
+
+    arca.authorize_mode = "ok"
+    retry = api.post(f"/invoices/{draft['id']}/authorize")
+    assert retry.status_code == 409  # corregir => nueva factura
+
+
+# --- unknown + reconciliación + reproceso ---
+
+
+def test_timeout_post_envio_reconcilia_en_get(api, arca):
+    """El caso 'unknown' clave: ARCA emitió pero la respuesta se perdió."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.authorize_mode = "timeout_but_issued"
+    factura = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true").json()
+    assert factura["status"] == "unknown"
+    assert "Sin respuesta" in factura["last_error"]
+
+    arca.authorize_mode = "ok"
+    reconciliada = api.get(f"/invoices/{draft['id']}").json()
+    assert reconciliada["status"] == "authorized"
+    assert reconciliada["cae"] == "76100000000001"  # recuperado de FEXGetCMP
+    assert arca.calls["FEXAuthorize"] == 1  # nunca se re-envió
+
+
+def test_timeout_sin_emision_reintenta_con_mismo_id(api, arca):
+    """Reproceso verificado (checklist §2.1.1 punto 3) de punta a punta."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.authorize_mode = "timeout"
+    factura = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true").json()
+    assert factura["status"] == "unknown"
+    arca_id_original = factura["arca_id"]
+    cbte_nro_original = factura["cbte_nro"]
+
+    arca.authorize_mode = "ok"
+    retry = api.post(f"/invoices/{draft['id']}/authorize").json()
+    assert retry["status"] == "authorized"
+    assert retry["arca_id"] == arca_id_original      # mismo Id idempotente
+    assert retry["cbte_nro"] == cbte_nro_original    # mismos datos
+    assert arca.issued[(19, 1, cbte_nro_original)]["arca_id"] == arca_id_original
+
+
+def test_reconciliacion_detecta_comprobante_ajeno(api, arca):
+    """Si ARCA registra nuestro número con OTRO importe, jamás adoptar el CAE."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.authorize_mode = "timeout_but_issued"
+    api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    # Alguien (otra máquina) emitió con nuestro número y otro importe:
+    arca.issued[(19, 1, 1)]["imp_total"] = "999999.00"
+
+    factura = api.get(f"/invoices/{draft['id']}").json()
+    assert factura["status"] == "unknown"
+    assert "Revisión manual" in factura["last_error"]
+    assert factura["cae"] is None
+
+
+# --- lock anti doble-submit ---
+
+
+def test_submitting_reciente_bloquea_doble_submit(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    repo.update_invoice(api.conn, draft["id"], status="submitting")
+    r = api.post(f"/invoices/{draft['id']}/authorize")
+    assert r.status_code == 409
+    assert "en curso" in r.json()["detail"]
+
+
+# --- chequeo de DB desactualizada (§2.5) ---
+
+
+def test_db_desactualizada_bloquea_emision(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.last_cmp[(1, 19)] = 5  # ARCA conoce 5 comprobantes; DB local, 0
+    r = api.post(f"/invoices/{draft['id']}/authorize")
+    assert r.status_code == 409
+    assert "desactualizado" in r.json()["detail"]
+    # La factura vuelve a draft (el lock no queda tomado).
+    assert api.get(f"/invoices/{draft['id']}").json()["status"] == "draft"
+
+    forzada = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert forzada.status_code == 200
+    assert forzada.json()["cbte_nro"] == 6
+
+
+# --- escaping XML con datos hostiles vía API (checklist punto 4) ---
+
+
+def test_datos_hostiles_de_cliente_viajan_escapados(api, arca):
+    _crear_cliente(
+        api,
+        razon_social='PYME </Cliente><Imp_total>1</Imp_total> & "CO"',
+        domicilio="Ruta <8> km 1 & 1/2",
+    )
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    # El fake parsea cada request con ET.fromstring: si la inyección hubiera
+    # roto el XML, esto habría fallado. El valor llega intacto y escapado.
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "authorized"
+    assert arca.last_authorize_cliente == 'PYME </Cliente><Imp_total>1</Imp_total> & "CO"'
+    assert arca.issued[(19, 1, 1)]["imp_total"] == "1500.00"
+
+
+# --- params, cotización y salud ---
+
+
+def test_params_se_sirven_del_cache_sin_tocar_arca(api, arca):
+    r = api.get("/params/moneda")
+    assert r.status_code == 200
+    assert {p["code"] for p in r.json()} == {"DOL", "PES"}
+    assert arca.calls["FEXGetPARAM_MON"] == 0
+
+
+def test_params_kind_invalido(api):
+    assert api.get("/params/noexiste").status_code == 404
+
+
+def test_cotizacion_del_dia(api, arca):
+    r = api.get("/params/currency/DOL/rate")
+    assert r.status_code == 200
+    assert r.json() == {
+        "moneda_id": "DOL",
+        "fecha": "20260703",
+        "cotizacion": "1145.5690",
+    }
+
+
+def test_health_arca(api):
+    r = api.get("/health/arca")
+    assert r.status_code == 200
+    assert r.json() == {
+        "environment": "homo",
+        "appserver": "OK",
+        "dbserver": "OK",
+        "authserver": "OK",
+    }
+
+
+def test_pdf_todavia_no_implementado(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    assert api.get(f"/invoices/{draft['id']}/pdf").status_code == 501
+    assert api.get("/invoices/inexistente/pdf").status_code == 404
+
+
+def test_listado_paginado(api, arca):
+    _crear_cliente(api)
+    for _ in range(3):
+        _crear_draft(api)
+    assert len(api.get("/invoices").json()) == 3
+    assert len(api.get("/invoices?limit=2").json()) == 2
+    assert len(api.get("/invoices?limit=2&offset=2").json()) == 1
