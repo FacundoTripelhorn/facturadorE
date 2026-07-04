@@ -1,86 +1,11 @@
-"""Acceso a datos de clients / invoices / invoice_items.
-
-Convenciones: ids uuid4 hex; montos como TEXT (str de Decimal, nunca float);
-fechas de comprobante AAAAMMDD; timestamps ISO UTC.
-"""
+"""Acceso a datos de invoices / invoice_items, incluido el lock de submit."""
 
 from __future__ import annotations
 
 import datetime as dt
 import sqlite3
-import uuid
 
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat()
-
-
-def _new_id() -> str:
-    return uuid.uuid4().hex
-
-
-# --- clients ---
-
-CLIENT_FIELDS = (
-    "razon_social",
-    "domicilio",
-    "pais_dst",
-    "cuit_pais",
-    "id_impositivo",
-    "moneda_default",
-    "incoterms_default",
-    "idioma_default",
-    "forma_pago_default",
-    "descripcion_default",
-    "is_default",
-)
-
-
-def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
-    client_id = _new_id()
-    now = _now()
-    with conn:
-        if data.get("is_default"):
-            conn.execute("UPDATE clients SET is_default = 0")
-        conn.execute(
-            f"INSERT INTO clients (id, {', '.join(CLIENT_FIELDS)}, created_at, updated_at)"
-            f" VALUES (?{', ?' * len(CLIENT_FIELDS)}, ?, ?)",
-            (client_id, *(data[f] for f in CLIENT_FIELDS), now, now),
-        )
-    return get_client(conn, client_id)
-
-
-def update_client(conn: sqlite3.Connection, client_id: str, data: dict) -> sqlite3.Row | None:
-    if get_client(conn, client_id) is None:
-        return None
-    with conn:
-        if data.get("is_default"):
-            conn.execute("UPDATE clients SET is_default = 0")
-        conn.execute(
-            f"UPDATE clients SET {', '.join(f'{f} = ?' for f in CLIENT_FIELDS)},"
-            " updated_at = ? WHERE id = ?",
-            (*(data[f] for f in CLIENT_FIELDS), _now(), client_id),
-        )
-    return get_client(conn, client_id)
-
-
-def get_client(conn: sqlite3.Connection, client_id: str) -> sqlite3.Row | None:
-    return conn.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
-
-
-def get_default_client(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM clients WHERE is_default = 1 LIMIT 1"
-    ).fetchone()
-
-
-def list_clients(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM clients ORDER BY is_default DESC, razon_social"
-    ).fetchall()
-
-
-# --- invoices ---
+from ._common import new_id, now
 
 INVOICE_FIELDS = (
     "client_id",
@@ -110,13 +35,14 @@ INVOICE_FIELDS = (
 def create_invoice(
     conn: sqlite3.Connection, data: dict, items: list[dict]
 ) -> sqlite3.Row:
-    invoice_id = _new_id()
-    now = _now()
+    invoice_id = new_id()
+    ts = now()
     with conn:
         conn.execute(
-            f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)}, status, created_at, updated_at)"
+            f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)},"
+            " status, created_at, updated_at)"
             f" VALUES (?{', ?' * len(INVOICE_FIELDS)}, 'draft', ?, ?)",
-            (invoice_id, *(data[f] for f in INVOICE_FIELDS), now, now),
+            (invoice_id, *(data[f] for f in INVOICE_FIELDS), ts, ts),
         )
         for item in items:
             conn.execute(
@@ -125,7 +51,7 @@ def create_invoice(
                 "  pro_precio_uni, pro_total_item)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    _new_id(),
+                    new_id(),
                     invoice_id,
                     item["pro_codigo"],
                     item["pro_ds"],
@@ -135,7 +61,9 @@ def create_invoice(
                     item["pro_total_item"],
                 ),
             )
-    return get_invoice(conn, invoice_id)
+    row = get_invoice(conn, invoice_id)
+    assert row is not None  # recién insertado
+    return row
 
 
 def get_invoice(conn: sqlite3.Connection, invoice_id: str) -> sqlite3.Row | None:
@@ -160,12 +88,31 @@ def list_invoices(
     ).fetchall()
 
 
+# Columnas que la máquina de estados puede tocar tras la creación. Los nombres
+# de columna se interpolan en el SQL, así que el allowlist es obligatorio.
+UPDATABLE_INVOICE_FIELDS = frozenset(
+    {
+        "status",
+        "arca_id",
+        "cbte_nro",
+        "cae",
+        "cae_fch_vto",
+        "raw_request",
+        "raw_response",
+        "last_error",
+    }
+)
+
+
 def update_invoice(conn: sqlite3.Connection, invoice_id: str, **fields) -> None:
+    unknown = set(fields) - UPDATABLE_INVOICE_FIELDS
+    if unknown:
+        raise ValueError(f"Columnas no actualizables: {', '.join(sorted(unknown))}")
     assignments = ", ".join(f"{k} = ?" for k in fields)
     with conn:
         conn.execute(
             f"UPDATE invoices SET {assignments}, updated_at = ? WHERE id = ?",
-            (*fields.values(), _now(), invoice_id),
+            (*fields.values(), now(), invoice_id),
         )
 
 
@@ -176,14 +123,14 @@ def try_transition_to_submitting(
     draft/unknown, o desde un 'submitting' viejo (proceso muerto a mitad de
     llamada). Un 'submitting' reciente => otro submit en curso, no tomar."""
     stale_cutoff = (
-        dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=stale_seconds)
+        dt.datetime.now(dt.UTC) - dt.timedelta(seconds=stale_seconds)
     ).isoformat()
     with conn:
         cursor = conn.execute(
             "UPDATE invoices SET status = 'submitting', updated_at = ?"
             " WHERE id = ? AND (status IN ('draft', 'unknown')"
             "   OR (status = 'submitting' AND updated_at < ?))",
-            (_now(), invoice_id, stale_cutoff),
+            (now(), invoice_id, stale_cutoff),
         )
     return cursor.rowcount == 1
 

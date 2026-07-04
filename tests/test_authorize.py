@@ -8,8 +8,8 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from facturador.wsaa import Ticket
-from facturador.wsfex import (
+from facturador.arca.wsaa import Ticket
+from facturador.arca.wsfex import (
     FEX_NS,
     AuthResult,
     Invoice,
@@ -56,8 +56,8 @@ class _FakeWsaa:
         return Ticket(
             token="tok==",
             sign="sig==",
-            generation=dt.datetime.now(dt.timezone.utc),
-            expiration=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+            generation=dt.datetime.now(dt.UTC),
+            expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
             service="wsfex",
             environment="homo",
         )
@@ -106,7 +106,10 @@ def test_cmp_respeta_el_orden_del_wsdl():
 
 def test_cmp_valores_correctos():
     cmp_el = build_cmp_element(_invoice())
-    get = lambda tag: cmp_el.findtext(f"{{{FEX_NS}}}{tag}")
+
+    def get(tag):
+        return cmp_el.findtext(f"{{{FEX_NS}}}{tag}")
+
     assert get("Id") == "1"
     assert get("Tipo_expo") == "2"
     assert get("Permiso_existente") == ""
@@ -145,14 +148,16 @@ def test_last_id_y_last_cmp(test_config):
         body = request.content.decode()
         if "FEXGetLast_ID" in body:
             return httpx.Response(
-                200, text=_soap("FEXGetLast_ID", "<FEXResultGet><Id>41</Id></FEXResultGet>")
+                200,
+                text=_soap("FEXGetLast_ID", "<FEXResultGet><Id>41</Id></FEXResultGet>"),
             )
         # El Auth de Last_CMP lleva Pto_venta y Cbte_Tipo adentro.
         assert "<Pto_venta" in body.replace("ns0:", "") or "Pto_venta" in body
         return httpx.Response(
             200,
             text=_soap(
-                "FEXGetLast_CMP", "<FEXResult_LastCMP><Cbte_nro>7</Cbte_nro></FEXResult_LastCMP>"
+                "FEXGetLast_CMP",
+                "<FEXResult_LastCMP><Cbte_nro>7</Cbte_nro></FEXResult_LastCMP>",
             ),
         )
 

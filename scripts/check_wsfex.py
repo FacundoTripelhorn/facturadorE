@@ -9,9 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from facturador import db
+from facturador import db, repo
+from facturador.arca.wsfex import PARAM_METHODS, WsfexClient
 from facturador.config import load_config
-from facturador.wsfex import PARAM_METHODS, WsfexClient
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -32,7 +32,7 @@ def main() -> None:
 
     for kind in PARAM_METHODS:
         registros = client.get_param(kind)
-        n = db.replace_params(conn, kind, [r.as_dict() for r in registros])
+        n = repo.replace_params(conn, kind, [r.as_dict() for r in registros])
         muestra = ", ".join(f"{r.code}={r.description}" for r in registros[:3])
         print(f"{kind:<10} {n:>3} registros  [{muestra}{', ...' if n > 3 else ''}]")
 

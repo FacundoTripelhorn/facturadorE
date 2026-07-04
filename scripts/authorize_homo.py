@@ -23,9 +23,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from facturador import db
+from facturador import db, repo
+from facturador.arca.wsfex import Invoice, InvoiceItem, WsfexClient
 from facturador.config import load_config
-from facturador.wsfex import Invoice, InvoiceItem, WsfexClient
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -62,7 +62,7 @@ def cargar_input(path: Path) -> dict:
 def lookup_param(conn, kind: str, description_prefix: str) -> int:
     filas = [
         f
-        for f in db.get_params(conn, kind)
+        for f in repo.get_params(conn, kind)
         if (f["description"] or "").upper().startswith(description_prefix.upper())
     ]
     if not filas:
@@ -155,7 +155,10 @@ def main() -> None:
 
         arca_id = client.get_last_id() + 1
         cbte_nro = client.get_last_cmp(PUNTO_VTA_HOMO, 19) + 1
-        print(f"Id idempotente: {arca_id}  |  Comprobante: {PUNTO_VTA_HOMO:05d}-{cbte_nro:08d}")
+        print(
+            f"Id idempotente: {arca_id}  |  "
+            f"Comprobante: {PUNTO_VTA_HOMO:05d}-{cbte_nro:08d}"
+        )
 
         imp_total = Decimal(entrada["imp_total"])
         invoice = Invoice(
@@ -210,7 +213,10 @@ def main() -> None:
     print(f"Vencimiento CAE: {resultado.cae_fch_vto}")
     print(f"Comprobante    : tipo 19, {invoice.punto_vta:05d}-{invoice.cbte_nro:08d}")
     print(f"Fecha emisión  : {invoice.fecha_cbte}  |  Fecha pago: {invoice.fecha_pago}")
-    print(f"Importe        : {invoice.moneda_id} {invoice.imp_total} (ctz {invoice.moneda_ctz})")
+    print(
+        f"Importe        : {invoice.moneda_id} {invoice.imp_total}"
+        f" (ctz {invoice.moneda_ctz})"
+    )
     print(f"Reproceso      : {resultado.reproceso}")
     if resultado.motivos_obs:
         print(f"Observaciones  : {resultado.motivos_obs}")

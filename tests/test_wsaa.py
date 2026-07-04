@@ -9,13 +9,13 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives.serialization import pkcs7
 
-from facturador.wsaa import (
+from facturador.arca.wsaa import (
     SERVICE,
-    TicketCache,
+    TaAlreadyIssuedError,
     Ticket,
+    TicketCache,
     WsaaClient,
     WsaaError,
-    TaAlreadyIssuedError,
     build_login_request,
     build_tra,
     cuit_from_certificate,
@@ -31,9 +31,9 @@ def _make_ta_xml(
     expiration: dt.datetime | None = None,
 ) -> str:
     expiration = expiration or (
-        dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12)
+        dt.datetime.now(dt.UTC) + dt.timedelta(hours=12)
     )
-    generation = dt.datetime.now(dt.timezone.utc)
+    generation = dt.datetime.now(dt.UTC)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketResponse version="1.0">
   <header>
@@ -66,7 +66,8 @@ FAULT_ALREADY = (
     '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">'
     "<soapenv:Body><soapenv:Fault>"
     "<faultcode>ns1:coe.alreadyAuthenticated</faultcode>"
-    "<faultstring>El CEE ya posee un TA valido para el acceso al WSN solicitado</faultstring>"
+    "<faultstring>El CEE ya posee un TA valido para el acceso al WSN"
+    " solicitado</faultstring>"
     "</soapenv:Fault></soapenv:Body></soapenv:Envelope>"
 )
 
@@ -83,7 +84,7 @@ def test_tra_estructura_y_servicio():
 
 
 def test_tra_ventana_amplia_de_tiempos():
-    now = dt.datetime(2026, 7, 3, 12, 0, 0, tzinfo=dt.timezone.utc)
+    now = dt.datetime(2026, 7, 3, 12, 0, 0, tzinfo=dt.UTC)
     root = ET.fromstring(build_tra(now=now))
     gen = dt.datetime.fromisoformat(root.findtext("header/generationTime"))
     exp = dt.datetime.fromisoformat(root.findtext("header/expirationTime"))
@@ -142,7 +143,7 @@ def test_parseo_ta_ok():
 
 def test_ta_vencido_rechazado_al_parsear():
     vencido = _make_ta_xml(
-        expiration=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+        expiration=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
     )
     with pytest.raises(WsaaError, match="vencido"):
         parse_login_response(_make_soap_response(vencido), "homo")
@@ -168,7 +169,7 @@ def _ticket(expiration: dt.datetime, service=SERVICE, env="homo") -> Ticket:
     return Ticket(
         token="tok==",
         sign="sig==",
-        generation=dt.datetime.now(dt.timezone.utc),
+        generation=dt.datetime.now(dt.UTC),
         expiration=expiration,
         service=service,
         environment=env,
@@ -177,7 +178,7 @@ def _ticket(expiration: dt.datetime, service=SERVICE, env="homo") -> Ticket:
 
 def test_cache_roundtrip(tmp_path):
     cache = TicketCache(tmp_path / "ta.json")
-    original = _ticket(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12))
+    original = _ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12))
     cache.save(original)
     cargado = cache.load("homo")
     assert cargado == original
@@ -185,17 +186,17 @@ def test_cache_roundtrip(tmp_path):
 
 def test_cache_descarta_ta_vencido(tmp_path):
     cache = TicketCache(tmp_path / "ta.json")
-    cache.save(_ticket(dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=1)))
+    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(minutes=1)))
     # dentro del margen de renovación (5 min) => se considera vencido
     assert cache.load("homo") is None
 
 
 def test_cache_descarta_ta_de_otro_servicio_o_ambiente(tmp_path):
     cache = TicketCache(tmp_path / "ta.json")
-    cache.save(_ticket(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
                        service="wsfe"))
     assert cache.load("homo") is None
-    cache.save(_ticket(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
                        env="prod"))
     assert cache.load("homo") is None
 
@@ -231,7 +232,7 @@ def test_obtener_ta_reusar_y_renovar(test_config):
 
     # Forzar expiración: reescribir el cache con un TA al borde de vencer.
     client.cache.save(
-        _ticket(dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=2))
+        _ticket(dt.datetime.now(dt.UTC) + dt.timedelta(minutes=2))
     )
     client.get_ticket()             # renueva contra WSAA
     assert llamadas["n"] == 2

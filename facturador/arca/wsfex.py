@@ -19,7 +19,7 @@ from decimal import Decimal
 
 import httpx
 
-from .config import Config
+from ..config import Config
 from .wsaa import WsaaClient, cuit_from_certificate
 
 logger = logging.getLogger(__name__)
@@ -151,6 +151,10 @@ def _dec(value: Decimal) -> str:
     return format(value, "f")
 
 
+def _add_child(parent: ET.Element, tag: str, value) -> None:
+    ET.SubElement(parent, f"{{{FEX_NS}}}{tag}").text = str(value)
+
+
 def build_cmp_element(invoice: Invoice) -> ET.Element:
     """Arma el <Cmp> de FEXAuthorize en el ORDEN del WSDL real (secuencia
     estricta del ASMX, verificada 2026-07). Solo serializador: los textos
@@ -159,7 +163,7 @@ def build_cmp_element(invoice: Invoice) -> ET.Element:
     cmp_el = ET.Element(f"{{{FEX_NS}}}Cmp")
 
     def add(tag: str, value) -> None:
-        ET.SubElement(cmp_el, f"{{{FEX_NS}}}{tag}").text = str(value)
+        _add_child(cmp_el, tag, value)
 
     add("Id", invoice.arca_id)
     add("Fecha_cbte", invoice.fecha_cbte)
@@ -184,17 +188,13 @@ def build_cmp_element(invoice: Invoice) -> ET.Element:
     items_el = ET.SubElement(cmp_el, f"{{{FEX_NS}}}Items")
     for item in invoice.items:
         item_el = ET.SubElement(items_el, f"{{{FEX_NS}}}Item")
-
-        def add_item(tag: str, value) -> None:
-            ET.SubElement(item_el, f"{{{FEX_NS}}}{tag}").text = str(value)
-
-        add_item("Pro_codigo", item.pro_codigo)
-        add_item("Pro_ds", item.pro_ds)
-        add_item("Pro_qty", _dec(item.pro_qty))
-        add_item("Pro_umed", item.pro_umed)
-        add_item("Pro_precio_uni", _dec(item.pro_precio_uni))
-        add_item("Pro_bonificacion", _dec(item.pro_bonificacion))
-        add_item("Pro_total_item", _dec(item.pro_total_item))
+        _add_child(item_el, "Pro_codigo", item.pro_codigo)
+        _add_child(item_el, "Pro_ds", item.pro_ds)
+        _add_child(item_el, "Pro_qty", _dec(item.pro_qty))
+        _add_child(item_el, "Pro_umed", item.pro_umed)
+        _add_child(item_el, "Pro_precio_uni", _dec(item.pro_precio_uni))
+        _add_child(item_el, "Pro_bonificacion", _dec(item.pro_bonificacion))
+        _add_child(item_el, "Pro_total_item", _dec(item.pro_total_item))
     add("Fecha_pago", invoice.fecha_pago)
     return cmp_el
 

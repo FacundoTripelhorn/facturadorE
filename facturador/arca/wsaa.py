@@ -31,10 +31,11 @@ from pathlib import Path
 import httpx
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, pkcs7
 from cryptography.x509.oid import NameOID
 
-from .config import Config
+from ..config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class Ticket:
     environment: str
 
     def is_valid(self, now: dt.datetime | None = None) -> bool:
-        now = now or dt.datetime.now(dt.timezone.utc)
+        now = now or dt.datetime.now(dt.UTC)
         return now < self.expiration - TA_EXPIRY_MARGIN
 
     def __str__(self) -> str:  # nunca exponer token/sign
@@ -85,7 +86,7 @@ class Ticket:
 
 def build_tra(service: str = SERVICE, now: dt.datetime | None = None) -> bytes:
     """Arma el LoginTicketRequest (TRA) como XML serializado."""
-    now = (now or dt.datetime.now(dt.timezone.utc)).astimezone()
+    now = (now or dt.datetime.now(dt.UTC)).astimezone()
     root = ET.Element("loginTicketRequest", version="1.0")
     header = ET.SubElement(root, "header")
     ET.SubElement(header, "uniqueId").text = str(int(now.timestamp()))
@@ -108,6 +109,8 @@ def sign_tra_cms(
     """Firma el TRA como CMS/PKCS#7 (DER). Soporta key con passphrase."""
     cert = x509.load_pem_x509_certificate(cert_pem)
     key = load_pem_private_key(key_pem, password=key_passphrase)
+    if not isinstance(key, rsa.RSAPrivateKey | ec.EllipticCurvePrivateKey):
+        raise WsaaError("La clave privada debe ser RSA o EC para firmar el CMS")
     return (
         pkcs7.PKCS7SignatureBuilder()
         .set_data(tra)
@@ -180,9 +183,9 @@ def parse_login_response(body: bytes | str, environment: str) -> Ticket:
     generation = (
         _parse_datetime(generation_raw, "generationTime")
         if generation_raw
-        else dt.datetime.now(dt.timezone.utc)
+        else dt.datetime.now(dt.UTC)
     )
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     if expiration <= now:
         raise WsaaError(
             f"El TA recibido ya está vencido (expirationTime={expiration_raw}). "
