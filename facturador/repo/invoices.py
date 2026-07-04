@@ -1,91 +1,11 @@
-"""Acceso a datos: clients / invoices / invoice_items / arca_params.
-
-Convenciones: ids uuid4 hex; montos como TEXT (str de Decimal, nunca float);
-fechas de comprobante AAAAMMDD; timestamps ISO UTC.
-"""
+"""Acceso a datos de invoices / invoice_items, incluido el lock de submit."""
 
 from __future__ import annotations
 
 import datetime as dt
 import sqlite3
-import uuid
 
-
-def _now() -> str:
-    return dt.datetime.now(dt.UTC).isoformat()
-
-
-def _new_id() -> str:
-    return uuid.uuid4().hex
-
-
-# --- clients ---
-
-CLIENT_FIELDS = (
-    "razon_social",
-    "domicilio",
-    "pais_dst",
-    "cuit_pais",
-    "id_impositivo",
-    "moneda_default",
-    "incoterms_default",
-    "idioma_default",
-    "forma_pago_default",
-    "descripcion_default",
-    "is_default",
-)
-
-
-def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
-    client_id = _new_id()
-    now = _now()
-    with conn:
-        if data.get("is_default"):
-            conn.execute("UPDATE clients SET is_default = 0")
-        conn.execute(
-            f"INSERT INTO clients (id, {', '.join(CLIENT_FIELDS)},"
-            " created_at, updated_at)"
-            f" VALUES (?{', ?' * len(CLIENT_FIELDS)}, ?, ?)",
-            (client_id, *(data[f] for f in CLIENT_FIELDS), now, now),
-        )
-    row = get_client(conn, client_id)
-    assert row is not None  # recién insertado
-    return row
-
-
-def update_client(
-    conn: sqlite3.Connection, client_id: str, data: dict
-) -> sqlite3.Row | None:
-    if get_client(conn, client_id) is None:
-        return None
-    with conn:
-        if data.get("is_default"):
-            conn.execute("UPDATE clients SET is_default = 0")
-        conn.execute(
-            f"UPDATE clients SET {', '.join(f'{f} = ?' for f in CLIENT_FIELDS)},"
-            " updated_at = ? WHERE id = ?",
-            (*(data[f] for f in CLIENT_FIELDS), _now(), client_id),
-        )
-    return get_client(conn, client_id)
-
-
-def get_client(conn: sqlite3.Connection, client_id: str) -> sqlite3.Row | None:
-    return conn.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
-
-
-def get_default_client(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM clients WHERE is_default = 1 LIMIT 1"
-    ).fetchone()
-
-
-def list_clients(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM clients ORDER BY is_default DESC, razon_social"
-    ).fetchall()
-
-
-# --- invoices ---
+from ._common import new_id, now
 
 INVOICE_FIELDS = (
     "client_id",
@@ -115,14 +35,14 @@ INVOICE_FIELDS = (
 def create_invoice(
     conn: sqlite3.Connection, data: dict, items: list[dict]
 ) -> sqlite3.Row:
-    invoice_id = _new_id()
-    now = _now()
+    invoice_id = new_id()
+    ts = now()
     with conn:
         conn.execute(
             f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)},"
             " status, created_at, updated_at)"
             f" VALUES (?{', ?' * len(INVOICE_FIELDS)}, 'draft', ?, ?)",
-            (invoice_id, *(data[f] for f in INVOICE_FIELDS), now, now),
+            (invoice_id, *(data[f] for f in INVOICE_FIELDS), ts, ts),
         )
         for item in items:
             conn.execute(
@@ -131,7 +51,7 @@ def create_invoice(
                 "  pro_precio_uni, pro_total_item)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    _new_id(),
+                    new_id(),
                     invoice_id,
                     item["pro_codigo"],
                     item["pro_ds"],
@@ -192,7 +112,7 @@ def update_invoice(conn: sqlite3.Connection, invoice_id: str, **fields) -> None:
     with conn:
         conn.execute(
             f"UPDATE invoices SET {assignments}, updated_at = ? WHERE id = ?",
-            (*fields.values(), _now(), invoice_id),
+            (*fields.values(), now(), invoice_id),
         )
 
 
@@ -210,7 +130,7 @@ def try_transition_to_submitting(
             "UPDATE invoices SET status = 'submitting', updated_at = ?"
             " WHERE id = ? AND (status IN ('draft', 'unknown')"
             "   OR (status = 'submitting' AND updated_at < ?))",
-            (_now(), invoice_id, stale_cutoff),
+            (now(), invoice_id, stale_cutoff),
         )
     return cursor.rowcount == 1
 
@@ -224,41 +144,3 @@ def max_authorized_cbte_nro(
         (punto_venta, cbte_tipo),
     ).fetchone()
     return int(row["m"] or 0)
-
-
-# --- arca_params (cache de tablas dinámicas) ---
-
-
-def replace_params(
-    conn: sqlite3.Connection,
-    kind: str,
-    records: list[dict],
-    fetched_at: dt.datetime | None = None,
-) -> int:
-    """Reemplaza el cache completo de un kind (refresh atómico)."""
-    fetched = (fetched_at or dt.datetime.now(dt.UTC)).isoformat()
-    with conn:
-        conn.execute("DELETE FROM arca_params WHERE kind = ?", (kind,))
-        conn.executemany(
-            "INSERT INTO arca_params"
-            " (kind, code, description, valid_from, valid_to, fetched_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    kind,
-                    r["code"],
-                    r.get("description"),
-                    r.get("valid_from"),
-                    r.get("valid_to"),
-                    fetched,
-                )
-                for r in records
-            ],
-        )
-    return len(records)
-
-
-def get_params(conn: sqlite3.Connection, kind: str) -> list[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM arca_params WHERE kind = ? ORDER BY code", (kind,)
-    ).fetchall()
