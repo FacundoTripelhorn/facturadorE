@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #111; }
+  .homo-banner {
+    border: 1.5pt dashed #b00; color: #b00; text-align: center;
+    font-weight: bold; padding: 2mm; margin-bottom: 3mm; font-size: 10pt;
+  }
+  .marco { border: 1pt solid #000; }
+  .cabecera { display: flex; border-bottom: 1pt solid #000; }
+  .cabecera .col { padding: 3mm; width: 50%; }
+  .cabecera .col.izq { border-right: none; }
+  .tipo-box {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    border: 1pt solid #000; background: #fff; text-align: center;
+    width: 14mm; padding: 1mm 0;
+  }
+  .tipo-box .letra { font-size: 20pt; font-weight: bold; line-height: 1; }
+  .tipo-box .cod { font-size: 6pt; }
+  .cabecera-wrap { position: relative; }
+  h1 { font-size: 13pt; margin: 0 0 2mm; }
+  h2 { font-size: 11pt; margin: 0 0 2mm; text-align: right; }
+  .campo { margin: 0.8mm 0; }
+  .campo b { display: inline-block; }
+  .bloque { padding: 3mm; border-bottom: 1pt solid #000; }
+  .dos-col { display: flex; }
+  .dos-col > div { width: 50%; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+  table.items th, table.items td { border: 0.5pt solid #444; padding: 1.5mm; }
+  table.items th { background: #eee; font-size: 8pt; }
+  td.num, th.num { text-align: right; }
+  .total { text-align: right; font-size: 11pt; font-weight: bold; padding: 3mm; }
+  .leyenda { font-weight: bold; text-align: center; padding: 2mm; border-bottom: 1pt solid #000; }
+  .pie { display: flex; padding: 3mm; align-items: center; }
+  .pie .qr { width: 30mm; }
+  .pie .qr img { width: 28mm; height: 28mm; }
+  .pie .cae { margin-left: auto; text-align: right; }
+  .pie .cae .valor { font-size: 12pt; font-weight: bold; }
+  .obs { padding: 3mm; border-bottom: 1pt solid #000; }
+</style>
+</head>
+<body>
+
+{% if es_homo %}
+<div class="homo-banner">COMPROBANTE DE HOMOLOGACIÓN — SIN VALOR FISCAL</div>
+{% endif %}
+
+<div class="marco">
+  <div class="cabecera-wrap">
+    <div class="tipo-box">
+      <div class="letra">E</div>
+      <div class="cod">COD. {{ inv["cbte_tipo"] }}</div>
+    </div>
+    <div class="cabecera">
+      <div class="col izq">
+        <h1>{{ emisor.razon_social or "—" }}</h1>
+        <div class="campo"><b>Domicilio:</b> {{ emisor.domicilio }}</div>
+        <div class="campo"><b>Condición frente al IVA:</b> {{ emisor.condicion_iva }}</div>
+        <div class="campo"><b>CUIT:</b> {{ cuit_emisor }}</div>
+        <div class="campo"><b>Ingresos Brutos:</b> {{ emisor.iibb or cuit_emisor }}</div>
+        <div class="campo"><b>Inicio de Actividades:</b> {{ emisor.inicio_actividades }}</div>
+      </div>
+      <div class="col">
+        <h2>FACTURA DE EXPORTACIÓN</h2>
+        <div class="campo" style="text-align:right"><b>Comp. Nro:</b> {{ nro_completo }}</div>
+        <div class="campo" style="text-align:right"><b>Fecha de Emisión:</b> {{ inv["fecha_cbte"] | fecha }}</div>
+        <div class="campo" style="text-align:right"><b>Fecha de Pago:</b> {{ inv["fecha_pago"] | fecha }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bloque dos-col">
+    <div>
+      <div class="campo"><b>Apellido y Nombre / Razón Social:</b> {{ inv["cliente"] }}</div>
+      <div class="campo"><b>Domicilio:</b> {{ inv["domicilio_cliente"] }}</div>
+      <div class="campo"><b>País Destino:</b> {{ pais_ds }}</div>
+    </div>
+    <div>
+      <div class="campo"><b>CUIT País:</b> {{ inv["cuit_pais_cliente"] }}</div>
+      <div class="campo"><b>ID Impositivo:</b> {{ inv["id_impositivo"] }}</div>
+      <div class="campo"><b>Destino del comprobante:</b> {{ tipo_expo_ds }}</div>
+    </div>
+  </div>
+
+  <div class="bloque dos-col">
+    <div>
+      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] }}</div>
+      <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] }}</div>
+    </div>
+    <div>
+      <div class="campo"><b>Forma de Pago:</b> {{ inv["forma_pago"] }}</div>
+      {% if inv["incoterms"] %}
+      <div class="campo"><b>Incoterms:</b> {{ inv["incoterms"] }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="bloque">
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Descripción</th>
+          <th class="num">Cantidad</th>
+          <th>U. Medida</th>
+          <th class="num">Precio Unit.</th>
+          <th class="num">Importe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item["pro_codigo"] }}</td>
+          <td>{{ item["pro_ds"] }}</td>
+          <td class="num">{{ item["pro_qty"] }}</td>
+          <td>{{ "unidades" if item["pro_umed"] == 7 else item["pro_umed"] }}</td>
+          <td class="num">{{ item["pro_precio_uni"] }}</td>
+          <td class="num">{{ item["pro_total_item"] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="total">Importe Total: {{ inv["moneda_id"] }} {{ inv["imp_total"] }}</div>
+  </div>
+
+  <div class="leyenda">IVA EXENTO — OPERACIÓN DE EXPORTACIÓN</div>
+
+  {% if inv["obs"] %}
+  <div class="obs"><b>Observaciones:</b> {{ inv["obs"] }}</div>
+  {% endif %}
+
+  <div class="pie">
+    <div class="qr"><img src="{{ qr_data_uri }}" alt="QR RG 4892"></div>
+    <div class="cae">
+      <div class="campo"><b>CAE Nº:</b> <span class="valor">{{ inv["cae"] }}</span></div>
+      <div class="campo"><b>Fecha Vto. CAE:</b> {{ inv["cae_fch_vto"] | fecha }}</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

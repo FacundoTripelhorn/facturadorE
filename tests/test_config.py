@@ -32,6 +32,7 @@ def test_no_existe_forma_de_mezclar_ambiente_y_certificado(tmp_path):
         "cuit",
         "key_passphrase",
         "punto_venta",
+        "emisor",  # datos del PDF (fase 5); no afecta URLs ni certificados
     }
 
 

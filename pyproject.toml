@@ -9,6 +9,9 @@ dependencies = [
     "python-dotenv>=1.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "weasyprint>=69.0",
+    "qrcode[pil]>=8.2",
+    "jinja2>=3.1.6",
 ]
 
 [dependency-groups]
@@ -42,6 +45,10 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["weasyprint", "qrcode"]
+ignore_missing_imports = true
 
 [build-system]
 requires = ["hatchling"]

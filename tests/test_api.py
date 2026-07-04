@@ -8,49 +8,7 @@ chequeo de DB desactualizada.
 
 import datetime as dt
 
-import httpx
-import pytest
-from fastapi.testclient import TestClient
-
-from facturador import db, repo
-from facturador.api import create_app
-from facturador.arca.wsaa import Ticket
-from facturador.arca.wsfex import WsfexClient
-from tests.arca_fake import FakeArca
-from tests.conftest import seed_params
-
-
-class _FakeWsaa:
-    def get_ticket(self):
-        return Ticket(
-            token="tok==",
-            sign="sig==",
-            generation=dt.datetime.now(dt.UTC),
-            expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
-            service="wsfex",
-            environment="homo",
-        )
-
-
-@pytest.fixture
-def arca() -> FakeArca:
-    return FakeArca()
-
-
-@pytest.fixture
-def api(test_config, arca, tmp_path):
-    conn = db.connect(tmp_path / "data" / "test.db")
-    seed_params(conn)
-    wsfex = WsfexClient(
-        test_config,
-        wsaa=_FakeWsaa(),
-        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
-    )
-    app = create_app(config=test_config, conn=conn, wsfex=wsfex)
-    client = TestClient(app)
-    client.conn = conn  # para asserts directos sobre la DB
-    return client
-
+from facturador import repo
 
 CLIENTE = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -335,13 +293,6 @@ def test_health_arca(api):
         "dbserver": "OK",
         "authserver": "OK",
     }
-
-
-def test_pdf_todavia_no_implementado(api, arca):
-    _crear_cliente(api)
-    draft = _crear_draft(api)
-    assert api.get(f"/invoices/{draft['id']}/pdf").status_code == 501
-    assert api.get("/invoices/inexistente/pdf").status_code == 404
 
 
 def test_listado_paginado(api, arca):

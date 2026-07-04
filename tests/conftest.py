@@ -1,14 +1,21 @@
-"""Fixtures compartidas: certificado autofirmado de prueba (nunca el real)."""
+"""Fixtures compartidas: certificado autofirmado de prueba (nunca el real),
+app FastAPI contra el simulador de ARCA y cache de params sembrado."""
 
 import datetime as dt
 
+import httpx
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from fastapi.testclient import TestClient
 
+from facturador import db
+from facturador.api import create_app
+from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
+from tests.arca_fake import FakeArca, FakeWsaa
 
 TEST_CUIT = "20111111112"
 
@@ -54,6 +61,26 @@ def test_config(tmp_path, test_cert_and_key) -> Config:
     (secrets / "homo.key").write_bytes(key_pem)
     (tmp_path / "data").mkdir()
     return Config(env="homo", home=tmp_path, cuit=None, key_passphrase=None)
+
+
+@pytest.fixture
+def arca() -> FakeArca:
+    return FakeArca()
+
+
+@pytest.fixture
+def api(test_config, arca, tmp_path):
+    conn = db.connect(tmp_path / "data" / "test.db")
+    seed_params(conn)
+    wsfex = WsfexClient(
+        test_config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(config=test_config, conn=conn, wsfex=wsfex)
+    client = TestClient(app)
+    client.conn = conn  # para asserts directos sobre la DB
+    return client
 
 
 def seed_params(conn) -> None:

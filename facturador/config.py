@@ -34,12 +34,25 @@ class ConfigError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class Emisor:
+    """Datos del emisor que van al PDF y no viajan a ARCA (spike.md §0.1):
+    leyenda de IVA, IIBB e inicio de actividades salen de config local."""
+
+    razon_social: str = ""
+    domicilio: str = ""
+    iibb: str = ""                 # vacío => se imprime el CUIT
+    inicio_actividades: str = ""   # texto libre, p.ej. "01/2020"
+    condicion_iva: str = "IVA Responsable Inscripto"
+
+
+@dataclass(frozen=True)
 class Config:
     env: str          # "homo" | "prod"
     home: Path        # raíz de datos (secrets/, data/, backups/)
     cuit: int | None  # emisor; None => se extrae del certificado en runtime
     key_passphrase: str | None
     punto_venta: int = 1  # en homo es libre; en prod, el PV RECE exclusivo
+    emisor: Emisor = Emisor()
 
     @property
     def wsaa_url(self) -> str:
@@ -60,6 +73,10 @@ class Config:
     @property
     def data_dir(self) -> Path:
         return self.home / "data"
+
+    @property
+    def pdf_dir(self) -> Path:
+        return self.data_dir / "pdfs"
 
 
 def load_config(env_file: str | Path | None = ".env") -> Config:
@@ -86,12 +103,20 @@ def load_config(env_file: str | Path | None = ".env") -> Config:
     if not punto_venta_raw.isdigit() or int(punto_venta_raw) < 1:
         raise ConfigError("ARCA_PUNTO_VTA debe ser un entero >= 1")
 
+    emisor = Emisor(
+        razon_social=os.environ.get("EMISOR_RAZON_SOCIAL", "").strip(),
+        domicilio=os.environ.get("EMISOR_DOMICILIO", "").strip(),
+        iibb=os.environ.get("EMISOR_IIBB", "").strip(),
+        inicio_actividades=os.environ.get("EMISOR_INICIO_ACTIVIDADES", "").strip(),
+    )
+
     config = Config(
         env=env,
         home=home,
         cuit=cuit,
         key_passphrase=os.environ.get("ARCA_KEY_PASSPHRASE") or None,
         punto_venta=int(punto_venta_raw),
+        emisor=emisor,
     )
     validate_config(config)
     return config
