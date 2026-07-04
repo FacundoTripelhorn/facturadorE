@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 
 from facturador import db, repo
 from facturador.api import create_app
-from facturador.wsaa import Ticket
-from facturador.wsfex import WsfexClient
+from facturador.arca.wsaa import Ticket
+from facturador.arca.wsfex import WsfexClient
 from tests.arca_fake import FakeArca
 from tests.conftest import seed_params
 
@@ -25,8 +25,8 @@ class _FakeWsaa:
         return Ticket(
             token="tok==",
             sign="sig==",
-            generation=dt.datetime.now(dt.timezone.utc),
-            expiration=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+            generation=dt.datetime.now(dt.UTC),
+            expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
             service="wsfex",
             environment="homo",
         )
@@ -297,7 +297,8 @@ def test_datos_hostiles_de_cliente_viajan_escapados(api, arca):
     # roto el XML, esto habría fallado. El valor llega intacto y escapado.
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "authorized"
-    assert arca.last_authorize_cliente == 'PYME </Cliente><Imp_total>1</Imp_total> & "CO"'
+    esperado = 'PYME </Cliente><Imp_total>1</Imp_total> & "CO"'
+    assert arca.last_authorize_cliente == esperado
     assert arca.issued[(19, 1, 1)]["imp_total"] == "1500.00"
 
 

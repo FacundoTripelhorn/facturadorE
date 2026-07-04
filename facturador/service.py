@@ -17,13 +17,20 @@ import json
 import logging
 import sqlite3
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
-from . import db, repo
+from . import repo
+from .arca.wsfex import Invoice, WsfexClient, WsfexError
 from .config import Config
+from .mappers import (
+    dec,
+    raw_to_wsfex_invoice,
+    row_to_wsfex_invoice,
+    wsfex_invoice_to_raw,
+)
 from .schemas import ClientIn, InvoiceCreate
-from .wsfex import Invoice, InvoiceItem, WsfexClient, WsfexError
 
 logger = logging.getLogger(__name__)
 
@@ -61,15 +68,15 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_params(self, kind: str) -> list[sqlite3.Row]:
-        rows = db.get_params(self.conn, kind)
+        rows = repo.get_params(self.conn, kind)
         if rows:
             fetched = dt.datetime.fromisoformat(rows[0]["fetched_at"])
-            if dt.datetime.now(dt.timezone.utc) - fetched < PARAMS_TTL:
+            if dt.datetime.now(dt.UTC) - fetched < PARAMS_TTL:
                 return rows
         try:
             records = self.wsfex.get_param(kind)
-            db.replace_params(self.conn, kind, [r.as_dict() for r in records])
-            return db.get_params(self.conn, kind)
+            repo.replace_params(self.conn, kind, [r.as_dict() for r in records])
+            return repo.get_params(self.conn, kind)
         except (WsfexError, httpx.HTTPError) as exc:
             if rows:
                 logger.warning(
@@ -147,15 +154,16 @@ class InvoiceService:
                     f"No se pudo obtener la cotización {moneda_id} de ARCA: {exc}"
                 ) from exc
 
+        items: list[dict[str, Any]]
         if payload.items:
             items = [
                 {
                     "pro_codigo": i.pro_codigo,
                     "pro_ds": i.pro_ds,
-                    "pro_qty": _dec(i.pro_qty),
+                    "pro_qty": dec(i.pro_qty),
                     "pro_umed": i.pro_umed,
-                    "pro_precio_uni": _dec(i.pro_precio_uni),
-                    "pro_total_item": _dec(i.pro_qty * i.pro_precio_uni),
+                    "pro_precio_uni": dec(i.pro_precio_uni),
+                    "pro_total_item": dec(i.pro_qty * i.pro_precio_uni),
                 }
                 for i in payload.items
             ]
@@ -171,8 +179,8 @@ class InvoiceService:
                     "pro_ds": descripcion,
                     "pro_qty": "1",
                     "pro_umed": 7,
-                    "pro_precio_uni": _dec(payload.imp_total),
-                    "pro_total_item": _dec(payload.imp_total),
+                    "pro_precio_uni": dec(payload.imp_total),
+                    "pro_total_item": dec(payload.imp_total),
                 }
             ]
 
@@ -198,12 +206,12 @@ class InvoiceService:
             "domicilio_cliente": client["domicilio"],
             "id_impositivo": client["id_impositivo"],
             "moneda_id": moneda_id,
-            "moneda_ctz": _dec(ctz),
+            "moneda_ctz": dec(ctz),
             "incoterms": "",  # vacío en servicios (§0.1)
             "incoterms_ds": "",
             "forma_pago": client["forma_pago_default"],
             "idioma_cbte": client["idioma_default"],
-            "imp_total": _dec(payload.imp_total),
+            "imp_total": dec(payload.imp_total),
             "obs": payload.obs,
             "environment": self.config.env,
         }
@@ -242,7 +250,7 @@ class InvoiceService:
         if not repo.try_transition_to_submitting(self.conn, invoice_id):
             raise ConflictError("Ya hay un authorize en curso para esta factura")
 
-        inv = repo.get_invoice(self.conn, invoice_id)
+        inv = self._reload(invoice_id)
         try:
             if inv["raw_request"] is None:
                 return self._authorize_first_time(inv, force_desync)
@@ -279,15 +287,16 @@ class InvoiceService:
             )
 
         cbte_nro = last_cmp + 1
-        wsfex_invoice = _row_to_wsfex_invoice(inv, arca_id, cbte_nro,
-                                              repo.get_invoice_items(self.conn, invoice_id))
+        wsfex_invoice = row_to_wsfex_invoice(
+            inv, arca_id, cbte_nro, repo.get_invoice_items(self.conn, invoice_id)
+        )
         # Regla 3: persistir el request completo ANTES de llamar.
         repo.update_invoice(
             self.conn,
             invoice_id,
             arca_id=arca_id,
             cbte_nro=cbte_nro,
-            raw_request=json.dumps(_wsfex_invoice_to_raw(wsfex_invoice)),
+            raw_request=json.dumps(wsfex_invoice_to_raw(wsfex_invoice)),
         )
         return self._send(invoice_id, wsfex_invoice)
 
@@ -301,8 +310,13 @@ class InvoiceService:
             return resolved
         # Regla 5: reproceso con el MISMO arca_id y datos idénticos, tomados
         # del request persistido (no de la fila, por si algo mutó).
-        wsfex_invoice = _raw_to_wsfex_invoice(json.loads(inv["raw_request"]))
+        wsfex_invoice = raw_to_wsfex_invoice(json.loads(inv["raw_request"]))
         return self._send(inv["id"], wsfex_invoice)
+
+    def _reload(self, invoice_id: str) -> sqlite3.Row:
+        inv = repo.get_invoice(self.conn, invoice_id)
+        assert inv is not None  # ya validada en authorize/get_invoice
+        return inv
 
     def _send(self, invoice_id: str, wsfex_invoice: Invoice) -> sqlite3.Row:
         try:
@@ -316,7 +330,7 @@ class InvoiceService:
                 last_error=f"ARCA {exc.code}: {exc.message}",
                 raw_response=json.dumps({"error": exc.code, "message": exc.message}),
             )
-            return repo.get_invoice(self.conn, invoice_id)
+            return self._reload(invoice_id)
         except httpx.HTTPError as exc:
             # Sin respuesta concluyente (timeout post-envío, corte, etc.):
             # unknown hasta reconciliar con FEXGetCMP (§1.5).
@@ -326,7 +340,7 @@ class InvoiceService:
                 status="unknown",
                 last_error=f"Sin respuesta de ARCA: {exc}",
             )
-            return repo.get_invoice(self.conn, invoice_id)
+            return self._reload(invoice_id)
 
         # Verificación post-emisión (checklist punto 6).
         problemas = self.wsfex.verify_issued(wsfex_invoice, result)
@@ -340,7 +354,7 @@ class InvoiceService:
                 last_error="Verificación FEXGetCMP con discrepancias: "
                 + "; ".join(problemas),
             )
-            return repo.get_invoice(self.conn, invoice_id)
+            return self._reload(invoice_id)
 
         repo.update_invoice(
             self.conn,
@@ -359,7 +373,7 @@ class InvoiceService:
                 }
             ),
         )
-        return repo.get_invoice(self.conn, invoice_id)
+        return self._reload(invoice_id)
 
     def _try_reconcile(self, inv: sqlite3.Row) -> sqlite3.Row | None:
         """FEXGetCMP para una factura submitting/unknown. Devuelve la fila
@@ -378,7 +392,8 @@ class InvoiceService:
         # (checklist punto 3).
         raw = json.loads(inv["raw_request"])
         imp_registrado = registrado.get("Imp_total")
-        if imp_registrado is None or Decimal(imp_registrado) != Decimal(raw["imp_total"]):
+        imp_enviado = Decimal(raw["imp_total"])
+        if imp_registrado is None or Decimal(imp_registrado) != imp_enviado:
             repo.update_invoice(
                 self.conn,
                 inv["id"],
@@ -389,7 +404,7 @@ class InvoiceService:
                     "Revisión manual requerida."
                 ),
             )
-            return repo.get_invoice(self.conn, inv["id"])
+            return self._reload(inv["id"])
         repo.update_invoice(
             self.conn,
             inv["id"],
@@ -402,81 +417,4 @@ class InvoiceService:
         logger.info(
             "Factura %s reconciliada vía FEXGetCMP: CAE recuperado", inv["id"]
         )
-        return repo.get_invoice(self.conn, inv["id"])
-
-
-def _dec(value: Decimal) -> str:
-    return format(value, "f")
-
-
-def _row_to_wsfex_invoice(
-    inv: sqlite3.Row, arca_id: int, cbte_nro: int, items: list[sqlite3.Row]
-) -> Invoice:
-    return Invoice(
-        arca_id=arca_id,
-        fecha_cbte=inv["fecha_cbte"],
-        punto_vta=inv["punto_venta"],
-        cbte_nro=cbte_nro,
-        dst_cmp=inv["dst_cmp"],
-        cliente=inv["cliente"],
-        cuit_pais_cliente=inv["cuit_pais_cliente"],
-        domicilio_cliente=inv["domicilio_cliente"],
-        id_impositivo=inv["id_impositivo"],
-        moneda_ctz=Decimal(inv["moneda_ctz"]),
-        imp_total=Decimal(inv["imp_total"]),
-        fecha_pago=inv["fecha_pago"],
-        forma_pago=inv["forma_pago"],
-        cbte_tipo=inv["cbte_tipo"],
-        tipo_expo=inv["tipo_expo"],
-        permiso_existente=inv["permiso_existente"],
-        moneda_id=inv["moneda_id"],
-        incoterms=inv["incoterms"],
-        idioma_cbte=inv["idioma_cbte"],
-        obs=inv["obs"],
-        items=[
-            InvoiceItem(
-                pro_ds=i["pro_ds"],
-                pro_precio_uni=Decimal(i["pro_precio_uni"]),
-                pro_codigo=i["pro_codigo"],
-                pro_qty=Decimal(i["pro_qty"]),
-                pro_umed=i["pro_umed"],
-            )
-            for i in items
-        ],
-    )
-
-
-def _wsfex_invoice_to_raw(invoice: Invoice) -> dict:
-    raw = {
-        k: (format(v, "f") if isinstance(v, Decimal) else v)
-        for k, v in vars(invoice).items()
-        if k != "items"
-    }
-    raw["items"] = [
-        {
-            "pro_ds": i.pro_ds,
-            "pro_precio_uni": format(i.pro_precio_uni, "f"),
-            "pro_codigo": i.pro_codigo,
-            "pro_qty": format(i.pro_qty, "f"),
-            "pro_umed": i.pro_umed,
-        }
-        for i in invoice.items
-    ]
-    return raw
-
-
-def _raw_to_wsfex_invoice(raw: dict) -> Invoice:
-    datos = dict(raw)
-    items = [
-        InvoiceItem(
-            pro_ds=i["pro_ds"],
-            pro_precio_uni=Decimal(i["pro_precio_uni"]),
-            pro_codigo=i["pro_codigo"],
-            pro_qty=Decimal(i["pro_qty"]),
-            pro_umed=i["pro_umed"],
-        )
-        for i in datos.pop("items")
-    ]
-    for campo in ("moneda_ctz", "imp_total"):
-        datos[campo] = Decimal(datos[campo])
-    return Invoice(items=items, **datos)
+        return self._reload(inv["id"])

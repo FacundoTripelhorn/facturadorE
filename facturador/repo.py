@@ -1,4 +1,4 @@
-"""Acceso a datos de clients / invoices / invoice_items.
+"""Acceso a datos: clients / invoices / invoice_items / arca_params.
 
 Convenciones: ids uuid4 hex; montos como TEXT (str de Decimal, nunca float);
 fechas de comprobante AAAAMMDD; timestamps ISO UTC.
@@ -12,7 +12,7 @@ import uuid
 
 
 def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat()
+    return dt.datetime.now(dt.UTC).isoformat()
 
 
 def _new_id() -> str:
@@ -43,14 +43,19 @@ def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
         if data.get("is_default"):
             conn.execute("UPDATE clients SET is_default = 0")
         conn.execute(
-            f"INSERT INTO clients (id, {', '.join(CLIENT_FIELDS)}, created_at, updated_at)"
+            f"INSERT INTO clients (id, {', '.join(CLIENT_FIELDS)},"
+            " created_at, updated_at)"
             f" VALUES (?{', ?' * len(CLIENT_FIELDS)}, ?, ?)",
             (client_id, *(data[f] for f in CLIENT_FIELDS), now, now),
         )
-    return get_client(conn, client_id)
+    row = get_client(conn, client_id)
+    assert row is not None  # recién insertado
+    return row
 
 
-def update_client(conn: sqlite3.Connection, client_id: str, data: dict) -> sqlite3.Row | None:
+def update_client(
+    conn: sqlite3.Connection, client_id: str, data: dict
+) -> sqlite3.Row | None:
     if get_client(conn, client_id) is None:
         return None
     with conn:
@@ -114,7 +119,8 @@ def create_invoice(
     now = _now()
     with conn:
         conn.execute(
-            f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)}, status, created_at, updated_at)"
+            f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)},"
+            " status, created_at, updated_at)"
             f" VALUES (?{', ?' * len(INVOICE_FIELDS)}, 'draft', ?, ?)",
             (invoice_id, *(data[f] for f in INVOICE_FIELDS), now, now),
         )
@@ -135,7 +141,9 @@ def create_invoice(
                     item["pro_total_item"],
                 ),
             )
-    return get_invoice(conn, invoice_id)
+    row = get_invoice(conn, invoice_id)
+    assert row is not None  # recién insertado
+    return row
 
 
 def get_invoice(conn: sqlite3.Connection, invoice_id: str) -> sqlite3.Row | None:
@@ -160,7 +168,26 @@ def list_invoices(
     ).fetchall()
 
 
+# Columnas que la máquina de estados puede tocar tras la creación. Los nombres
+# de columna se interpolan en el SQL, así que el allowlist es obligatorio.
+UPDATABLE_INVOICE_FIELDS = frozenset(
+    {
+        "status",
+        "arca_id",
+        "cbte_nro",
+        "cae",
+        "cae_fch_vto",
+        "raw_request",
+        "raw_response",
+        "last_error",
+    }
+)
+
+
 def update_invoice(conn: sqlite3.Connection, invoice_id: str, **fields) -> None:
+    unknown = set(fields) - UPDATABLE_INVOICE_FIELDS
+    if unknown:
+        raise ValueError(f"Columnas no actualizables: {', '.join(sorted(unknown))}")
     assignments = ", ".join(f"{k} = ?" for k in fields)
     with conn:
         conn.execute(
@@ -176,7 +203,7 @@ def try_transition_to_submitting(
     draft/unknown, o desde un 'submitting' viejo (proceso muerto a mitad de
     llamada). Un 'submitting' reciente => otro submit en curso, no tomar."""
     stale_cutoff = (
-        dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=stale_seconds)
+        dt.datetime.now(dt.UTC) - dt.timedelta(seconds=stale_seconds)
     ).isoformat()
     with conn:
         cursor = conn.execute(
@@ -197,3 +224,41 @@ def max_authorized_cbte_nro(
         (punto_venta, cbte_tipo),
     ).fetchone()
     return int(row["m"] or 0)
+
+
+# --- arca_params (cache de tablas dinámicas) ---
+
+
+def replace_params(
+    conn: sqlite3.Connection,
+    kind: str,
+    records: list[dict],
+    fetched_at: dt.datetime | None = None,
+) -> int:
+    """Reemplaza el cache completo de un kind (refresh atómico)."""
+    fetched = (fetched_at or dt.datetime.now(dt.UTC)).isoformat()
+    with conn:
+        conn.execute("DELETE FROM arca_params WHERE kind = ?", (kind,))
+        conn.executemany(
+            "INSERT INTO arca_params"
+            " (kind, code, description, valid_from, valid_to, fetched_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    kind,
+                    r["code"],
+                    r.get("description"),
+                    r.get("valid_from"),
+                    r.get("valid_to"),
+                    fetched,
+                )
+                for r in records
+            ],
+        )
+    return len(records)
+
+
+def get_params(conn: sqlite3.Connection, kind: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM arca_params WHERE kind = ? ORDER BY code", (kind,)
+    ).fetchall()

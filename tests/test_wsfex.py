@@ -6,17 +6,23 @@ import xml.etree.ElementTree as ET
 import httpx
 import pytest
 
-from facturador import db
-from facturador.wsaa import Ticket, WsaaClient
-from facturador.wsfex import FEX_NS, ParamRecord, WsfexClient, WsfexError, parse_param_items
+from facturador import db, repo
+from facturador.arca.wsaa import Ticket
+from facturador.arca.wsfex import (
+    FEX_NS,
+    ParamRecord,
+    WsfexClient,
+    WsfexError,
+    parse_param_items,
+)
 
 
 def _fake_ticket() -> Ticket:
     return Ticket(
         token="tok==",
         sign="sig==",
-        generation=dt.datetime.now(dt.timezone.utc),
-        expiration=dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=12),
+        generation=dt.datetime.now(dt.UTC),
+        expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
         service="wsfex",
         environment="homo",
     )
@@ -56,7 +62,8 @@ MON_OK = _soap(
 
 ERR_600 = _soap(
     "FEXGetPARAM_MON",
-    "<FEXErr><ErrCode>600</ErrCode><ErrMsg>No se corresponden token con firma</ErrMsg></FEXErr>",
+    "<FEXErr><ErrCode>600</ErrCode>"
+    "<ErrMsg>No se corresponden token con firma</ErrMsg></FEXErr>",
 )
 
 CON_EVENTOS = _soap(
@@ -64,7 +71,8 @@ CON_EVENTOS = _soap(
     "<FEXResultGet>"
     "<ClsFEXResponse_Mon><Mon_Id>DOL</Mon_Id><Mon_Ds>Dolar</Mon_Ds></ClsFEXResponse_Mon>"
     "</FEXResultGet>"
-    "<FEXEvents><EventCode>99</EventCode><EventMsg>Mantenimiento programado</EventMsg></FEXEvents>"
+    "<FEXEvents><EventCode>99</EventCode>"
+    "<EventMsg>Mantenimiento programado</EventMsg></FEXEvents>"
     "<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>",
 )
 
@@ -140,15 +148,17 @@ def test_parse_param_items_generico_para_paises():
 
 def test_cache_de_params_en_sqlite(tmp_path):
     conn = db.connect(tmp_path / "test.db")
-    n = db.replace_params(
+    n = repo.replace_params(
         conn, "moneda", [ParamRecord("DOL", "Dolar", None, None).as_dict()]
     )
     assert n == 1
-    filas = db.get_params(conn, "moneda")
+    filas = repo.get_params(conn, "moneda")
     assert filas[0]["code"] == "DOL"
     assert filas[0]["fetched_at"]  # timestamp presente para el TTL de 24 h
 
     # refresh reemplaza, no duplica
-    db.replace_params(conn, "moneda", [ParamRecord("EUR", "Euro", None, None).as_dict()])
-    filas = db.get_params(conn, "moneda")
+    repo.replace_params(
+        conn, "moneda", [ParamRecord("EUR", "Euro", None, None).as_dict()]
+    )
+    filas = repo.get_params(conn, "moneda")
     assert [f["code"] for f in filas] == ["EUR"]

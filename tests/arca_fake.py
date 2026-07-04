@@ -12,7 +12,7 @@ from collections import Counter
 
 import httpx
 
-from facturador.wsfex import FEX_NS
+from facturador.arca.wsfex import FEX_NS
 
 
 def soap_response(method: str, inner: str) -> str:

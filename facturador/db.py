@@ -1,8 +1,7 @@
-"""SQLite mínimo para el spike: cache de tablas dinámicas de ARCA (§2.2)."""
+"""Esquema SQLite y conexión (spike.md §2.2). Las queries viven en repo.py."""
 
 from __future__ import annotations
 
-import datetime as dt
 import sqlite3
 from pathlib import Path
 
@@ -41,8 +40,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     cbte_tipo          INTEGER NOT NULL DEFAULT 19,
     punto_venta        INTEGER NOT NULL,
     cbte_nro           INTEGER,
-    status             TEXT NOT NULL DEFAULT 'draft'
-                       CHECK (status IN ('draft','submitting','authorized','rejected','unknown')),
+    status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                       ('draft','submitting','authorized','rejected','unknown')),
     fecha_cbte         TEXT NOT NULL,
     fecha_pago         TEXT NOT NULL,
     tipo_expo          INTEGER NOT NULL DEFAULT 2,
@@ -91,37 +90,3 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     return conn
-
-
-def replace_params(
-    conn: sqlite3.Connection,
-    kind: str,
-    records: list[dict],
-    fetched_at: dt.datetime | None = None,
-) -> int:
-    """Reemplaza el cache completo de un kind (refresh atómico)."""
-    fetched = (fetched_at or dt.datetime.now(dt.timezone.utc)).isoformat()
-    with conn:
-        conn.execute("DELETE FROM arca_params WHERE kind = ?", (kind,))
-        conn.executemany(
-            "INSERT INTO arca_params (kind, code, description, valid_from, valid_to, fetched_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    kind,
-                    r["code"],
-                    r.get("description"),
-                    r.get("valid_from"),
-                    r.get("valid_to"),
-                    fetched,
-                )
-                for r in records
-            ],
-        )
-    return len(records)
-
-
-def get_params(conn: sqlite3.Connection, kind: str) -> list[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM arca_params WHERE kind = ? ORDER BY code", (kind,)
-    ).fetchall()
