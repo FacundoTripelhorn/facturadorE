@@ -69,7 +69,8 @@ def create_invoice(
                 ),
             )
     row = get_invoice(conn, invoice_id)
-    assert row is not None  # recién insertado
+    if row is None:  # recién insertado: no debe pasar
+        raise RuntimeError(f"Factura {invoice_id} no se pudo releer tras el INSERT")
     return row
 
 

@@ -326,7 +326,8 @@ class InvoiceService:
 
     def _reload(self, invoice_id: str) -> sqlite3.Row:
         inv = repo.get_invoice(self.conn, invoice_id)
-        assert inv is not None  # ya validada en authorize/get_invoice
+        if inv is None:  # ya validada en authorize/get_invoice: no debe pasar
+            raise RuntimeError(f"Factura {invoice_id} desapareció durante el flujo")
         return inv
 
     def _send(self, invoice_id: str, wsfex_invoice: Invoice) -> sqlite3.Row:

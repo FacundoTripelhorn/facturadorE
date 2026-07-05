@@ -84,5 +84,6 @@ def render_invoice_pdf(
 ) -> bytes:
     html = render_invoice_html(inv, items, config, cuit_emisor, pais_ds)
     pdf = HTML(string=html).write_pdf()
-    assert pdf is not None  # write_pdf sin target devuelve bytes
+    if pdf is None:  # write_pdf sin target siempre devuelve bytes
+        raise RuntimeError("weasyprint no devolvió bytes del PDF")
     return pdf

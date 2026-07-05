@@ -67,6 +67,7 @@ def wsfex_invoice_to_raw(invoice: Invoice) -> dict:
             "pro_codigo": i.pro_codigo,
             "pro_qty": format(i.pro_qty, "f"),
             "pro_umed": i.pro_umed,
+            "pro_bonificacion": format(i.pro_bonificacion, "f"),
         }
         for i in invoice.items
     ]
@@ -82,6 +83,9 @@ def raw_to_wsfex_invoice(raw: dict) -> Invoice:
             pro_codigo=i["pro_codigo"],
             pro_qty=Decimal(i["pro_qty"]),
             pro_umed=i["pro_umed"],
+            # Default para raw_requests persistidos antes de guardarse este
+            # campo: eran siempre facturas sin bonificación.
+            pro_bonificacion=Decimal(i.get("pro_bonificacion", "0")),
         )
         for i in datos.pop("items")
     ]
