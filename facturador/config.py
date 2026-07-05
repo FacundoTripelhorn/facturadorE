@@ -16,17 +16,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .constants import WSAA_URLS, WSFEX_URLS
+
 VALID_ENVS = ("homo", "prod")
-
-WSAA_URLS = {
-    "homo": "https://wsaahomo.afip.gov.ar/ws/services/LoginCms",
-    "prod": "https://wsaa.afip.gov.ar/ws/services/LoginCms",
-}
-
-WSFEX_URLS = {
-    "homo": "https://wswhomo.afip.gov.ar/wsfexv1/service.asmx",
-    "prod": "https://servicios1.afip.gov.ar/wsfexv1/service.asmx",
-}
 
 
 class ConfigError(RuntimeError):

@@ -6,6 +6,19 @@ las tablas dinámicas de ARCA (consultables vía /params/:kind); si ARCA los
 cambiara, el lugar de la verdad es la tabla, no este archivo.
 """
 
+# Endpoints de ARCA por ambiente (spike.md §1.3). NO son configurables por
+# separado: Config los deriva del único flag ARCA_ENV (checklist §2.1.1
+# punto 1), imposible mezclar cert de homo con URL de prod por construcción.
+WSAA_URLS = {
+    "homo": "https://wsaahomo.afip.gov.ar/ws/services/LoginCms",
+    "prod": "https://wsaa.afip.gov.ar/ws/services/LoginCms",
+}
+
+WSFEX_URLS = {
+    "homo": "https://wswhomo.afip.gov.ar/wsfexv1/service.asmx",
+    "prod": "https://servicios1.afip.gov.ar/wsfexv1/service.asmx",
+}
+
 # SOAP 1.1 (compartido por WSAA y WSFEX)
 SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 
