@@ -5,15 +5,16 @@
   <p>
     <button hx-post="/ui/facturas/{{ force_invoice_id }}/authorize?force=true"
             hx-target="#resultado" hx-swap="innerHTML">
-      Forzar de todos modos (homologación / restore reciente)
+      <span class="spinner"></span> Forzar de todos modos (homologación / restore reciente)
     </button>
   </p>
   {% endif %}
 </div>
 {% elif factura and factura["status"] == AUTHORIZED %}
 <div class="panel ok">
-  <strong>Factura E {{ "%05d"|format(factura["punto_venta"]) }}-{{ "%08d"|format(factura["cbte_nro"]) }} autorizada.</strong>
-  CAE {{ factura["cae"] }} (vence {{ factura["cae_fch_vto"][6:] }}/{{ factura["cae_fch_vto"][4:6] }}/{{ factura["cae_fch_vto"][:4] }})
+  <span class="cae-grande num">Factura E {{ "%05d"|format(factura["punto_venta"]) }}-{{ "%08d"|format(factura["cbte_nro"]) }} autorizada</span><br>
+  CAE <span class="num">{{ factura["cae"] }}</span>
+  (vence {{ factura["cae_fch_vto"][6:] }}/{{ factura["cae_fch_vto"][4:6] }}/{{ factura["cae_fch_vto"][:4] }})
   — <a href="/invoices/{{ factura['id'] }}/pdf" target="_blank">Descargar PDF</a>
 </div>
 {% elif factura %}

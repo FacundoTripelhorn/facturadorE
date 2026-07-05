@@ -9,13 +9,16 @@
 
 <div id="resultado"></div>
 
-<fieldset>
-  <legend>Nueva Factura E {% if default %}— {{ default["razon_social"] }}{% endif %}</legend>
+<section class="card">
+  <h2>Nueva Factura E
+    {% if default %}<span class="sub">{{ default["razon_social"] }}</span>{% endif %}
+  </h2>
   <form hx-post="/ui/facturas" hx-target="#resultado" hx-swap="innerHTML">
     <div class="fila">
       <div>
         <label for="imp_total">Monto ({{ default["moneda_default"] if default else "DOL" }})</label>
-        <input id="imp_total" name="imp_total" type="number" step="0.01" min="0.01" required autofocus>
+        <input id="imp_total" name="imp_total" type="number" step="0.01" min="0.01"
+               class="num" required autofocus>
       </div>
       <div>
         <label for="fecha_pago">Fecha de pago</label>
@@ -39,21 +42,21 @@
     <input id="obs" name="obs" value="">
     <p class="nota">
       Emisión: hoy.
-      {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): {{ ctz }}.
+      {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz }}</span>.
       {% else %}Cotización: se obtiene de ARCA al autorizar.{% endif %}
       La numeración y la cotización finales las asigna ARCA al autorizar.
     </p>
-    <button type="submit">Emitir y autorizar</button>
+    <button type="submit"><span class="spinner"></span> Emitir y autorizar</button>
   </form>
-</fieldset>
+</section>
 
 {% endif %}
 
-<fieldset>
-  <legend>Comprobantes</legend>
+<section class="card">
+  <h2>Comprobantes</h2>
   <div id="listado" hx-get="/ui/listado" hx-trigger="facturas-changed from:body">
     {% include "_listado.html" %}
   </div>
-</fieldset>
+</section>
 
 {% endblock %}

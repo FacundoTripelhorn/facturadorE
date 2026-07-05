@@ -6,43 +6,148 @@
 <title>facturador</title>
 <script src="/static/htmx.min.js"></script>
 <style>
-  :root { --borde: #ccc; --ok: #1a7f37; --error: #b42318; --aviso: #b54708; }
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto;
-         padding: 0 1rem; color: #1c1c1c; }
-  nav { display: flex; gap: 1rem; align-items: baseline; margin-bottom: 1.5rem;
-        border-bottom: 1px solid var(--borde); padding-bottom: .6rem; }
-  nav .titulo { font-weight: 700; font-size: 1.2rem; margin-right: auto; }
-  nav a { color: inherit; }
-  .badge-env { border: 1px solid var(--aviso); color: var(--aviso);
-               border-radius: 4px; padding: .1rem .5rem; font-size: .8rem; }
-  fieldset { border: 1px solid var(--borde); border-radius: 6px;
-             margin-bottom: 1.5rem; padding: 1rem; }
-  legend { font-weight: 600; padding: 0 .4rem; }
-  label { display: block; margin: .6rem 0 .2rem; font-size: .9rem; }
-  input, select, textarea { width: 100%; box-sizing: border-box; padding: .45rem;
-          border: 1px solid var(--borde); border-radius: 4px; font: inherit; }
-  .fila { display: flex; gap: 1rem; }
-  .fila > div { flex: 1; }
-  button { padding: .55rem 1.2rem; border: 0; border-radius: 5px; font: inherit;
-           background: #0b57d0; color: #fff; cursor: pointer; margin-top: 1rem; }
-  button.secundario { background: #6b7280; }
-  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--borde); }
-  .estado { border-radius: 999px; padding: .1rem .6rem; font-size: .8rem;
-            background: #eee; white-space: nowrap; }
-  .estado.authorized { background: #d1f0dc; color: var(--ok); }
-  .estado.rejected, .estado.unknown { background: #fde2dd; color: var(--error); }
-  .panel { border-radius: 6px; padding: .8rem 1rem; margin-bottom: 1.2rem; }
-  .panel.ok { background: #eefaf2; border: 1px solid var(--ok); }
-  .panel.error { background: #fdf1ef; border: 1px solid var(--error); }
-  .nota { color: #555; font-size: .85rem; }
+  :root {
+    --fondo: #f4f5f7;
+    --superficie: #ffffff;
+    --tinta: #1a2233;
+    --tinta-suave: #5c6577;
+    --borde: #e3e6eb;
+    --acento: #1d4ed8;
+    --acento-hover: #1e40af;
+    --ok: #15803d;
+    --ok-fondo: #ecfdf3;
+    --error: #b42318;
+    --error-fondo: #fef3f2;
+    --aviso: #b54708;
+    --aviso-fondo: #fffaeb;
+    --radio: 10px;
+    --num: "ss01";
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo); color: var(--tinta);
+    max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem 4rem;
+    line-height: 1.45; font-size: 15px;
+  }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+
+  nav {
+    display: flex; gap: 1.25rem; align-items: center;
+    margin-bottom: 1.75rem;
+  }
+  nav .titulo {
+    font-weight: 750; font-size: 1.15rem; margin-right: auto;
+    letter-spacing: -.01em;
+  }
+  nav .titulo span { color: var(--acento); }
+  nav a { color: var(--tinta-suave); text-decoration: none; font-weight: 550;
+          padding: .3rem 0; border-bottom: 2px solid transparent; }
+  nav a:hover { color: var(--tinta); }
+  nav a[aria-current="page"] { color: var(--tinta); border-bottom-color: var(--acento); }
+  .badge-env {
+    background: var(--aviso-fondo); color: var(--aviso);
+    border: 1px solid #fedf89; border-radius: 999px;
+    padding: .15rem .7rem; font-size: .78rem; font-weight: 600;
+  }
+
+  .card {
+    background: var(--superficie); border: 1px solid var(--borde);
+    border-radius: var(--radio); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  .card h2 {
+    margin: 0 0 1rem; font-size: 1rem; font-weight: 650;
+    display: flex; align-items: baseline; gap: .5rem;
+  }
+  .card h2 .sub { color: var(--tinta-suave); font-weight: 450; font-size: .9rem; }
+
+  label { display: block; margin: .8rem 0 .3rem; font-size: .82rem;
+          font-weight: 600; color: var(--tinta-suave); }
+  input, select, textarea {
+    width: 100%; padding: .55rem .7rem; font: inherit; color: inherit;
+    border: 1px solid var(--borde); border-radius: 7px; background: #fff;
+    transition: border-color .1s, box-shadow .1s;
+  }
+  input:focus, select:focus {
+    outline: none; border-color: var(--acento);
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, .12);
+  }
+  .fila { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .fila > div { flex: 1; min-width: 180px; }
+  .check { display: flex; align-items: center; gap: .5rem; margin-top: 1rem;
+           font-size: .9rem; color: var(--tinta); font-weight: 450; }
+  .check input { width: auto; }
+
+  button {
+    padding: .6rem 1.4rem; border: 0; border-radius: 7px; font: inherit;
+    font-weight: 600; background: var(--acento); color: #fff; cursor: pointer;
+    margin-top: 1.1rem; transition: background .1s;
+  }
+  button:hover { background: var(--acento-hover); }
+  button.secundario {
+    background: transparent; color: var(--tinta-suave);
+    border: 1px solid var(--borde); margin: 0; padding: .3rem .8rem;
+    font-size: .82rem; font-weight: 550;
+  }
+  button.secundario:hover { color: var(--tinta); border-color: var(--tinta-suave);
+                            background: transparent; }
+
+  /* Estado de envío (htmx): spinner y botón bloqueado mientras ARCA responde */
+  .spinner { display: none; width: 1em; height: 1em; vertical-align: -.15em;
+             border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+             border-radius: 50%; animation: girar .7s linear infinite; }
+  .htmx-request .spinner, .spinner.htmx-request { display: inline-block; }
+  .htmx-request button[type=submit] { opacity: .7; pointer-events: none; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th {
+    text-align: left; padding: .5rem .6rem; color: var(--tinta-suave);
+    font-size: .72rem; font-weight: 650; text-transform: uppercase;
+    letter-spacing: .05em; border-bottom: 1px solid var(--borde);
+  }
+  td { padding: .55rem .6rem; border-bottom: 1px solid var(--borde); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #fafbfc; }
+  td.num, th.num { text-align: right; }
+  td.num { white-space: nowrap; }
+
+  .estado {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border-radius: 999px; padding: .12rem .65rem; font-size: .78rem;
+    font-weight: 600; background: #f2f4f7; color: var(--tinta-suave);
+    white-space: nowrap;
+  }
+  .estado::before { content: ""; width: .45rem; height: .45rem;
+                    border-radius: 50%; background: currentColor; }
+  .estado.authorized { background: var(--ok-fondo); color: var(--ok); }
+  .estado.rejected { background: var(--error-fondo); color: var(--error); }
+  .estado.unknown { background: var(--aviso-fondo); color: var(--aviso); }
+
+  .panel { border-radius: var(--radio); padding: .9rem 1.2rem; margin-bottom: 1.25rem;
+           border: 1px solid; font-size: .92rem; }
+  .panel.ok { background: var(--ok-fondo); border-color: #a6f4c5; color: #054f31; }
+  .panel.error { background: var(--error-fondo); border-color: #fecdca; color: #7a271a; }
+  .panel .cae-grande { font-size: 1.05rem; font-weight: 700; }
+  .panel a { color: inherit; font-weight: 650; }
+
+  .nota { color: var(--tinta-suave); font-size: .82rem; margin-top: .8rem; }
+  .vacio { color: var(--tinta-suave); text-align: center; padding: 1.5rem 0;
+           font-size: .9rem; }
+  a { color: var(--acento); }
+  @media (max-width: 640px) {
+    body { padding-top: 1rem; }
+    .card { padding: 1rem; }
+    .oculta-movil { display: none; }
+  }
 </style>
 </head>
 <body>
 <nav>
-  <span class="titulo">facturador</span>
-  <a href="/">Facturas</a>
-  <a href="/clientes">Clientes</a>
+  <span class="titulo">factura<span>dor</span></span>
+  <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Facturas</a>
+  <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
   {% if env != "prod" %}<span class="badge-env">{{ env }} — sin valor fiscal</span>{% endif %}
 </nav>
 {% block content %}{% endblock %}

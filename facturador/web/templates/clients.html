@@ -3,8 +3,8 @@
 
 {% if error %}<div class="panel error">{{ error }}</div>{% endif %}
 
-<fieldset>
-  <legend>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</legend>
+<section class="card">
+  <h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
   <form method="post" action="/ui/clientes">
     {% if editando %}<input type="hidden" name="client_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
@@ -79,36 +79,35 @@
     <label for="descripcion_default">Descripción default del servicio</label>
     <input id="descripcion_default" name="descripcion_default"
            value="{{ editando['descripcion_default'] if editando else '' }}">
-    <label>
-      <input type="checkbox" name="is_default" value="true" style="width:auto"
+    <label class="check">
+      <input type="checkbox" name="is_default" value="true"
              {% if editando and editando["is_default"] %}checked{% endif %}>
       Cliente habitual (precargado en el form de facturas)
     </label>
     <button type="submit">Guardar</button>
     {% if editando %}<a href="/clientes" style="margin-left:1rem">Cancelar</a>{% endif %}
   </form>
-</fieldset>
+</section>
 
-<fieldset>
-  <legend>Clientes</legend>
+<section class="card">
+  <h2>Clientes</h2>
   {% if not clientes %}
-  <p class="nota">Sin clientes todavía.</p>
+  <p class="vacio">Sin clientes todavía.</p>
   {% else %}
   <table>
-    <thead><tr><th>Razón social</th><th>País</th><th>ID impositivo</th><th></th><th></th></tr></thead>
+    <thead><tr><th>Razón social</th><th>País</th><th class="oculta-movil">ID impositivo</th><th></th></tr></thead>
     <tbody>
       {% for c in clientes %}
       <tr>
         <td>{{ c["razon_social"] }}{% if c["is_default"] %} ★{% endif %}</td>
-        <td>{{ c["pais_dst"] }}</td>
-        <td>{{ c["id_impositivo"] }}</td>
+        <td class="num">{{ c["pais_dst"] }}</td>
+        <td class="oculta-movil">{{ c["id_impositivo"] }}</td>
         <td><a href="/clientes?edit={{ c['id'] }}">Editar</a></td>
-        <td></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% endif %}
-</fieldset>
+</section>
 
 {% endblock %}
