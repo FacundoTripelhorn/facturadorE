@@ -16,9 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import qrcode
 
-QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
-
-TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA
+from ..constants import QR_BASE_URL, TIPO_DOC_CUIT
 
 
 def _monto(value: str) -> float:

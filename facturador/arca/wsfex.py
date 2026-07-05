@@ -20,11 +20,17 @@ from decimal import Decimal
 import httpx
 
 from ..config import Config
+from ..constants import (
+    CBTE_TIPO_FACTURA_E,
+    MONEDA_DOL,
+    SOAP_ENV_NS,
+    TIPO_EXPO_SERVICIOS,
+    UMED_UNIDADES,
+)
 from .wsaa import WsaaClient, cuit_from_certificate
 
 logger = logging.getLogger(__name__)
 
-SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 # Namespace verificado contra el WSDL real (2026-07): es minúscula, no FEXV1.
 FEX_NS = "http://ar.gov.afip.dif.fexv1/"
 
@@ -89,7 +95,7 @@ class InvoiceItem:
     pro_precio_uni: Decimal
     pro_codigo: str = "0001"
     pro_qty: Decimal = Decimal(1)
-    pro_umed: int = 7  # unidades
+    pro_umed: int = UMED_UNIDADES
     pro_bonificacion: Decimal = Decimal(0)
 
     @property
@@ -115,10 +121,10 @@ class Invoice:
     fecha_pago: str           # AAAAMMDD; puede diferir de fecha_cbte
     forma_pago: str
     items: list[InvoiceItem]
-    cbte_tipo: int = 19       # Factura E
-    tipo_expo: int = 2        # servicios
+    cbte_tipo: int = CBTE_TIPO_FACTURA_E
+    tipo_expo: int = TIPO_EXPO_SERVICIOS
     permiso_existente: str = ""   # vacío para servicios
-    moneda_id: str = "DOL"
+    moneda_id: str = MONEDA_DOL
     incoterms: str = ""       # vacío en servicios (§0.1)
     idioma_cbte: int = 1      # español
     obs: str = ""
@@ -394,7 +400,7 @@ class WsfexClient:
             raise WsfexError("?", "FEXGetLast_ID sin Id en la respuesta")
         return int(last)
 
-    def get_last_cmp(self, punto_vta: int, cbte_tipo: int = 19) -> int:
+    def get_last_cmp(self, punto_vta: int, cbte_tipo: int = CBTE_TIPO_FACTURA_E) -> int:
         """Último número autorizado para (pto_vta, tipo). ARCA es la fuente
         de verdad de la numeración (§3), nunca un contador local."""
         auth = self._auth_element()

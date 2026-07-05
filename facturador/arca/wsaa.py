@@ -36,6 +36,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, p
 from cryptography.x509.oid import NameOID
 
 from ..config import Config
+from ..constants import SOAP_ENV_NS
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,6 @@ TRA_EXPIRATION_SLACK = dt.timedelta(minutes=10)
 # Margen antes del vencimiento real del TA a partir del cual se renueva.
 TA_EXPIRY_MARGIN = dt.timedelta(minutes=5)
 
-SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 WSAA_NS = "http://wsaa.view.sua.dvadac.desein.afip.gov"
 
 

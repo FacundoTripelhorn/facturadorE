@@ -24,6 +24,7 @@ import httpx
 from . import repo
 from .arca.wsfex import Invoice, WsfexClient, WsfexError
 from .config import Config
+from .constants import UMED_UNIDADES
 from .mappers import (
     dec,
     raw_to_wsfex_invoice,
@@ -178,7 +179,7 @@ class InvoiceService:
                     "pro_codigo": "0001",
                     "pro_ds": descripcion,
                     "pro_qty": "1",
-                    "pro_umed": 7,
+                    "pro_umed": UMED_UNIDADES,
                     "pro_precio_uni": dec(payload.imp_total),
                     "pro_total_item": dec(payload.imp_total),
                 }

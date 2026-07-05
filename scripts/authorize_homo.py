@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from facturador import db, repo
 from facturador.arca.wsfex import Invoice, InvoiceItem, WsfexClient
 from facturador.config import load_config
+from facturador.constants import CBTE_TIPO_FACTURA_E, MONEDA_DOL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -150,11 +151,11 @@ def main() -> None:
         dst_cmp = lookup_param(conn, "pais", entrada["pais_descripcion"])
         cuit_pais = lookup_param(conn, "cuit_pais", entrada["cuit_pais_descripcion"])
 
-        ctz, ctz_fecha = client.get_ctz("DOL")
+        ctz, ctz_fecha = client.get_ctz(MONEDA_DOL)
         print(f"Cotización DOL (ARCA, {ctz_fecha}): {ctz}")
 
         arca_id = client.get_last_id() + 1
-        cbte_nro = client.get_last_cmp(PUNTO_VTA_HOMO, 19) + 1
+        cbte_nro = client.get_last_cmp(PUNTO_VTA_HOMO, CBTE_TIPO_FACTURA_E) + 1
         print(
             f"Id idempotente: {arca_id}  |  "
             f"Comprobante: {PUNTO_VTA_HOMO:05d}-{cbte_nro:08d}"

@@ -116,7 +116,7 @@
           <td>{{ item["pro_codigo"] }}</td>
           <td>{{ item["pro_ds"] }}</td>
           <td class="num">{{ item["pro_qty"] }}</td>
-          <td>{{ "unidades" if item["pro_umed"] == 7 else item["pro_umed"] }}</td>
+          <td>{{ "unidades" if item["pro_umed"] == UMED_UNIDADES else item["pro_umed"] }}</td>
           <td class="num">{{ item["pro_precio_uni"] }}</td>
           <td class="num">{{ item["pro_total_item"] }}</td>
         </tr>
