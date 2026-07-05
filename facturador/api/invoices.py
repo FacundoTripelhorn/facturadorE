@@ -7,6 +7,7 @@ import sqlite3
 from fastapi import APIRouter, Query, Response
 
 from .. import repo
+from ..constants import InvoiceStatus
 from ..pdf import invoice_pdf_filename, render_invoice_pdf
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
@@ -61,7 +62,7 @@ def _pais_ds(conn: sqlite3.Connection, dst_cmp: int) -> str:
 @router.get("/{invoice_id}/pdf")
 def invoice_pdf(invoice_id: str, service: ServiceDep):
     inv = service.get_invoice(invoice_id)  # 404 si no existe; reconcilia unknown
-    if inv["status"] != "authorized":
+    if inv["status"] != InvoiceStatus.AUTHORIZED:
         raise ConflictError(
             f"El PDF existe solo para facturas autorizadas "
             f"(estado actual: {inv['status']})"

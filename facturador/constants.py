@@ -6,6 +6,24 @@ las tablas dinámicas de ARCA (consultables vía /params/:kind); si ARCA los
 cambiara, el lugar de la verdad es la tabla, no este archivo.
 """
 
+import enum
+
+
+class InvoiceStatus(enum.StrEnum):
+    """Estados de la máquina de estados de facturas (spike.md §2.2).
+
+    Es un StrEnum: cada miembro ES su valor TEXT, así que entra sin
+    conversión en la columna ``invoices.status`` y en el JSON de la API.
+    El CHECK de schema.sql enumera los mismos valores; un test los mantiene
+    en sync.
+    """
+
+    DRAFT = "draft"
+    SUBMITTING = "submitting"
+    AUTHORIZED = "authorized"
+    REJECTED = "rejected"
+    UNKNOWN = "unknown"  # timeout post-envío, pendiente de reconciliar
+
 # Endpoints de ARCA por ambiente (spike.md §1.3). NO son configurables por
 # separado: Config los deriva del único flag ARCA_ENV (checklist §2.1.1
 # punto 1), imposible mezclar cert de homo con URL de prod por construcción.
