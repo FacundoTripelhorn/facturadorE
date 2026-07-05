@@ -159,3 +159,13 @@ def max_authorized_cbte_nro(
         (punto_venta, cbte_tipo, InvoiceStatus.AUTHORIZED),
     ).fetchone()
     return int(row["m"] or 0)
+
+
+def max_arca_id(conn: sqlite3.Connection) -> int:
+    """Máximo Id de FEXAuthorize reservado localmente, en cualquier estado.
+
+    Una factura 'unknown'/'submitting' ya reservó su arca_id aunque ARCA no
+    lo conozca todavía (el timeout pudo ser pre-envío): el próximo Id nuevo
+    debe superar también estas reservas, no solo FEXGetLast_ID."""
+    row = conn.execute("SELECT MAX(arca_id) AS m FROM invoices").fetchone()
+    return int(row["m"] or 0)

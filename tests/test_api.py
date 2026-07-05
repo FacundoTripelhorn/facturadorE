@@ -195,6 +195,31 @@ def test_timeout_sin_emision_reintenta_con_mismo_id(api, arca):
     assert arca.issued[(19, 1, cbte_nro_original)]["arca_id"] == arca_id_original
 
 
+def test_arca_id_nuevo_no_colisiona_con_reservas_locales(api, arca):
+    """Una factura 'unknown' reservó su arca_id sin que ARCA lo conozca
+    (timeout pre-envío): la siguiente factura nueva debe saltearlo, no
+    reventar contra el UNIQUE de arca_id."""
+    _crear_cliente(api)
+    colgada = _crear_draft(api)
+    arca.authorize_mode = "timeout"
+    r = api.post(f"/invoices/{colgada['id']}/authorize?force_desync=true").json()
+    assert r["status"] == "unknown"
+    assert r["arca_id"] == 1  # reservado localmente, ARCA nunca lo vio
+
+    arca.authorize_mode = "ok"
+    nueva = _crear_draft(api)
+    r = api.post(f"/invoices/{nueva['id']}/authorize?force_desync=true")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "authorized"
+    assert r.json()["arca_id"] == 2  # saltea la reserva local
+
+    # La colgada, al reintentar, encuentra su número tomado por la nueva:
+    # jamás adopta un CAE ajeno; queda para revisión manual.
+    retry = api.post(f"/invoices/{colgada['id']}/authorize").json()
+    assert retry["status"] == "unknown"
+    assert retry["cae"] is None
+
+
 def test_reconciliacion_detecta_comprobante_ajeno(api, arca):
     """Si ARCA registra nuestro número con OTRO importe, jamás adoptar el CAE."""
     _crear_cliente(api)

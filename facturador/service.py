@@ -274,7 +274,12 @@ class InvoiceService:
         invoice_id = inv["id"]
         try:
             last_cmp = self.wsfex.get_last_cmp(inv["punto_venta"], inv["cbte_tipo"])
-            arca_id = inv["arca_id"] or self.wsfex.get_last_id() + 1
+            # El Id nuevo debe superar el último de ARCA Y las reservas
+            # locales (facturas unknown/submitting que aún no llegaron a
+            # ARCA); si no, colisiona con el UNIQUE de arca_id.
+            arca_id = inv["arca_id"] or (
+                max(self.wsfex.get_last_id(), repo.max_arca_id(self.conn)) + 1
+            )
         except (WsfexError, httpx.HTTPError) as exc:
             raise ArcaUnavailableError(f"ARCA no disponible: {exc}") from exc
 
@@ -395,19 +400,28 @@ class InvoiceService:
         if not cae:
             return None
         # Nunca aceptar un CAE sin verificar contra el request persistido
-        # (checklist punto 3).
+        # (checklist punto 3). El Id es la identidad real del request: el
+        # importe solo no alcanza (otra factura del mismo monto pudo tomar
+        # este número mientras esta esperaba reconciliación).
         raw = json.loads(inv["raw_request"])
+        id_registrado = registrado.get("Id")
         imp_registrado = registrado.get("Imp_total")
-        imp_enviado = Decimal(raw["imp_total"])
-        if imp_registrado is None or Decimal(imp_registrado) != imp_enviado:
+        es_propio = (
+            id_registrado is not None
+            and int(id_registrado) == raw["arca_id"]
+            and imp_registrado is not None
+            and Decimal(imp_registrado) == Decimal(raw["imp_total"])
+        )
+        if not es_propio:
             repo.update_invoice(
                 self.conn,
                 inv["id"],
                 status=InvoiceStatus.UNKNOWN,
                 last_error=(
-                    f"ARCA registra el comprobante {inv['cbte_nro']} con importe "
-                    f"{imp_registrado}, distinto del enviado {raw['imp_total']}. "
-                    "Revisión manual requerida."
+                    f"ARCA registra el comprobante {inv['cbte_nro']} con "
+                    f"Id={id_registrado} e importe {imp_registrado}, distintos "
+                    f"de los enviados (Id={raw['arca_id']}, "
+                    f"importe {raw['imp_total']}). Revisión manual requerida."
                 ),
             )
             return self._reload(inv["id"])

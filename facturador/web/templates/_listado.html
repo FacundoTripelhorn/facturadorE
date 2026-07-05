@@ -1,0 +1,42 @@
+{% if not facturas %}
+<p class="nota">Sin comprobantes todavía.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th><th>Comprobante</th><th>Cliente</th><th>Importe</th>
+      <th>Estado</th><th>CAE</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in facturas %}
+    <tr>
+      <td>{{ f["fecha_cbte"][6:] }}/{{ f["fecha_cbte"][4:6] }}/{{ f["fecha_cbte"][:4] }}</td>
+      <td>
+        {# El número es definitivo solo al autorizar; antes es una reserva
+           local que ARCA puede reasignar. #}
+        {% if f["status"] == AUTHORIZED %}{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ f["cliente"] }}</td>
+      <td>{{ f["moneda_id"] }} {{ f["imp_total"] }}</td>
+      <td>
+        <span class="estado {{ f['status'] }}" {% if f["last_error"] %}title="{{ f['last_error'] }}"{% endif %}>
+          {{ STATUS_LABELS[f["status"]] }}
+        </span>
+      </td>
+      <td>{{ f["cae"] or "—" }}</td>
+      <td>
+        {% if f["status"] == AUTHORIZED %}
+        <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">PDF</a>
+        {% elif f["status"] in RETRYABLE %}
+        <button class="secundario" style="margin:0; padding:.2rem .7rem"
+                hx-post="/ui/facturas/{{ f['id'] }}/authorize"
+                hx-target="#resultado" hx-swap="innerHTML">Autorizar</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
