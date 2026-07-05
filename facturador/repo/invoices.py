@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import sqlite3
 
+from ..constants import InvoiceStatus
 from ._common import new_id, now
 
 INVOICE_FIELDS = (
@@ -41,8 +42,14 @@ def create_invoice(
         conn.execute(
             f"INSERT INTO invoices (id, {', '.join(INVOICE_FIELDS)},"
             " status, created_at, updated_at)"
-            f" VALUES (?{', ?' * len(INVOICE_FIELDS)}, 'draft', ?, ?)",
-            (invoice_id, *(data[f] for f in INVOICE_FIELDS), ts, ts),
+            f" VALUES (?{', ?' * len(INVOICE_FIELDS)}, ?, ?, ?)",
+            (
+                invoice_id,
+                *(data[f] for f in INVOICE_FIELDS),
+                InvoiceStatus.DRAFT,
+                ts,
+                ts,
+            ),
         )
         for item in items:
             conn.execute(
@@ -127,10 +134,18 @@ def try_transition_to_submitting(
     ).isoformat()
     with conn:
         cursor = conn.execute(
-            "UPDATE invoices SET status = 'submitting', updated_at = ?"
-            " WHERE id = ? AND (status IN ('draft', 'unknown')"
-            "   OR (status = 'submitting' AND updated_at < ?))",
-            (now(), invoice_id, stale_cutoff),
+            "UPDATE invoices SET status = ?, updated_at = ?"
+            " WHERE id = ? AND (status IN (?, ?)"
+            "   OR (status = ? AND updated_at < ?))",
+            (
+                InvoiceStatus.SUBMITTING,
+                now(),
+                invoice_id,
+                InvoiceStatus.DRAFT,
+                InvoiceStatus.UNKNOWN,
+                InvoiceStatus.SUBMITTING,
+                stale_cutoff,
+            ),
         )
     return cursor.rowcount == 1
 
@@ -140,7 +155,7 @@ def max_authorized_cbte_nro(
 ) -> int:
     row = conn.execute(
         "SELECT MAX(cbte_nro) AS m FROM invoices"
-        " WHERE punto_venta = ? AND cbte_tipo = ? AND status = 'authorized'",
-        (punto_venta, cbte_tipo),
+        " WHERE punto_venta = ? AND cbte_tipo = ? AND status = ?",
+        (punto_venta, cbte_tipo, InvoiceStatus.AUTHORIZED),
     ).fetchone()
     return int(row["m"] or 0)

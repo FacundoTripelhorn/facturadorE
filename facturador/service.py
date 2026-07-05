@@ -24,6 +24,12 @@ import httpx
 from . import repo
 from .arca.wsfex import Invoice, WsfexClient, WsfexError
 from .config import Config
+from .constants import (
+    CBTE_TIPO_FACTURA_E,
+    TIPO_EXPO_SERVICIOS,
+    UMED_UNIDADES,
+    InvoiceStatus,
+)
 from .mappers import (
     dec,
     raw_to_wsfex_invoice,
@@ -178,7 +184,7 @@ class InvoiceService:
                     "pro_codigo": "0001",
                     "pro_ds": descripcion,
                     "pro_qty": "1",
-                    "pro_umed": 7,
+                    "pro_umed": UMED_UNIDADES,
                     "pro_precio_uni": dec(payload.imp_total),
                     "pro_total_item": dec(payload.imp_total),
                 }
@@ -192,11 +198,11 @@ class InvoiceService:
 
         data = {
             "client_id": client["id"],
-            "cbte_tipo": 19,
+            "cbte_tipo": CBTE_TIPO_FACTURA_E,
             "punto_venta": self.config.punto_venta,
             "fecha_cbte": fecha_cbte,
             "fecha_pago": fecha_pago,
-            "tipo_expo": 2,
+            "tipo_expo": TIPO_EXPO_SERVICIOS,
             "permiso_existente": "",
             "dst_cmp": client["pais_dst"],
             # Snapshot del cliente: el comprobante queda inmutable aunque el
@@ -221,7 +227,7 @@ class InvoiceService:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:
             raise NotFoundError(f"Factura {invoice_id} no existe")
-        if reconcile and inv["status"] == "unknown" and inv["raw_request"]:
+        if reconcile and inv["status"] == InvoiceStatus.UNKNOWN and inv["raw_request"]:
             try:
                 resolved = self._try_reconcile(inv)
             except (WsfexError, httpx.HTTPError):
@@ -238,9 +244,9 @@ class InvoiceService:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:
             raise NotFoundError(f"Factura {invoice_id} no existe")
-        if inv["status"] == "authorized":
+        if inv["status"] == InvoiceStatus.AUTHORIZED:
             return inv  # idempotente: mismo CAE, sin tocar ARCA
-        if inv["status"] == "rejected":
+        if inv["status"] == InvoiceStatus.REJECTED:
             raise ConflictError(
                 f"Factura rechazada por ARCA ({inv['last_error']}); "
                 "corregir los datos creando una nueva."
@@ -259,7 +265,7 @@ class InvoiceService:
             # No se llegó a enviar nada: volver a draft para no dejar el
             # lock tomado (raw_request sigue NULL).
             if inv["raw_request"] is None:
-                repo.update_invoice(self.conn, invoice_id, status="draft")
+                repo.update_invoice(self.conn, invoice_id, status=InvoiceStatus.DRAFT)
             raise
 
     def _authorize_first_time(
@@ -326,7 +332,7 @@ class InvoiceService:
             repo.update_invoice(
                 self.conn,
                 invoice_id,
-                status="rejected",
+                status=InvoiceStatus.REJECTED,
                 last_error=f"ARCA {exc.code}: {exc.message}",
                 raw_response=json.dumps({"error": exc.code, "message": exc.message}),
             )
@@ -337,7 +343,7 @@ class InvoiceService:
             repo.update_invoice(
                 self.conn,
                 invoice_id,
-                status="unknown",
+                status=InvoiceStatus.UNKNOWN,
                 last_error=f"Sin respuesta de ARCA: {exc}",
             )
             return self._reload(invoice_id)
@@ -348,7 +354,7 @@ class InvoiceService:
             repo.update_invoice(
                 self.conn,
                 invoice_id,
-                status="unknown",
+                status=InvoiceStatus.UNKNOWN,
                 cae=result.cae,
                 cae_fch_vto=result.cae_fch_vto,
                 last_error="Verificación FEXGetCMP con discrepancias: "
@@ -359,7 +365,7 @@ class InvoiceService:
         repo.update_invoice(
             self.conn,
             invoice_id,
-            status="authorized",
+            status=InvoiceStatus.AUTHORIZED,
             cae=result.cae,
             cae_fch_vto=result.cae_fch_vto,
             last_error=None,
@@ -397,7 +403,7 @@ class InvoiceService:
             repo.update_invoice(
                 self.conn,
                 inv["id"],
-                status="unknown",
+                status=InvoiceStatus.UNKNOWN,
                 last_error=(
                     f"ARCA registra el comprobante {inv['cbte_nro']} con importe "
                     f"{imp_registrado}, distinto del enviado {raw['imp_total']}. "
@@ -408,7 +414,7 @@ class InvoiceService:
         repo.update_invoice(
             self.conn,
             inv["id"],
-            status="authorized",
+            status=InvoiceStatus.AUTHORIZED,
             cae=cae,
             cae_fch_vto=registrado.get("Fch_venc_Cae"),
             last_error=None,

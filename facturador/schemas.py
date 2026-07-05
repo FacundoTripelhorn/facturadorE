@@ -8,6 +8,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .constants import MONEDA_DOL, UMED_UNIDADES
+
 _FECHA_RE = re.compile(r"^\d{8}$")
 
 
@@ -24,7 +26,7 @@ class ClientIn(BaseModel):
     pais_dst: int
     cuit_pais: int
     id_impositivo: str = ""
-    moneda_default: str = "DOL"
+    moneda_default: str = MONEDA_DOL
     incoterms_default: str = ""
     idioma_default: int = 1
     forma_pago_default: str = "WIRE TRANSFER"
@@ -45,7 +47,7 @@ class ItemIn(BaseModel):
     pro_precio_uni: Decimal = Field(gt=0)
     pro_codigo: str = "0001"
     pro_qty: Decimal = Field(default=Decimal(1), gt=0)
-    pro_umed: int = 7
+    pro_umed: int = UMED_UNIDADES
 
 
 class InvoiceCreate(BaseModel):

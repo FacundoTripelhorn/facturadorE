@@ -7,12 +7,28 @@ timeout sin emisión y timeout post-envío con emisión (el caso 'unknown').
 
 from __future__ import annotations
 
+import datetime as dt
 import xml.etree.ElementTree as ET
 from collections import Counter
 
 import httpx
 
+from facturador.arca.wsaa import Ticket
 from facturador.arca.wsfex import FEX_NS
+
+
+class FakeWsaa:
+    """WSAA que siempre entrega un TA vigente de mentira."""
+
+    def get_ticket(self) -> Ticket:
+        return Ticket(
+            token="tok==",
+            sign="sig==",
+            generation=dt.datetime.now(dt.UTC),
+            expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
+            service="wsfex",
+            environment="homo",
+        )
 
 
 def soap_response(method: str, inner: str) -> str:

@@ -1,0 +1,162 @@
+"""Fase 5 — PDF + QR RG 4892.
+
+Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
+endpoint (200/409/404), copia persistida en data/pdfs y escaping de datos
+hostiles en el HTML del comprobante.
+"""
+
+import base64
+import dataclasses
+import datetime as dt
+import json
+from urllib.parse import parse_qs, urlparse
+
+from facturador import repo
+from facturador.config import Emisor
+from facturador.pdf import render_invoice_html
+from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
+from tests.conftest import TEST_CUIT
+
+CLIENTE = {
+    "razon_social": "CLIENTE URUGUAY S.A.",
+    "domicilio": "Av. Siempreviva 123, Montevideo",
+    "pais_dst": 225,
+    "cuit_pais": 55000002002,
+    "id_impositivo": "RUT 219999830019",
+    "descripcion_default": "Servicios de desarrollo de software",
+    "is_default": True,
+}
+
+
+def _factura_autorizada(api, **cliente_overrides):
+    alta = api.post("/clients", json={**CLIENTE, **cliente_overrides})
+    assert alta.status_code == 201, alta.text
+    draft = api.post("/invoices", json={"imp_total": "1500.00"}).json()
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+# --- QR RG 4892 ---
+
+
+def test_qr_payload_cumple_rg4892(api, arca):
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+
+    payload = build_qr_payload(inv, int(TEST_CUIT))
+
+    hoy = dt.date.today()
+    assert payload == {
+        "ver": 1,
+        "fecha": hoy.isoformat(),
+        "cuit": int(TEST_CUIT),
+        "ptoVta": 1,
+        "tipoCmp": 19,
+        "nroCmp": 1,
+        "importe": 1500.0,
+        "moneda": "DOL",
+        "ctz": 1145.569,
+        "tipoDocRec": 80,
+        "nroDocRec": 55000002002,
+        "tipoCodAut": "E",
+        "codAut": 76100000000001,
+    }
+
+
+def test_qr_url_lleva_el_payload_en_base64(api, arca):
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    payload = build_qr_payload(inv, int(TEST_CUIT))
+
+    url = qr_url(payload)
+
+    assert url.startswith(f"{QR_BASE_URL}?p=")
+    p = parse_qs(urlparse(url).query)["p"][0]
+    assert json.loads(base64.b64decode(p)) == payload
+
+
+def test_qr_exige_factura_con_cae(api, arca):
+    api.post("/clients", json=CLIENTE)
+    draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
+    inv = repo.get_invoice(api.conn, draft["id"])
+    try:
+        build_qr_payload(inv, int(TEST_CUIT))
+        raise AssertionError("debió rechazar una factura sin CAE")
+    except ValueError:
+        pass
+
+
+# --- endpoint /invoices/:id/pdf ---
+
+
+def test_pdf_de_factura_autorizada(api, arca, test_config):
+    factura = _factura_autorizada(api)
+
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF-")
+    filename = "factura-E-00001-00000001-homo.pdf"
+    assert filename in r.headers["content-disposition"]
+    # Copia persistida en data/pdfs (layout §2.5), idéntica a la respuesta.
+    assert (test_config.pdf_dir / filename).read_bytes() == r.content
+
+
+def test_pdf_de_draft_es_conflicto(api, arca):
+    api.post("/clients", json=CLIENTE)
+    draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
+    r = api.get(f"/invoices/{draft['id']}/pdf")
+    assert r.status_code == 409
+    assert "draft" in r.json()["detail"]
+
+
+def test_pdf_inexistente_es_404(api):
+    assert api.get("/invoices/inexistente/pdf").status_code == 404
+
+
+# --- contenido y escaping del HTML ---
+
+
+def test_html_contiene_los_datos_del_comprobante(api, arca, test_config):
+    config = dataclasses.replace(
+        test_config,
+        emisor=Emisor(
+            razon_social="MI EMPRESA S.R.L.",
+            domicilio="Calle Falsa 123, CABA",
+            iibb="901-123456-7",
+            inicio_actividades="01/2020",
+        ),
+    )
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+
+    html = render_invoice_html(inv, items, config, int(TEST_CUIT), pais_ds="URUGUAY")
+
+    assert "MI EMPRESA S.R.L." in html
+    assert "901-123456-7" in html
+    assert "IVA Responsable Inscripto" in html
+    assert "CLIENTE URUGUAY S.A." in html
+    assert "URUGUAY" in html
+    assert "00001-00000001" in html
+    assert "Servicios de desarrollo de software" in html
+    assert "1500.00" in html
+    assert "IVA EXENTO — OPERACIÓN DE EXPORTACIÓN" in html
+    assert "76100000000001" in html                      # CAE
+    assert "data:image/png;base64," in html              # QR incrustado
+    assert "SIN VALOR FISCAL" in html                    # marca de homologación
+
+
+def test_datos_hostiles_quedan_escapados_en_el_html(api, arca, test_config):
+    factura = _factura_autorizada(
+        api, razon_social='PYME <script>alert(1)</script> & "CO"'
+    )
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+
+    html = render_invoice_html(inv, items, test_config, int(TEST_CUIT))
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
