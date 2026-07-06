@@ -16,6 +16,7 @@ import datetime as dt
 import json
 import logging
 import sqlite3
+import threading
 from decimal import Decimal
 from typing import Any
 
@@ -42,6 +43,16 @@ logger = logging.getLogger(__name__)
 
 PARAMS_TTL = dt.timedelta(hours=24)
 
+# Serializa authorize() de punta a punta entre llamadas concurrentes. Dos
+# razones: (1) ARCA exige numeración estrictamente secuencial (solo se puede
+# autorizar last_cmp+1), así que dos emisiones NO pueden pipelinearse — la
+# segunda tiene que ver el CAE de la primera antes de tomar su número (el
+# arca_id además es global por CUIT, no por serie); (2) la conexión SQLite es
+# única y compartida entre threads (§2.5, FastAPI atiende en threadpool), y no
+# es segura para transacciones concurrentes. Serializar todo el authorize
+# resuelve ambas. Volumen ~1 factura/semana: el costo de serializar es nulo.
+_AUTHORIZE_LOCK = threading.Lock()
+
 
 class ServiceError(RuntimeError):
     pass
@@ -53,6 +64,12 @@ class NotFoundError(ServiceError):
 
 class ConflictError(ServiceError):
     pass
+
+
+class StaleRegistryError(ConflictError):
+    """DB local desactualizada frente a ARCA (§2.5): la única variante de
+    conflicto que es forzable a conciencia con force_desync. Es un tipo
+    propio para que la UI no tenga que mirar el texto del mensaje."""
 
 
 class DomainError(ServiceError):
@@ -241,32 +258,37 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def authorize(self, invoice_id: str, force_desync: bool = False) -> sqlite3.Row:
-        inv = repo.get_invoice(self.conn, invoice_id)
-        if inv is None:
-            raise NotFoundError(f"Factura {invoice_id} no existe")
-        if inv["status"] == InvoiceStatus.AUTHORIZED:
-            return inv  # idempotente: mismo CAE, sin tocar ARCA
-        if inv["status"] == InvoiceStatus.REJECTED:
-            raise ConflictError(
-                f"Factura rechazada por ARCA ({inv['last_error']}); "
-                "corregir los datos creando una nueva."
-            )
+        # Serializa el authorize completo (ver _AUTHORIZE_LOCK): numeración
+        # secuencial de ARCA + conexión SQLite compartida no reentrante.
+        with _AUTHORIZE_LOCK:
+            inv = repo.get_invoice(self.conn, invoice_id)
+            if inv is None:
+                raise NotFoundError(f"Factura {invoice_id} no existe")
+            if inv["status"] == InvoiceStatus.AUTHORIZED:
+                return inv  # idempotente: mismo CAE, sin tocar ARCA
+            if inv["status"] == InvoiceStatus.REJECTED:
+                raise ConflictError(
+                    f"Factura rechazada por ARCA ({inv['last_error']}); "
+                    "corregir los datos creando una nueva."
+                )
 
-        # Lock anti doble-submit (regla 1).
-        if not repo.try_transition_to_submitting(self.conn, invoice_id):
-            raise ConflictError("Ya hay un authorize en curso para esta factura")
+            # Lock anti doble-submit de ESTA factura (regla 1).
+            if not repo.try_transition_to_submitting(self.conn, invoice_id):
+                raise ConflictError("Ya hay un authorize en curso para esta factura")
 
-        inv = self._reload(invoice_id)
-        try:
-            if inv["raw_request"] is None:
-                return self._authorize_first_time(inv, force_desync)
-            return self._authorize_retry(inv)
-        except (ConflictError, ArcaUnavailableError):
-            # No se llegó a enviar nada: volver a draft para no dejar el
-            # lock tomado (raw_request sigue NULL).
-            if inv["raw_request"] is None:
-                repo.update_invoice(self.conn, invoice_id, status=InvoiceStatus.DRAFT)
-            raise
+            inv = self._reload(invoice_id)
+            try:
+                if inv["raw_request"] is None:
+                    return self._authorize_first_time(inv, force_desync)
+                return self._authorize_retry(inv)
+            except (ConflictError, ArcaUnavailableError):
+                # No se llegó a enviar nada: volver a draft para no dejar el
+                # lock tomado (raw_request sigue NULL).
+                if inv["raw_request"] is None:
+                    repo.update_invoice(
+                        self.conn, invoice_id, status=InvoiceStatus.DRAFT
+                    )
+                raise
 
     def _authorize_first_time(
         self, inv: sqlite3.Row, force_desync: bool
@@ -289,7 +311,7 @@ class InvoiceService:
             self.conn, inv["punto_venta"], inv["cbte_tipo"]
         )
         if last_cmp > local_max and not force_desync:
-            raise ConflictError(
+            raise StaleRegistryError(
                 f"Registro local desactualizado: ARCA reporta último comprobante "
                 f"{last_cmp} para PV {inv['punto_venta']} tipo {inv['cbte_tipo']} "
                 f"pero la DB local llega a {local_max}. Restaurar el último "
@@ -301,14 +323,24 @@ class InvoiceService:
         wsfex_invoice = row_to_wsfex_invoice(
             inv, arca_id, cbte_nro, repo.get_invoice_items(self.conn, invoice_id)
         )
-        # Regla 3: persistir el request completo ANTES de llamar.
-        repo.update_invoice(
-            self.conn,
-            invoice_id,
-            arca_id=arca_id,
-            cbte_nro=cbte_nro,
-            raw_request=json.dumps(wsfex_invoice_to_raw(wsfex_invoice)),
-        )
+        # Regla 3: persistir el request completo ANTES de llamar. El try
+        # atrapa una colisión del UNIQUE(arca_id) que, con el lock de
+        # numeración, no debería ocurrir; si ocurriera (p.ej. restore de
+        # backup a mitad de vuelo), se reporta como conflicto y el wrapper
+        # devuelve la factura a draft en vez de dejarla colgada en submitting.
+        try:
+            repo.update_invoice(
+                self.conn,
+                invoice_id,
+                arca_id=arca_id,
+                cbte_nro=cbte_nro,
+                raw_request=json.dumps(wsfex_invoice_to_raw(wsfex_invoice)),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ConflictError(
+                f"Colisión de numeración local (arca_id {arca_id} ya usado); "
+                "reintentar la autorización."
+            ) from exc
         return self._send(invoice_id, wsfex_invoice)
 
     def _authorize_retry(self, inv: sqlite3.Row) -> sqlite3.Row:
@@ -419,9 +451,13 @@ class InvoiceService:
         if not cae:
             return None
         # Nunca aceptar un CAE sin verificar contra el request persistido
-        # (checklist punto 3). El Id es la identidad real del request: el
-        # importe solo no alcanza (otra factura del mismo monto pudo tomar
-        # este número mientras esta esperaba reconciliación).
+        # (checklist punto 3). Se chequean Id E importe, y el importe NO es
+        # redundante: en el esquema multi-máquina (§2.5), dos equipos que
+        # restauran el mismo backup pueden reservar el MISMO arca_id y enviar
+        # datos distintos al mismo número. ARCA guarda solo el primero; el
+        # segundo, al reconciliar, ve un Id que coincide pero un importe que
+        # no, y el chequeo de importe es lo único que evita que adopte un CAE
+        # de un comprobante por otro monto.
         raw = json.loads(inv["raw_request"])
         id_registrado = registrado.get("Id")
         imp_registrado = registrado.get("Imp_total")

@@ -31,7 +31,7 @@ from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
 from ..schemas import ClientIn, InvoiceCreate
-from ..service import ConflictError, NotFoundError, ServiceError
+from ..service import NotFoundError, ServiceError, StaleRegistryError
 
 router = APIRouter(include_in_schema=False)
 
@@ -236,15 +236,16 @@ def autorizar(
         service.authorize(invoice_id, force_desync=force)
     except NotFoundError:
         return RedirectResponse("/comprobantes", status_code=303)
-    except (ConflictError, ServiceError) as exc:
+    except ServiceError as exc:
         inv = _factura_o_redirect(service, invoice_id)
         if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
-            # El chequeo de DB desactualizada (§2.5) es forzable a conciencia;
-            # cualquier otro conflicto se muestra en la misma revisión.
+            # Solo el desajuste de registro (§2.5) es forzable a conciencia,
+            # señalado por su tipo propio, no por el texto del mensaje;
+            # cualquier otro conflicto se muestra sin botón de force.
             return _pagina_revisar(
                 request, service, inv,
                 error=str(exc),
-                force="desactualizado" in str(exc),
+                force=isinstance(exc, StaleRegistryError),
             )
         return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
     return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)

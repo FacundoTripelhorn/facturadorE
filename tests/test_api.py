@@ -7,8 +7,12 @@ chequeo de DB desactualizada.
 """
 
 import datetime as dt
+import threading
+
+import pytest
 
 from facturador import repo
+from facturador.service import StaleRegistryError
 
 CLIENTE = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -263,6 +267,61 @@ def test_db_desactualizada_bloquea_emision(api, arca):
     forzada = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
     assert forzada.status_code == 200
     assert forzada.json()["cbte_nro"] == 6
+
+
+def test_db_desactualizada_es_un_tipo_propio_no_un_mensaje(api, arca):
+    """El conflicto forzable tiene su propio tipo (StaleRegistryError) para
+    que la UI no dependa del texto del mensaje."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.last_cmp[(1, 19)] = 5
+    service = api.app.state.service
+    with pytest.raises(StaleRegistryError):
+        service.authorize(draft["id"])
+
+
+def test_authorize_concurrente_no_duplica_numeracion(api, arca):
+    """Dos authorize en paralelo sobre facturas distintas se serializan: cada
+    uno ve la numeración de ARCA ya avanzada por el anterior. Sin el lock de
+    numeración ambos tomarían el mismo arca_id/cbte_nro."""
+    _crear_cliente(api)
+    d1 = _crear_draft(api)
+    d2 = _crear_draft(api)
+    service = api.app.state.service
+
+    barrera = threading.Barrier(2)
+    resultados: dict[str, object] = {}
+
+    def correr(invoice_id: str) -> None:
+        barrera.wait()  # maximiza el solapamiento
+        try:
+            resultados[invoice_id] = dict(service.authorize(invoice_id))
+        except Exception as exc:  # noqa: BLE001 - se re-chequea abajo
+            resultados[invoice_id] = exc
+
+    hilos = [threading.Thread(target=correr, args=(d["id"],)) for d in (d1, d2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    filas = [resultados[d1["id"]], resultados[d2["id"]]]
+    for f in filas:
+        assert not isinstance(f, Exception), f
+        assert f["status"] == "authorized"
+    assert {f["cbte_nro"] for f in filas} == {1, 2}
+    assert {f["arca_id"] for f in filas} == {1, 2}
+    assert arca.calls["FEXAuthorize"] == 2
+
+
+def test_descartar_borrador_borra_tambien_los_items(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    assert len(repo.get_invoice_items(api.conn, draft["id"])) == 1
+
+    assert repo.delete_draft(api.conn, draft["id"]) is True
+    assert repo.get_invoice(api.conn, draft["id"]) is None
+    assert repo.get_invoice_items(api.conn, draft["id"]) == []
 
 
 # --- escaping XML con datos hostiles vía API (checklist punto 4) ---
