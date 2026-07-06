@@ -162,6 +162,22 @@ def max_authorized_cbte_nro(
     return int(row["m"] or 0)
 
 
+def delete_draft(conn: sqlite3.Connection, invoice_id: str) -> bool:
+    """Borra un borrador jamás enviado. El WHERE repite la guarda de estado
+    para que sea atómica: si otro proceso lo transicionó, no borra nada."""
+    with conn:
+        cursor = conn.execute(
+            "DELETE FROM invoices WHERE id = ? AND status = ?"
+            " AND raw_request IS NULL",
+            (invoice_id, InvoiceStatus.DRAFT),
+        )
+        if cursor.rowcount == 1:
+            conn.execute(
+                "DELETE FROM invoice_items WHERE invoice_id = ?", (invoice_id,)
+            )
+    return cursor.rowcount == 1
+
+
 def max_arca_id(conn: sqlite3.Connection) -> int:
     """Máximo Id de FEXAuthorize reservado localmente, en cualquier estado.
 

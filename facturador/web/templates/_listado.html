@@ -19,7 +19,7 @@
         {% else %}—{% endif %}
       </td>
       <td class="oculta-movil">{{ f["cliente"] }}</td>
-      <td class="num">{{ f["moneda_id"] }} {{ f["imp_total"] }}</td>
+      <td class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] }}</td>
       <td>
         <span class="estado {{ f['status'] }}" {% if f["last_error"] %}title="{{ f['last_error'] }}"{% endif %}>
           {{ STATUS_LABELS[f["status"]] }}
@@ -29,10 +29,16 @@
       <td>
         {% if f["status"] == AUTHORIZED %}
         <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">PDF</a>
-        {% elif f["status"] in RETRYABLE %}
+        {% elif f["status"] == DRAFT %}
+        {# Un borrador pasa siempre por la revisión, nunca directo a ARCA. #}
+        <button class="secundario"
+                hx-get="/ui/facturas/{{ f['id'] }}/confirmar"
+                hx-target="#resultado" hx-swap="innerHTML">Revisar</button>
+        {% elif f["status"] == UNKNOWN %}
+        {# Ya se envió: el reintento es reproceso idempotente, sin re-revisión. #}
         <button class="secundario"
                 hx-post="/ui/facturas/{{ f['id'] }}/authorize"
-                hx-target="#resultado" hx-swap="innerHTML">Autorizar</button>
+                hx-target="#resultado" hx-swap="innerHTML">Reintentar</button>
         {% endif %}
       </td>
     </tr>

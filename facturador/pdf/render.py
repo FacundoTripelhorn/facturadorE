@@ -18,6 +18,7 @@ from weasyprint import HTML
 
 from ..config import Config
 from ..constants import (
+    MONEDA_DISPLAY,
     TIPO_EXPO_BIENES,
     TIPO_EXPO_OTROS,
     TIPO_EXPO_SERVICIOS,
@@ -37,6 +38,8 @@ def _fecha_larga(aaaammdd: str) -> str:
 
 
 _env.filters["fecha"] = _fecha_larga
+# DOL → USD para el lector; el código ARCA viaja solo en el XML.
+_env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
 
 
 def invoice_pdf_filename(inv: sqlite3.Row) -> str:

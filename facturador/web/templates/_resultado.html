@@ -1,4 +1,8 @@
-{% if error %}
+{% if aviso %}
+<div class="panel neutro">
+  <div>{{ aviso }}</div>
+</div>
+{% elif error %}
 <div class="panel error">
   <div>
     <strong>No se pudo autorizar.</strong> {{ error }}

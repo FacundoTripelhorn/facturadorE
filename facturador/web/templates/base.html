@@ -165,6 +165,27 @@
   .panel a { color: inherit; font-weight: 700; }
   .panel p { margin: .4rem 0 0; }
 
+  .panel.neutro { background: #f4f6fa; border-color: var(--borde); color: var(--tinta-suave); }
+  .panel.neutro::before { content: "i"; background: var(--tinta-suave); color: #fff; }
+
+  /* ---- paso de revisión (dos fases) ---- */
+  .revisar { border-color: #c7d4f8; }
+  .revisar > h2 { background: #f0f4ff; border-bottom-color: #c7d4f8; }
+  .revisar-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: .75rem 1.5rem; margin-bottom: 1.1rem;
+  }
+  .revisar-grid dt { font-size: .72rem; font-weight: 650; color: var(--tinta-suave);
+                     text-transform: uppercase; letter-spacing: .05em; }
+  .revisar-grid dd { margin: .1rem 0 0; font-weight: 550; }
+  table.items-revisar th, table.items-revisar td { padding: .45rem .6rem; }
+  table.items-revisar th:first-child, table.items-revisar td:first-child { padding-left: .6rem; }
+  table.items-revisar th:last-child, table.items-revisar td:last-child { padding-right: .6rem; }
+  .total-revisar { text-align: right; font-size: 1.15rem; font-weight: 750;
+                   margin: .9rem 0 0; }
+  .acciones-revisar { display: flex; gap: .8rem; align-items: center; }
+  .acciones-revisar .secundario { margin-top: 1.2rem; padding: .55rem 1.1rem; }
+
   .nota { color: var(--tinta-suave); font-size: .82rem; margin-top: .9rem; }
   .vacio { color: var(--tinta-suave); text-align: center; padding: 2rem 0;
            font-size: .9rem; }

@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from .. import repo
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
-from ..constants import MONEDA_DOL, InvoiceStatus
+from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
 from ..schemas import ClientIn, InvoiceCreate
 from ..service import ConflictError, ServiceError
 
@@ -41,7 +41,14 @@ STATUS_LABELS = {
 }
 templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
+templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
+templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 templates.env.globals["RETRYABLE"] = (InvoiceStatus.DRAFT, InvoiceStatus.UNKNOWN)
+# Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.
+templates.env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
+templates.env.filters["fecha"] = (
+    lambda aaaammdd: f"{aaaammdd[6:]}/{aaaammdd[4:6]}/{aaaammdd[:4]}"
+)
 
 
 def _fecha_iso_a_arca(fecha: str | None) -> str | None:
@@ -59,6 +66,7 @@ def _render_resultado(
     *,
     factura=None,
     error: str | None = None,
+    aviso: str | None = None,
     force_invoice_id: str | None = None,
 ):
     """Partial de resultado + refresh del listado vía evento HTMX."""
@@ -68,7 +76,23 @@ def _render_resultado(
         {
             "factura": factura,
             "error": error,
+            "aviso": aviso,
             "force_invoice_id": force_invoice_id,
+        },
+    )
+    response.headers["HX-Trigger"] = "facturas-changed"
+    return response
+
+
+def _render_confirmacion(request: Request, service, draft):
+    """Paso de revisión (dos fases): borrador creado, NADA viajó a ARCA
+    todavía; se muestra exactamente lo que se va a enviar."""
+    response = templates.TemplateResponse(
+        request,
+        "_confirmacion.html",
+        {
+            "f": draft,
+            "items": repo.get_invoice_items(service.conn, draft["id"]),
         },
     )
     response.headers["HX-Trigger"] = "facturas-changed"
@@ -148,7 +172,7 @@ def clientes(request: Request, service: ServiceDep, edit: str | None = None):
 
 
 @router.post("/ui/facturas", response_class=HTMLResponse)
-def crear_y_autorizar(
+def generar_borrador(
     request: Request,
     service: ServiceDep,
     imp_total: str = Form(...),
@@ -157,7 +181,9 @@ def crear_y_autorizar(
     fecha_pago: str = Form(""),
     obs: str = Form(""),
 ):
-    """El click semanal: draft + authorize en un solo POST (§0 paso 3)."""
+    """Fase 1 del flujo en dos pasos: genera el borrador y lo muestra para
+    revisión. Nada viaja a ARCA hasta el Confirmar explícito — un error acá
+    se descarta sin consecuencia impositiva."""
     try:
         payload = InvoiceCreate(
             imp_total=Decimal(imp_total),
@@ -178,7 +204,33 @@ def crear_y_autorizar(
     except ServiceError as exc:
         return _render_resultado(request, service, error=str(exc))
 
-    return _autorizar(request, service, draft["id"], force=False)
+    return _render_confirmacion(request, service, draft)
+
+
+@router.get("/ui/facturas/{invoice_id}/confirmar", response_class=HTMLResponse)
+def confirmar(request: Request, service: ServiceDep, invoice_id: str):
+    """Reabre la revisión de un borrador existente desde el listado."""
+    try:
+        inv = service.get_invoice(invoice_id, reconcile=False)
+    except ServiceError as exc:
+        return _render_resultado(request, service, error=str(exc))
+    if inv["status"] != InvoiceStatus.DRAFT:
+        return _render_resultado(
+            request, service,
+            error=f"Solo los borradores se revisan (estado: {inv['status']})",
+        )
+    return _render_confirmacion(request, service, inv)
+
+
+@router.post("/ui/facturas/{invoice_id}/descartar", response_class=HTMLResponse)
+def descartar(request: Request, service: ServiceDep, invoice_id: str):
+    try:
+        service.delete_draft(invoice_id)
+    except ServiceError as exc:
+        return _render_resultado(request, service, error=str(exc))
+    return _render_resultado(
+        request, service, aviso="Borrador descartado; no se envió nada a ARCA."
+    )
 
 
 @router.post("/ui/facturas/{invoice_id}/authorize", response_class=HTMLResponse)

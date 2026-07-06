@@ -324,6 +324,24 @@ class InvoiceService:
         wsfex_invoice = raw_to_wsfex_invoice(json.loads(inv["raw_request"]))
         return self._send(inv["id"], wsfex_invoice)
 
+    def delete_draft(self, invoice_id: str) -> None:
+        """Descarta un borrador que NUNCA llegó a ARCA (raw_request NULL).
+
+        Cualquier otra cosa no se borra: una factura enviada (aun rechazada
+        o unknown) es parte del registro y de la auditoría."""
+        inv = repo.get_invoice(self.conn, invoice_id)
+        if inv is None:
+            raise NotFoundError(f"Factura {invoice_id} no existe")
+        if inv["status"] != InvoiceStatus.DRAFT or inv["raw_request"] is not None:
+            raise ConflictError(
+                "Solo se pueden descartar borradores que nunca se enviaron a "
+                f"ARCA (estado actual: {inv['status']})"
+            )
+        if not repo.delete_draft(self.conn, invoice_id):
+            raise ConflictError(
+                "El borrador cambió de estado mientras se descartaba; recargar"
+            )
+
     def _reload(self, invoice_id: str) -> sqlite3.Row:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:  # ya validada en authorize/get_invoice: no debe pasar
