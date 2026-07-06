@@ -58,7 +58,9 @@ cp prod.key prod.crt ~/facturador/secrets/
 chmod 400 ~/facturador/secrets/prod.key
 ```
 
-Actualizar `~/facturador/.env`:
+Actualizar el `.env` de la raíz del repo (el que se creó en la guía de
+homologación; la app lo carga del directorio de trabajo, no de
+`FACTURADOR_HOME`):
 
 ```dotenv
 ARCA_ENV=prod

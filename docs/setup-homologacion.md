@@ -62,7 +62,9 @@ dos o si la key tiene permisos más laxos que `400`/`600`.
 
 ## 4. Configurar `.env`
 
-Crear `~/facturador/.env`:
+La app carga el `.env` del **directorio de trabajo** desde donde se ejecuta,
+no de `FACTURADOR_HOME`. Como todos los comandos de esta guía se corren desde
+la raíz del repo, crear el `.env` ahí (ya está en el `.gitignore`):
 
 ```dotenv
 ARCA_ENV=homo
@@ -87,10 +89,14 @@ Del flag `ARCA_ENV=homo` se derivan automáticamente las URLs de homologación
 `secrets/homo.key` / `secrets/homo.crt`. No hay nada más que configurar y no
 existen overrides por URL: es imposible por construcción mezclar ambientes.
 
+> Si preferís no tener un `.env` en el repo, exportá las mismas variables en
+> el shell (`export ARCA_ENV=homo`, etc.): el `.env` es solo una comodidad,
+> las variables de entorno reales siempre mandan.
+
 ## 5. Verificar la conectividad, paso a paso
 
-Desde la raíz del repo, con el `.env` apuntado por `FACTURADOR_HOME` (o
-ejecutando desde `~/facturador` directamente):
+Todos los comandos se corren desde la raíz del repo (donde quedó el `.env` del
+paso 4):
 
 ```bash
 uv sync

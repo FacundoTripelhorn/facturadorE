@@ -47,17 +47,19 @@ configuración local y verificación):
 ## Instalación y configuración
 
 ```bash
-git clone <este-repo> && cd facturador
+git clone <url-del-repo> facturador && cd facturador
 uv sync
 ```
 
 La app lee toda su configuración de variables de entorno (y de un `.env` si
-existe). Layout de datos esperado bajo `FACTURADOR_HOME` (por defecto, el
-directorio actual):
+existe). El `.env` se carga del **directorio de trabajo** desde donde se
+ejecuta la app — típicamente la raíz del repo, donde ya está en el
+`.gitignore` —, no de `FACTURADOR_HOME`; alternativamente se pueden exportar
+las mismas variables en el shell. Layout de datos esperado bajo
+`FACTURADOR_HOME` (por defecto, el directorio actual):
 
 ```
 $FACTURADOR_HOME/
-  .env
   secrets/            # chmod 700
     homo.key          # chmod 400 — la app se niega a arrancar con permisos laxos
     homo.crt
