@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="panel error">
+  <div>
+    <strong>No se pudo autorizar.</strong> {{ error }}
+  </div>
+</div>
+{% endif %}
+
+<section class="card revisar">
+  <h2>Revisar antes de enviar
+    <span class="sub">borrador — nada viajó a ARCA todavía</span>
+  </h2>
+  <div class="cuerpo">
+    {% include "_datos_factura.html" %}
+    <div class="acciones-revisar">
+      {% if ofrecer_force %}
+      <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize?force=true">
+        <button type="submit">Forzar de todos modos (homologación / restore reciente)</button>
+      </form>
+      {% else %}
+      <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize">
+        <button type="submit">Confirmar y autorizar en ARCA</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/ui/facturas/{{ f['id'] }}/descartar"
+            onsubmit="return confirm('¿Descartar este borrador?')">
+        <button type="submit" class="secundario">Descartar borrador</button>
+      </form>
+    </div>
+    <p class="nota">Al confirmar, ARCA asigna la numeración definitiva y el CAE.
+    Si algo está mal, descartá el borrador y generá uno nuevo desde
+    <a href="/">Emitir</a>: descartar no tiene ningún efecto impositivo.</p>
+  </div>
+</section>
+
+{% endblock %}

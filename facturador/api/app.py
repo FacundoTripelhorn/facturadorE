@@ -1,5 +1,6 @@
 """Ensamblado de la app FastAPI: wiring de dependencias, manejo de errores
-de dominio y registro de routers. Servida solo en localhost (spike.md §2.5)."""
+de dominio y registro de routers (API JSON + frontend HTML §2.4).
+Servida solo en localhost (spike.md §2.5)."""
 
 from __future__ import annotations
 
@@ -7,8 +8,9 @@ import sqlite3
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from .. import db
+from .. import db, web
 from ..arca.wsfex import WsfexClient
 from ..config import Config, load_config
 from ..service import (
@@ -53,5 +55,10 @@ def create_app(
     app.include_router(clients.router)
     app.include_router(params.router)
     app.include_router(health.router)
+
+    # Frontend HTML (§2.4): mismas dependencias vía app.state.service. Los
+    # errores de dominio del frontend se renderizan en partials, no acá.
+    app.include_router(web.router)
+    app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
 
     return app

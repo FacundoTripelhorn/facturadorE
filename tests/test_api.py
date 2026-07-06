@@ -7,8 +7,12 @@ chequeo de DB desactualizada.
 """
 
 import datetime as dt
+import threading
+
+import pytest
 
 from facturador import repo
+from facturador.service import StaleRegistryError
 
 CLIENTE = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -195,6 +199,31 @@ def test_timeout_sin_emision_reintenta_con_mismo_id(api, arca):
     assert arca.issued[(19, 1, cbte_nro_original)]["arca_id"] == arca_id_original
 
 
+def test_arca_id_nuevo_no_colisiona_con_reservas_locales(api, arca):
+    """Una factura 'unknown' reservó su arca_id sin que ARCA lo conozca
+    (timeout pre-envío): la siguiente factura nueva debe saltearlo, no
+    reventar contra el UNIQUE de arca_id."""
+    _crear_cliente(api)
+    colgada = _crear_draft(api)
+    arca.authorize_mode = "timeout"
+    r = api.post(f"/invoices/{colgada['id']}/authorize?force_desync=true").json()
+    assert r["status"] == "unknown"
+    assert r["arca_id"] == 1  # reservado localmente, ARCA nunca lo vio
+
+    arca.authorize_mode = "ok"
+    nueva = _crear_draft(api)
+    r = api.post(f"/invoices/{nueva['id']}/authorize?force_desync=true")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "authorized"
+    assert r.json()["arca_id"] == 2  # saltea la reserva local
+
+    # La colgada, al reintentar, encuentra su número tomado por la nueva:
+    # jamás adopta un CAE ajeno; queda para revisión manual.
+    retry = api.post(f"/invoices/{colgada['id']}/authorize").json()
+    assert retry["status"] == "unknown"
+    assert retry["cae"] is None
+
+
 def test_reconciliacion_detecta_comprobante_ajeno(api, arca):
     """Si ARCA registra nuestro número con OTRO importe, jamás adoptar el CAE."""
     _crear_cliente(api)
@@ -238,6 +267,61 @@ def test_db_desactualizada_bloquea_emision(api, arca):
     forzada = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
     assert forzada.status_code == 200
     assert forzada.json()["cbte_nro"] == 6
+
+
+def test_db_desactualizada_es_un_tipo_propio_no_un_mensaje(api, arca):
+    """El conflicto forzable tiene su propio tipo (StaleRegistryError) para
+    que la UI no dependa del texto del mensaje."""
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    arca.last_cmp[(1, 19)] = 5
+    service = api.app.state.service
+    with pytest.raises(StaleRegistryError):
+        service.authorize(draft["id"])
+
+
+def test_authorize_concurrente_no_duplica_numeracion(api, arca):
+    """Dos authorize en paralelo sobre facturas distintas se serializan: cada
+    uno ve la numeración de ARCA ya avanzada por el anterior. Sin el lock de
+    numeración ambos tomarían el mismo arca_id/cbte_nro."""
+    _crear_cliente(api)
+    d1 = _crear_draft(api)
+    d2 = _crear_draft(api)
+    service = api.app.state.service
+
+    barrera = threading.Barrier(2)
+    resultados: dict[str, object] = {}
+
+    def correr(invoice_id: str) -> None:
+        barrera.wait()  # maximiza el solapamiento
+        try:
+            resultados[invoice_id] = dict(service.authorize(invoice_id))
+        except Exception as exc:  # noqa: BLE001 - se re-chequea abajo
+            resultados[invoice_id] = exc
+
+    hilos = [threading.Thread(target=correr, args=(d["id"],)) for d in (d1, d2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    filas = [resultados[d1["id"]], resultados[d2["id"]]]
+    for f in filas:
+        assert not isinstance(f, Exception), f
+        assert f["status"] == "authorized"
+    assert {f["cbte_nro"] for f in filas} == {1, 2}
+    assert {f["arca_id"] for f in filas} == {1, 2}
+    assert arca.calls["FEXAuthorize"] == 2
+
+
+def test_descartar_borrador_borra_tambien_los_items(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    assert len(repo.get_invoice_items(api.conn, draft["id"])) == 1
+
+    assert repo.delete_draft(api.conn, draft["id"]) is True
+    assert repo.get_invoice(api.conn, draft["id"]) is None
+    assert repo.get_invoice_items(api.conn, draft["id"]) == []
 
 
 # --- escaping XML con datos hostiles vía API (checklist punto 4) ---

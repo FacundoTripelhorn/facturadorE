@@ -198,6 +198,7 @@ class FakeArca:
             text=soap_response(
                 "FEXGetCMP",
                 "<FEXResultGet>"
+                f"<Id>{emitido['arca_id']}</Id>"
                 f"<Cbte_tipo>{tipo}</Cbte_tipo><Punto_vta>{pv}</Punto_vta>"
                 f"<Cbte_nro>{nro}</Cbte_nro><Cae>{emitido['cae']}</Cae>"
                 f"<Imp_total>{emitido['imp_total']}</Imp_total>"

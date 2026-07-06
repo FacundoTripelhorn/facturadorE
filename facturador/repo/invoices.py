@@ -69,7 +69,8 @@ def create_invoice(
                 ),
             )
     row = get_invoice(conn, invoice_id)
-    assert row is not None  # recién insertado
+    if row is None:  # recién insertado: no debe pasar
+        raise RuntimeError(f"Factura {invoice_id} no se pudo releer tras el INSERT")
     return row
 
 
@@ -87,12 +88,28 @@ def get_invoice_items(conn: sqlite3.Connection, invoice_id: str) -> list[sqlite3
 
 
 def list_invoices(
-    conn: sqlite3.Connection, limit: int = 50, offset: int = 0
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    offset: int = 0,
+    statuses: tuple[str, ...] | None = None,
 ) -> list[sqlite3.Row]:
+    where = ""
+    params: tuple = ()
+    if statuses:
+        where = f" WHERE status IN ({', '.join('?' * len(statuses))})"
+        params = tuple(statuses)
     return conn.execute(
-        "SELECT * FROM invoices ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        (limit, offset),
+        f"SELECT * FROM invoices{where}"
+        " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
     ).fetchall()
+
+
+def count_invoices_by_status(conn: sqlite3.Connection) -> dict[str, int]:
+    rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM invoices GROUP BY status"
+    ).fetchall()
+    return {row["status"]: row["n"] for row in rows}
 
 
 # Columnas que la máquina de estados puede tocar tras la creación. Los nombres
@@ -158,4 +175,37 @@ def max_authorized_cbte_nro(
         " WHERE punto_venta = ? AND cbte_tipo = ? AND status = ?",
         (punto_venta, cbte_tipo, InvoiceStatus.AUTHORIZED),
     ).fetchone()
+    return int(row["m"] or 0)
+
+
+def delete_draft(conn: sqlite3.Connection, invoice_id: str) -> bool:
+    """Borra un borrador jamás enviado (status=draft, raw_request NULL).
+
+    Los ítems se borran ANTES que la factura para no depender de que el
+    enforcement de foreign keys esté apagado (si algún día se activa
+    PRAGMA foreign_keys=ON, borrar el padre primero fallaría). Ambos DELETE
+    repiten la guarda de estado vía subquery, así que la operación sigue
+    siendo atómica: si otro proceso ya lo transicionó, no se borra nada."""
+    with conn:
+        conn.execute(
+            "DELETE FROM invoice_items WHERE invoice_id = ("
+            "  SELECT id FROM invoices"
+            "  WHERE id = ? AND status = ? AND raw_request IS NULL)",
+            (invoice_id, InvoiceStatus.DRAFT),
+        )
+        cursor = conn.execute(
+            "DELETE FROM invoices WHERE id = ? AND status = ?"
+            " AND raw_request IS NULL",
+            (invoice_id, InvoiceStatus.DRAFT),
+        )
+    return cursor.rowcount == 1
+
+
+def max_arca_id(conn: sqlite3.Connection) -> int:
+    """Máximo Id de FEXAuthorize reservado localmente, en cualquier estado.
+
+    Una factura 'unknown'/'submitting' ya reservó su arca_id aunque ARCA no
+    lo conozca todavía (el timeout pudo ser pre-envío): el próximo Id nuevo
+    debe superar también estas reservas, no solo FEXGetLast_ID."""
+    row = conn.execute("SELECT MAX(arca_id) AS m FROM invoices").fetchone()
     return int(row["m"] or 0)

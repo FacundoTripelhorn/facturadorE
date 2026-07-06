@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if aviso %}
+<div class="panel neutro"><div>{{ aviso }}</div></div>
+{% endif %}
+{% if error %}
+<div class="panel error"><div>{{ error }}</div></div>
+{% endif %}
+
+{% if not clientes %}
+<div class="panel error">
+  <div>No hay clientes cargados. <a href="/clientes">Crear el primero</a> para poder facturar.</div>
+</div>
+{% else %}
+
+<section class="card">
+  <h2>Nueva Factura E
+    {% if default %}<span class="sub">{{ default["razon_social"] }}</span>{% endif %}
+  </h2>
+  <div class="cuerpo">
+  <form method="post" action="/ui/facturas">
+    <div class="fila">
+      <div>
+        <label for="imp_total">Monto ({{ (default["moneda_default"] if default else "DOL") | moneda }})</label>
+        <input id="imp_total" name="imp_total" type="number" step="0.01" min="0.01"
+               class="num" required autofocus>
+      </div>
+      <div>
+        <label for="fecha_pago">Fecha de pago</label>
+        <input id="fecha_pago" name="fecha_pago" type="date" value="{{ hoy }}" required>
+      </div>
+      <div>
+        <label for="client_id">Cliente</label>
+        <select id="client_id" name="client_id">
+          {% for c in clientes %}
+          <option value="{{ c['id'] }}" {% if default and c['id'] == default['id'] %}selected{% endif %}>
+            {{ c["razon_social"] }}{% if c["is_default"] %} ★{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <label for="descripcion">Descripción del servicio</label>
+    <input id="descripcion" name="descripcion"
+           value="{{ default['descripcion_default'] if default else '' }}">
+    <label for="obs">Observaciones (opcional)</label>
+    <input id="obs" name="obs" value="">
+    <p class="nota">
+      Emisión: hoy.
+      {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz }}</span>.
+      {% else %}Cotización: se obtiene de ARCA al autorizar.{% endif %}
+      Genera un borrador y pasa a la revisión: nada viaja a ARCA hasta confirmarlo.
+    </p>
+    <button type="submit">Generar borrador</button>
+  </form>
+  </div>
+</section>
+
+<p class="nota" style="text-align:center">
+  El registro completo, con estados y PDFs, vive en
+  <a href="/comprobantes">Comprobantes</a>.
+</p>
+
+{% endif %}
+
+{% endblock %}

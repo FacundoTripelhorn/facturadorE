@@ -34,7 +34,8 @@ def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
             (client_id, *(data[f] for f in CLIENT_FIELDS), ts, ts),
         )
     row = get_client(conn, client_id)
-    assert row is not None  # recién insertado
+    if row is None:  # recién insertado: no debe pasar
+        raise RuntimeError(f"Cliente {client_id} no se pudo releer tras el INSERT")
     return row
 
 

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if f["status"] == AUTHORIZED %}
+<div class="panel ok">
+  <div>
+    <span class="cae-grande num">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} autorizada</span><br>
+    CAE <span class="num">{{ f["cae"] }}</span>
+    (vence {{ f["cae_fch_vto"] | fecha }})
+    — <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">Descargar PDF</a>
+  </div>
+</div>
+{% else %}
+<div class="panel error">
+  <div>
+    <strong>{{ STATUS_LABELS[f["status"]] }}.</strong>
+    {{ f["last_error"] or "" }}
+    {% if f["status"] == UNKNOWN %}
+    <p class="nota">El reintento reusa el mismo Id idempotente: sin riesgo de
+    doble emisión.</p>
+    <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize">
+      <button type="submit">Reintentar autorización</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2>Lo enviado a ARCA
+    <span class="sub">
+      {% if f["status"] == AUTHORIZED %}
+      comprobante {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
+      {% else %}registro inmutable del intento{% endif %}
+    </span>
+  </h2>
+  <div class="cuerpo">
+    {% include "_datos_factura.html" %}
+    <p class="nota"><a href="/comprobantes">← Volver a comprobantes</a></p>
+  </div>
+</section>
+
+{% endblock %}

@@ -87,7 +87,7 @@
 
   <div class="bloque dos-col">
     <div>
-      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] }}</div>
+      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}</div>
       <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] }}</div>
     </div>
     <div>
@@ -123,7 +123,7 @@
         {% endfor %}
       </tbody>
     </table>
-    <div class="total">Importe Total: {{ inv["moneda_id"] }} {{ inv["imp_total"] }}</div>
+    <div class="total">Importe Total: {{ inv["moneda_id"] | moneda }} {{ inv["imp_total"] }}</div>
   </div>
 
   <div class="leyenda">IVA EXENTO — OPERACIÓN DE EXPORTACIÓN</div>

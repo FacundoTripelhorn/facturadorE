@@ -56,6 +56,10 @@ UMED_UNIDADES = 7
 # Moneda del caso canónico (FEXGetPARAM_MON)
 MONEDA_DOL = "DOL"
 
+# Códigos de moneda de ARCA → código ISO para mostrar. Solo presentación:
+# hacia ARCA siempre viaja el código de la tabla (DOL, PES, ...).
+MONEDA_DISPLAY = {"DOL": "USD", "PES": "ARS"}
+
 # QR RG 4892
 QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
 TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA

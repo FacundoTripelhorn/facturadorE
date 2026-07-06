@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if error %}<div class="panel error">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
+  <div class="cuerpo">
+  <form method="post" action="/ui/clientes">
+    {% if editando %}<input type="hidden" name="client_id" value="{{ editando['id'] }}">{% endif %}
+    <div class="fila">
+      <div>
+        <label for="razon_social">Razón social</label>
+        <input id="razon_social" name="razon_social" required
+               value="{{ editando['razon_social'] if editando else '' }}">
+      </div>
+      <div>
+        <label for="id_impositivo">ID impositivo (tax ID en su país)</label>
+        <input id="id_impositivo" name="id_impositivo"
+               value="{{ editando['id_impositivo'] if editando else '' }}">
+      </div>
+    </div>
+    <label for="domicilio">Domicilio</label>
+    <input id="domicilio" name="domicilio"
+           value="{{ editando['domicilio'] if editando else '' }}">
+    <div class="fila">
+      <div>
+        <label for="pais_dst">País destino</label>
+        <select id="pais_dst" name="pais_dst" required>
+          {% for p in params.get("pais", []) %}
+          <option value="{{ p['code'] }}"
+            {% if editando and p['code']|int == editando['pais_dst'] %}selected{% endif %}>
+            {{ p["description"] or p["code"] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="cuit_pais">CUIT país (tipo de persona)</label>
+        <select id="cuit_pais" name="cuit_pais" required>
+          {% for p in params.get("cuit_pais", []) %}
+          <option value="{{ p['code'] }}"
+            {% if editando and p['code']|int == editando['cuit_pais'] %}selected{% endif %}>
+            {{ p["description"] or p["code"] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="fila">
+      <div>
+        <label for="moneda_default">Moneda</label>
+        <select id="moneda_default" name="moneda_default">
+          {% for p in params.get("moneda", []) %}
+          <option value="{{ p['code'] }}"
+            {% if (editando and p['code'] == editando['moneda_default'])
+               or (not editando and p['code'] == 'DOL') %}selected{% endif %}>
+            {{ p["code"] }} — {{ p["description"] or "" }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="idioma_default">Idioma del comprobante</label>
+        <select id="idioma_default" name="idioma_default">
+          {% for p in params.get("idioma", []) %}
+          <option value="{{ p['code'] }}"
+            {% if editando and p['code']|int == editando['idioma_default'] %}selected{% endif %}>
+            {{ p["description"] or p["code"] }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="forma_pago_default">Forma de pago</label>
+        <input id="forma_pago_default" name="forma_pago_default"
+               value="{{ editando['forma_pago_default'] if editando else 'WIRE TRANSFER' }}">
+      </div>
+    </div>
+    <label for="descripcion_default">Descripción default del servicio</label>
+    <input id="descripcion_default" name="descripcion_default"
+           value="{{ editando['descripcion_default'] if editando else '' }}">
+    <label class="check">
+      <input type="checkbox" name="is_default" value="true"
+             {% if editando and editando["is_default"] %}checked{% endif %}>
+      Cliente habitual (precargado en el form de facturas)
+    </label>
+    <button type="submit">Guardar</button>
+    {% if editando %}<a href="/clientes" style="margin-left:1rem">Cancelar</a>{% endif %}
+  </form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Clientes</h2>
+  {% if not clientes %}
+  <p class="vacio">Sin clientes todavía.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Razón social</th><th>País</th><th class="oculta-movil">ID impositivo</th><th></th></tr></thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr>
+        <td>{{ c["razon_social"] }}{% if c["is_default"] %} ★{% endif %}</td>
+        <td class="num">{{ c["pais_dst"] }}</td>
+        <td class="oculta-movil">{{ c["id_impositivo"] }}</td>
+        <td><a href="/clientes?edit={{ c['id'] }}">Editar</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% endblock %}

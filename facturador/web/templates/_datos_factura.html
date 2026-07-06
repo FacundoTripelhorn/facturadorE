@@ -1,0 +1,26 @@
+{# Datos read-only del comprobante: lo que se envía (revisión) o lo que se
+   envió (detalle). Compartido por revisar.html y detalle.html. #}
+<div class="revisar-grid">
+  <div><dt>Cliente</dt><dd>{{ f["cliente"] }}</dd></div>
+  <div><dt>Domicilio</dt><dd>{{ f["domicilio_cliente"] }}</dd></div>
+  <div><dt>ID impositivo</dt><dd>{{ f["id_impositivo"] }}</dd></div>
+  <div><dt>CUIT país</dt><dd class="num">{{ f["cuit_pais_cliente"] }}</dd></div>
+  <div><dt>Fecha de emisión</dt><dd class="num">{{ f["fecha_cbte"] | fecha }}</dd></div>
+  <div><dt>Fecha de pago</dt><dd class="num">{{ f["fecha_pago"] | fecha }}</dd></div>
+  <div><dt>Moneda / cotización</dt>
+       <dd class="num">{{ f["moneda_id"] | moneda }} — {{ f["moneda_ctz"] }}</dd></div>
+  <div><dt>Forma de pago</dt><dd>{{ f["forma_pago"] }}</dd></div>
+  {% if f["obs"] %}<div><dt>Observaciones</dt><dd>{{ f["obs"] }}</dd></div>{% endif %}
+</div>
+<table class="items-revisar">
+  <thead><tr><th>Descripción</th><th class="num">Cantidad</th>
+             <th class="num">Precio unit.</th><th class="num">Importe</th></tr></thead>
+  <tbody>
+    {% for i in items %}
+    <tr><td>{{ i["pro_ds"] }}</td><td class="num">{{ i["pro_qty"] }}</td>
+        <td class="num">{{ i["pro_precio_uni"] }}</td>
+        <td class="num">{{ i["pro_total_item"] }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="total-revisar num">Total: {{ f["moneda_id"] | moneda }} {{ f["imp_total"] }}</p>
