@@ -30,27 +30,19 @@ Qué incluye:
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
 
-## Trámites previos en ARCA
+## Setup por ambiente
 
-**Homologación** (ambiente de prueba, suficiente para empezar):
+Cada ambiente tiene su guía paso a paso (trámites en ARCA, certificados,
+configuración local y verificación):
 
-1. Con clave fiscal, entrar a **WSASS** ("Autoservicio de Acceso a APIs de
-   Homologación").
-2. Generar clave privada + CSR:
-
-   ```bash
-   openssl genrsa -out homo.key 2048
-   openssl req -new -key homo.key \
-     -subj "/C=AR/O=MiEmpresa/CN=facturador/serialNumber=CUIT 20XXXXXXXXX" \
-     -out pedido.csr
-   ```
-
-3. Subir el CSR en WSASS, descargar el certificado (`homo.crt`) y **autorizarlo
-   al servicio `wsfex`** dentro de WSASS.
-
-**Producción** requiere además certificado productivo, asociación al servicio
-"Facturación Electrónica de Exportación" y un punto de venta RECE exclusivo de
-exportación. El checklist completo está en `docs/spike.md` §1.4 y §4 (fase 7).
+- **[Homologación](docs/setup-homologacion.md)** — ambiente de prueba, sin
+  efectos fiscales. Por acá se empieza: certificado vía WSASS, autorización al
+  servicio `wsfex`, verificación de conectividad con los scripts y primera
+  emisión de prueba.
+- **[Producción](docs/setup-produccion.md)** — certificado productivo,
+  asociación al servicio "Facturación Electrónica de Exportación", punto de
+  venta RECE exclusivo de exportación, smoke test y primera factura real, más
+  los cuidados operativos (backups, numeración, multi-máquina).
 
 ## Instalación y configuración
 
@@ -185,7 +177,10 @@ facturador/
   schema.sql    # esquema de la base
 scripts/        # diagnóstico y flujo de homologación
 tests/          # pytest (incluye ARCA falso en tests/arca_fake.py)
-docs/spike.md   # diseño, decisiones y contexto de dominio
+docs/
+  spike.md              # diseño, decisiones y contexto de dominio
+  setup-homologacion.md # guía de setup del ambiente de prueba
+  setup-produccion.md   # guía de pasaje a producción
 ```
 
 ## Seguridad
