@@ -1,20 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if aviso %}
+<div class="panel neutro"><div>{{ aviso }}</div></div>
+{% endif %}
+{% if error %}
+<div class="panel error"><div>{{ error }}</div></div>
+{% endif %}
+
 {% if not clientes %}
 <div class="panel error">
-  No hay clientes cargados. <a href="/clientes">Crear el primero</a> para poder facturar.
+  <div>No hay clientes cargados. <a href="/clientes">Crear el primero</a> para poder facturar.</div>
 </div>
 {% else %}
-
-<div id="resultado"></div>
 
 <section class="card">
   <h2>Nueva Factura E
     {% if default %}<span class="sub">{{ default["razon_social"] }}</span>{% endif %}
   </h2>
   <div class="cuerpo">
-  <form hx-post="/ui/facturas" hx-target="#resultado" hx-swap="innerHTML">
+  <form method="post" action="/ui/facturas">
     <div class="fila">
       <div>
         <label for="imp_total">Monto ({{ (default["moneda_default"] if default else "DOL") | moneda }})</label>
@@ -45,9 +50,9 @@
       Emisión: hoy.
       {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz }}</span>.
       {% else %}Cotización: se obtiene de ARCA al autorizar.{% endif %}
-      Genera un borrador para revisar: nada viaja a ARCA hasta confirmarlo.
+      Genera un borrador y pasa a la revisión: nada viaja a ARCA hasta confirmarlo.
     </p>
-    <button type="submit"><span class="spinner"></span> Generar borrador</button>
+    <button type="submit">Generar borrador</button>
   </form>
   </div>
 </section>

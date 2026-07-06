@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div id="resultado"></div>
-
 <section class="card">
   <h2>Comprobantes</h2>
   <nav class="tabs">
@@ -13,9 +11,7 @@
     </a>
     {% endfor %}
   </nav>
-  <div id="listado" class="tabla-scroll"
-       hx-get="/ui/listado?estado={{ estado }}"
-       hx-trigger="facturas-changed from:body">
+  <div class="tabla-scroll">
     {% include "_listado.html" %}
   </div>
 </section>

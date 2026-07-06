@@ -1,5 +1,5 @@
 {% if not facturas %}
-<p class="vacio">Sin comprobantes todavía. La primera factura de la semana aparece acá.</p>
+<p class="vacio">Sin comprobantes en esta vista.</p>
 {% else %}
 <table>
   <thead>
@@ -11,11 +11,12 @@
   <tbody>
     {% for f in facturas %}
     <tr>
-      <td class="num">{{ f["fecha_cbte"][6:] }}/{{ f["fecha_cbte"][4:6] }}/{{ f["fecha_cbte"][:4] }}</td>
+      <td class="num">{{ f["fecha_cbte"] | fecha }}</td>
       <td class="num">
         {# El número es definitivo solo al autorizar; antes es una reserva
            local que ARCA puede reasignar. #}
-        {% if f["status"] == AUTHORIZED %}{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
+        {% if f["status"] == AUTHORIZED %}
+        <a href="/facturas/{{ f['id'] }}">{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}</a>
         {% else %}—{% endif %}
       </td>
       <td class="oculta-movil">{{ f["cliente"] }}</td>
@@ -31,14 +32,9 @@
         <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">PDF</a>
         {% elif f["status"] == DRAFT %}
         {# Un borrador pasa siempre por la revisión, nunca directo a ARCA. #}
-        <button class="secundario"
-                hx-get="/ui/facturas/{{ f['id'] }}/confirmar"
-                hx-target="#resultado" hx-swap="innerHTML">Revisar</button>
-        {% elif f["status"] == UNKNOWN %}
-        {# Ya se envió: el reintento es reproceso idempotente, sin re-revisión. #}
-        <button class="secundario"
-                hx-post="/ui/facturas/{{ f['id'] }}/authorize"
-                hx-target="#resultado" hx-swap="innerHTML">Reintentar</button>
+        <a href="/facturas/{{ f['id'] }}/revisar">Revisar</a>
+        {% else %}
+        <a href="/facturas/{{ f['id'] }}">Ver detalle</a>
         {% endif %}
       </td>
     </tr>

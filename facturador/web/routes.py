@@ -1,9 +1,17 @@
 """Rutas HTML del frontend. Lógica cero: cada handler arma el contexto con
 el InvoiceService/repo y renderiza; las reglas de dominio viven en service.
 
-El caso feliz semanal (§0.1) es UN submit: crea el draft y lo autoriza en el
-mismo POST. Los errores de dominio se muestran en el partial de resultado,
-nunca como JSON crudo.
+Flujo de emisión en páginas separadas (patrón Post/Redirect/Get):
+
+    GET  /                        form de nueva factura (solo acá hay inputs)
+    POST /ui/facturas             crea el borrador → 303 a la revisión
+    GET  /facturas/{id}/revisar   página de revisión: QUÉ se va a enviar
+    POST /ui/facturas/{id}/authorize  confirma → 303 al detalle
+    GET  /facturas/{id}           detalle read-only: qué se envió, estado,
+                                  CAE y PDF; sin ningún input
+    POST /ui/facturas/{id}/descartar  borra el borrador → 303 al form
+
+Nada viaja a ARCA sin pasar por la revisión; el detalle es el registro.
 """
 
 from __future__ import annotations
@@ -23,7 +31,7 @@ from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
 from ..schemas import ClientIn, InvoiceCreate
-from ..service import ConflictError, ServiceError
+from ..service import ConflictError, NotFoundError, ServiceError
 
 router = APIRouter(include_in_schema=False)
 
@@ -43,7 +51,6 @@ templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
-templates.env.globals["RETRYABLE"] = (InvoiceStatus.DRAFT, InvoiceStatus.UNKNOWN)
 # Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.
 templates.env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
 templates.env.filters["fecha"] = (
@@ -75,66 +82,19 @@ TAB_LABELS = {
     "atencion": "Atención",
 }
 
-
-def _contexto_listado(service, estado: str = "todas") -> dict:
-    statuses = TAB_FILTERS.get(estado)
-    return {
-        "estado": estado,
-        "facturas": repo.list_invoices(
-            service.conn, limit=50, offset=0, statuses=statuses
-        ),
-    }
-
-
-def _render_resultado(
-    request: Request,
-    service,
-    *,
-    factura=None,
-    error: str | None = None,
-    aviso: str | None = None,
-    force_invoice_id: str | None = None,
-):
-    """Partial de resultado + refresh del listado vía evento HTMX."""
-    response = templates.TemplateResponse(
-        request,
-        "_resultado.html",
-        {
-            "factura": factura,
-            "error": error,
-            "aviso": aviso,
-            "force_invoice_id": force_invoice_id,
-        },
-    )
-    response.headers["HX-Trigger"] = "facturas-changed"
-    return response
-
-
-def _render_confirmacion(request: Request, service, draft):
-    """Paso de revisión (dos fases): borrador creado, NADA viajó a ARCA
-    todavía; se muestra exactamente lo que se va a enviar."""
-    response = templates.TemplateResponse(
-        request,
-        "_confirmacion.html",
-        {
-            "f": draft,
-            "items": repo.get_invoice_items(service.conn, draft["id"]),
-        },
-    )
-    response.headers["HX-Trigger"] = "facturas-changed"
-    return response
+AVISOS = {
+    "descartado": "Borrador descartado; no se envió nada a ARCA.",
+}
 
 
 # ---------------------------------------------------------------------------
-# Páginas
+# Emitir (la única página con inputs de factura)
 # ---------------------------------------------------------------------------
 
 
-@router.get("/", response_class=HTMLResponse)
-def home(request: Request, service: ServiceDep):
+def _contexto_form(service, error: str | None = None, aviso: str | None = None):
     clientes = repo.list_clients(service.conn)
     default = next((c for c in clientes if c["is_default"]), None)
-
     ctz = ctz_fecha = None
     if clientes:
         try:
@@ -143,19 +103,168 @@ def home(request: Request, service: ServiceDep):
             ctz = format(ctz_dec, "f")
         except (WsfexError, httpx.HTTPError):
             pass  # sin cotización el form sigue usable; authorize revalida
+    return {
+        "env": service.config.env,
+        "clientes": clientes,
+        "default": default,
+        "ctz": ctz,
+        "ctz_fecha": ctz_fecha,
+        "hoy": dt.date.today().isoformat(),
+        "error": error,
+        "aviso": aviso,
+    }
 
+
+@router.get("/", response_class=HTMLResponse)
+def home(request: Request, service: ServiceDep, aviso: str = ""):
+    return templates.TemplateResponse(
+        request, "home.html", _contexto_form(service, aviso=AVISOS.get(aviso))
+    )
+
+
+@router.post("/ui/facturas")
+def generar_borrador(
+    request: Request,
+    service: ServiceDep,
+    imp_total: str = Form(...),
+    client_id: str = Form(""),
+    descripcion: str = Form(""),
+    fecha_pago: str = Form(""),
+    obs: str = Form(""),
+):
+    """Crea SOLO el borrador y redirige a su revisión. Nada viaja a ARCA
+    hasta el Confirmar explícito de la página de revisión."""
+    try:
+        payload = InvoiceCreate(
+            imp_total=Decimal(imp_total),
+            client_id=client_id or None,
+            descripcion=descripcion or None,
+            fecha_pago=_fecha_iso_a_arca(fecha_pago),
+            obs=obs,
+        )
+        draft = service.create_invoice(payload)
+    except InvalidOperation:
+        error = f"Datos inválidos: monto {imp_total!r} no es un número"
+        return templates.TemplateResponse(
+            request, "home.html", _contexto_form(service, error=error),
+            status_code=422,
+        )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return templates.TemplateResponse(
+            request, "home.html",
+            _contexto_form(service, error=f"Datos inválidos: {detalles}"),
+            status_code=422,
+        )
+    except ServiceError as exc:
+        return templates.TemplateResponse(
+            request, "home.html", _contexto_form(service, error=str(exc)),
+            status_code=422,
+        )
+    return RedirectResponse(f"/facturas/{draft['id']}/revisar", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Revisión y detalle (read-only: acá no hay inputs)
+# ---------------------------------------------------------------------------
+
+
+def _factura_o_redirect(service, invoice_id: str, reconcile: bool = False):
+    try:
+        return service.get_invoice(invoice_id, reconcile=reconcile)
+    except NotFoundError:
+        return None
+
+
+@router.get("/facturas/{invoice_id}/revisar", response_class=HTMLResponse)
+def revisar(request: Request, service: ServiceDep, invoice_id: str):
+    """Qué se va a enviar a ARCA. Solo para borradores: cualquier otro
+    estado ya tiene historia y se ve en el detalle."""
+    inv = _factura_o_redirect(service, invoice_id)
+    if inv is None:
+        return RedirectResponse("/comprobantes", status_code=303)
+    if inv["status"] != InvoiceStatus.DRAFT:
+        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+    return _pagina_revisar(request, service, inv)
+
+
+def _pagina_revisar(
+    request: Request, service, inv, error: str | None = None, force: bool = False
+):
     return templates.TemplateResponse(
         request,
-        "home.html",
+        "revisar.html",
         {
             "env": service.config.env,
-            "clientes": clientes,
-            "default": default,
-            "ctz": ctz,
-            "ctz_fecha": ctz_fecha,
-            "hoy": dt.date.today().isoformat(),
+            "f": inv,
+            "items": repo.get_invoice_items(service.conn, inv["id"]),
+            "error": error,
+            "ofrecer_force": force,
+        },
+        status_code=409 if error else 200,
+    )
+
+
+@router.get("/facturas/{invoice_id}", response_class=HTMLResponse)
+def detalle(request: Request, service: ServiceDep, invoice_id: str):
+    """Registro read-only del comprobante: qué se envió, estado, CAE, PDF.
+    Reconcilia 'unknown' al mirarlo (lazy, igual que la API JSON)."""
+    inv = _factura_o_redirect(service, invoice_id, reconcile=True)
+    if inv is None:
+        return RedirectResponse("/comprobantes", status_code=303)
+    if inv["status"] == InvoiceStatus.DRAFT:
+        return RedirectResponse(f"/facturas/{invoice_id}/revisar", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "detalle.html",
+        {
+            "env": service.config.env,
+            "f": inv,
+            "items": repo.get_invoice_items(service.conn, inv["id"]),
         },
     )
+
+
+@router.post("/ui/facturas/{invoice_id}/authorize")
+def autorizar(
+    request: Request,
+    service: ServiceDep,
+    invoice_id: str,
+    force: bool = False,
+):
+    try:
+        service.authorize(invoice_id, force_desync=force)
+    except NotFoundError:
+        return RedirectResponse("/comprobantes", status_code=303)
+    except (ConflictError, ServiceError) as exc:
+        inv = _factura_o_redirect(service, invoice_id)
+        if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
+            # El chequeo de DB desactualizada (§2.5) es forzable a conciencia;
+            # cualquier otro conflicto se muestra en la misma revisión.
+            return _pagina_revisar(
+                request, service, inv,
+                error=str(exc),
+                force="desactualizado" in str(exc),
+            )
+        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+    return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+
+
+@router.post("/ui/facturas/{invoice_id}/descartar")
+def descartar(request: Request, service: ServiceDep, invoice_id: str):
+    try:
+        service.delete_draft(invoice_id)
+    except NotFoundError:
+        return RedirectResponse("/comprobantes", status_code=303)
+    except ServiceError:
+        # Enviada/no descartable: el detalle explica el estado real.
+        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+    return RedirectResponse("/?aviso=descartado", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Registro de comprobantes
+# ---------------------------------------------------------------------------
 
 
 @router.get("/comprobantes", response_class=HTMLResponse)
@@ -178,9 +287,17 @@ def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
             "env": service.config.env,
             "tabs": TAB_LABELS,
             "tab_counts": tab_counts,
-            **_contexto_listado(service, estado),
+            "estado": estado,
+            "facturas": repo.list_invoices(
+                service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]
+            ),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Clientes
+# ---------------------------------------------------------------------------
 
 
 def _pagina_clientes(
@@ -214,105 +331,6 @@ def _pagina_clientes(
 def clientes(request: Request, service: ServiceDep, edit: str | None = None):
     editando = repo.get_client(service.conn, edit) if edit else None
     return _pagina_clientes(request, service, editando=editando)
-
-
-# ---------------------------------------------------------------------------
-# Acciones HTMX
-# ---------------------------------------------------------------------------
-
-
-@router.post("/ui/facturas", response_class=HTMLResponse)
-def generar_borrador(
-    request: Request,
-    service: ServiceDep,
-    imp_total: str = Form(...),
-    client_id: str = Form(""),
-    descripcion: str = Form(""),
-    fecha_pago: str = Form(""),
-    obs: str = Form(""),
-):
-    """Fase 1 del flujo en dos pasos: genera el borrador y lo muestra para
-    revisión. Nada viaja a ARCA hasta el Confirmar explícito — un error acá
-    se descarta sin consecuencia impositiva."""
-    try:
-        payload = InvoiceCreate(
-            imp_total=Decimal(imp_total),
-            client_id=client_id or None,
-            descripcion=descripcion or None,
-            fecha_pago=_fecha_iso_a_arca(fecha_pago),
-            obs=obs,
-        )
-    except InvalidOperation:
-        error = f"Datos inválidos: monto {imp_total!r} no es un número"
-        return _render_resultado(request, service, error=error)
-    except ValidationError as exc:
-        detalles = "; ".join(e["msg"] for e in exc.errors())
-        return _render_resultado(request, service, error=f"Datos inválidos: {detalles}")
-
-    try:
-        draft = service.create_invoice(payload)
-    except ServiceError as exc:
-        return _render_resultado(request, service, error=str(exc))
-
-    return _render_confirmacion(request, service, draft)
-
-
-@router.get("/ui/facturas/{invoice_id}/confirmar", response_class=HTMLResponse)
-def confirmar(request: Request, service: ServiceDep, invoice_id: str):
-    """Reabre la revisión de un borrador existente desde el listado."""
-    try:
-        inv = service.get_invoice(invoice_id, reconcile=False)
-    except ServiceError as exc:
-        return _render_resultado(request, service, error=str(exc))
-    if inv["status"] != InvoiceStatus.DRAFT:
-        return _render_resultado(
-            request, service,
-            error=f"Solo los borradores se revisan (estado: {inv['status']})",
-        )
-    return _render_confirmacion(request, service, inv)
-
-
-@router.post("/ui/facturas/{invoice_id}/descartar", response_class=HTMLResponse)
-def descartar(request: Request, service: ServiceDep, invoice_id: str):
-    try:
-        service.delete_draft(invoice_id)
-    except ServiceError as exc:
-        return _render_resultado(request, service, error=str(exc))
-    return _render_resultado(
-        request, service, aviso="Borrador descartado; no se envió nada a ARCA."
-    )
-
-
-@router.post("/ui/facturas/{invoice_id}/authorize", response_class=HTMLResponse)
-def autorizar(
-    request: Request,
-    service: ServiceDep,
-    invoice_id: str,
-    force: bool = False,
-):
-    return _autorizar(request, service, invoice_id, force)
-
-
-def _autorizar(request: Request, service, invoice_id: str, force: bool):
-    try:
-        factura = service.authorize(invoice_id, force_desync=force)
-    except ConflictError as exc:
-        # El chequeo de DB desactualizada (§2.5) es forzable a conciencia;
-        # el draft ya quedó creado, el botón reintenta solo el authorize.
-        force_id = invoice_id if "desactualizado" in str(exc) else None
-        return _render_resultado(
-            request, service, error=str(exc), force_invoice_id=force_id
-        )
-    except ServiceError as exc:
-        return _render_resultado(request, service, error=str(exc))
-    return _render_resultado(request, service, factura=factura)
-
-
-@router.get("/ui/listado", response_class=HTMLResponse)
-def listado(request: Request, service: ServiceDep, estado: str = "todas"):
-    return templates.TemplateResponse(
-        request, "_listado.html", _contexto_listado(service, estado)
-    )
 
 
 @router.post("/ui/clientes", response_class=HTMLResponse)
