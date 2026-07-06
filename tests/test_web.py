@@ -196,6 +196,39 @@ def test_unknown_muestra_reintento_en_listado(api, arca):
     assert "Reintentar" in listado.text       # reproceso idempotente, sin revisión
 
 
+# --- página de comprobantes: tabs por estado ---
+
+
+def test_comprobantes_filtra_por_tab(api, arca):
+    _crear_cliente_por_form(api)
+    _, borrador_id = _generar_borrador(api)
+    _, autorizada_id = _generar_borrador(api, imp_total="900.00")
+    api.post(f"/ui/facturas/{autorizada_id}/authorize")
+
+    todas = api.get("/comprobantes")
+    assert todas.status_code == 200
+    assert "Borradores" in todas.text and "Autorizadas" in todas.text
+    assert "Borrador" in todas.text and "Autorizada" in todas.text
+
+    borradores = api.get("/comprobantes?estado=borradores")
+    assert "Revisar" in borradores.text
+    assert "76100000000001" not in borradores.text   # la autorizada no aparece
+
+    autorizadas = api.get("/comprobantes?estado=autorizadas")
+    assert "76100000000001" in autorizadas.text
+    assert "Revisar" not in autorizadas.text
+
+    assert api.get("/comprobantes?estado=inventado").status_code == 200  # cae en todas
+
+
+def test_home_es_solo_emision_y_linkea_al_registro(api, arca):
+    _crear_cliente_por_form(api)
+    r = api.get("/")
+    assert "Generar borrador" in r.text
+    assert 'href="/comprobantes"' in r.text
+    assert "<table" not in r.text            # el listado ya no vive acá
+
+
 # --- escaping (checklist §2.1.1 punto 4, aplicado al HTML) ---
 
 

@@ -186,6 +186,23 @@
   .acciones-revisar { display: flex; gap: .8rem; align-items: center; }
   .acciones-revisar .secundario { margin-top: 1.2rem; padding: .55rem 1.1rem; }
 
+  /* ---- tabs de comprobantes ---- */
+  .tabs { display: flex; gap: .25rem; padding: .6rem 1rem 0; background: #fafbfd;
+          border-bottom: 1px solid var(--borde); }
+  .tabs a {
+    text-decoration: none; color: var(--tinta-suave); font-weight: 600;
+    font-size: .88rem; padding: .45rem .85rem .55rem;
+    border-bottom: 2px solid transparent;
+  }
+  .tabs a:hover { color: var(--tinta); }
+  .tabs a[aria-current="page"] { color: var(--acento); border-bottom-color: var(--acento); }
+  .tabs .conteo {
+    background: #e8ecf3; color: var(--tinta-suave); border-radius: 999px;
+    padding: .05rem .45rem; font-size: .72rem; font-weight: 650;
+    margin-left: .15rem;
+  }
+  .tabs a[aria-current="page"] .conteo { background: #e3eaff; color: var(--acento); }
+
   .nota { color: var(--tinta-suave); font-size: .82rem; margin-top: .9rem; }
   .vacio { color: var(--tinta-suave); text-align: center; padding: 2rem 0;
            font-size: .9rem; }
@@ -202,7 +219,8 @@
 <header>
   <div class="adentro">
     <span class="titulo">factura<span>dor</span></span>
-    <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Facturas</a>
+    <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
+    <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     {% if env != "prod" %}<span class="badge-env">{{ env }} — sin valor fiscal</span>{% endif %}
   </div>

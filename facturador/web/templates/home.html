@@ -52,13 +52,11 @@
   </div>
 </section>
 
-{% endif %}
+<p class="nota" style="text-align:center">
+  El registro completo, con estados y PDFs, vive en
+  <a href="/comprobantes">Comprobantes</a>.
+</p>
 
-<section class="card">
-  <h2>Comprobantes</h2>
-  <div id="listado" class="tabla-scroll" hx-get="/ui/listado" hx-trigger="facturas-changed from:body">
-    {% include "_listado.html" %}
-  </div>
-</section>
+{% endif %}
 
 {% endblock %}

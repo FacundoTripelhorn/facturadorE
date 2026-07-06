@@ -88,12 +88,28 @@ def get_invoice_items(conn: sqlite3.Connection, invoice_id: str) -> list[sqlite3
 
 
 def list_invoices(
-    conn: sqlite3.Connection, limit: int = 50, offset: int = 0
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    offset: int = 0,
+    statuses: tuple[str, ...] | None = None,
 ) -> list[sqlite3.Row]:
+    where = ""
+    params: tuple = ()
+    if statuses:
+        where = f" WHERE status IN ({', '.join('?' * len(statuses))})"
+        params = tuple(statuses)
     return conn.execute(
-        "SELECT * FROM invoices ORDER BY created_at DESC LIMIT ? OFFSET ?",
-        (limit, offset),
+        f"SELECT * FROM invoices{where}"
+        " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (*params, limit, offset),
     ).fetchall()
+
+
+def count_invoices_by_status(conn: sqlite3.Connection) -> dict[str, int]:
+    rows = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM invoices GROUP BY status"
+    ).fetchall()
+    return {row["status"]: row["n"] for row in rows}
 
 
 # Columnas que la máquina de estados puede tocar tras la creación. Los nombres

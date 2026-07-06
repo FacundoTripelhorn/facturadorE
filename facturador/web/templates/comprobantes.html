@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div id="resultado"></div>
+
+<section class="card">
+  <h2>Comprobantes</h2>
+  <nav class="tabs">
+    {% for tab, label in tabs.items() %}
+    <a href="/comprobantes?estado={{ tab }}"
+       {% if tab == estado %}aria-current="page"{% endif %}>
+      {{ label }} <span class="conteo num">{{ tab_counts[tab] }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+  <div id="listado" class="tabla-scroll"
+       hx-get="/ui/listado?estado={{ estado }}"
+       hx-trigger="facturas-changed from:body">
+    {% include "_listado.html" %}
+  </div>
+</section>
+
+{% endblock %}

@@ -56,8 +56,34 @@ def _fecha_iso_a_arca(fecha: str | None) -> str | None:
     return fecha.replace("-", "") if fecha else None
 
 
-def _contexto_listado(service) -> dict:
-    return {"facturas": repo.list_invoices(service.conn, limit=50, offset=0)}
+# Tabs de /comprobantes: cada una agrupa los estados que le corresponden.
+TAB_FILTERS: dict[str, tuple[InvoiceStatus, ...] | None] = {
+    "todas": None,
+    "borradores": (InvoiceStatus.DRAFT,),
+    "autorizadas": (InvoiceStatus.AUTHORIZED,),
+    "atencion": (
+        InvoiceStatus.SUBMITTING,
+        InvoiceStatus.UNKNOWN,
+        InvoiceStatus.REJECTED,
+    ),
+}
+
+TAB_LABELS = {
+    "todas": "Todas",
+    "borradores": "Borradores",
+    "autorizadas": "Autorizadas",
+    "atencion": "Atención",
+}
+
+
+def _contexto_listado(service, estado: str = "todas") -> dict:
+    statuses = TAB_FILTERS.get(estado)
+    return {
+        "estado": estado,
+        "facturas": repo.list_invoices(
+            service.conn, limit=50, offset=0, statuses=statuses
+        ),
+    }
 
 
 def _render_resultado(
@@ -128,7 +154,31 @@ def home(request: Request, service: ServiceDep):
             "ctz": ctz,
             "ctz_fecha": ctz_fecha,
             "hoy": dt.date.today().isoformat(),
-            **_contexto_listado(service),
+        },
+    )
+
+
+@router.get("/comprobantes", response_class=HTMLResponse)
+def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
+    if estado not in TAB_FILTERS:
+        estado = "todas"
+    counts = repo.count_invoices_by_status(service.conn)
+    tab_counts = {
+        tab: (
+            sum(counts.values())
+            if statuses is None
+            else sum(counts.get(s, 0) for s in statuses)
+        )
+        for tab, statuses in TAB_FILTERS.items()
+    }
+    return templates.TemplateResponse(
+        request,
+        "comprobantes.html",
+        {
+            "env": service.config.env,
+            "tabs": TAB_LABELS,
+            "tab_counts": tab_counts,
+            **_contexto_listado(service, estado),
         },
     )
 
@@ -259,9 +309,9 @@ def _autorizar(request: Request, service, invoice_id: str, force: bool):
 
 
 @router.get("/ui/listado", response_class=HTMLResponse)
-def listado(request: Request, service: ServiceDep):
+def listado(request: Request, service: ServiceDep, estado: str = "todas"):
     return templates.TemplateResponse(
-        request, "_listado.html", _contexto_listado(service)
+        request, "_listado.html", _contexto_listado(service, estado)
     )
 
 

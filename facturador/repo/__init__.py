@@ -15,6 +15,7 @@ from .clients import (
 from .invoices import (
     INVOICE_FIELDS,
     UPDATABLE_INVOICE_FIELDS,
+    count_invoices_by_status,
     create_invoice,
     delete_draft,
     get_invoice,
@@ -29,6 +30,7 @@ from .params import get_params, replace_params
 
 __all__ = [
     "CLIENT_FIELDS",
+    "count_invoices_by_status",
     "INVOICE_FIELDS",
     "UPDATABLE_INVOICE_FIELDS",
     "create_client",
