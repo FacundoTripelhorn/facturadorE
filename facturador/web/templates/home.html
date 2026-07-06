@@ -13,6 +13,7 @@
   <h2>Nueva Factura E
     {% if default %}<span class="sub">{{ default["razon_social"] }}</span>{% endif %}
   </h2>
+  <div class="cuerpo">
   <form hx-post="/ui/facturas" hx-target="#resultado" hx-swap="innerHTML">
     <div class="fila">
       <div>
@@ -48,13 +49,14 @@
     </p>
     <button type="submit"><span class="spinner"></span> Emitir y autorizar</button>
   </form>
+  </div>
 </section>
 
 {% endif %}
 
 <section class="card">
   <h2>Comprobantes</h2>
-  <div id="listado" hx-get="/ui/listado" hx-trigger="facturas-changed from:body">
+  <div id="listado" class="tabla-scroll" hx-get="/ui/listado" hx-trigger="facturas-changed from:body">
     {% include "_listado.html" %}
   </div>
 </section>

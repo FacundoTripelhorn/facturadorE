@@ -1,29 +1,35 @@
 {% if error %}
 <div class="panel error">
-  <strong>No se pudo autorizar.</strong> {{ error }}
-  {% if force_invoice_id %}
-  <p>
-    <button hx-post="/ui/facturas/{{ force_invoice_id }}/authorize?force=true"
-            hx-target="#resultado" hx-swap="innerHTML">
-      <span class="spinner"></span> Forzar de todos modos (homologación / restore reciente)
-    </button>
-  </p>
-  {% endif %}
+  <div>
+    <strong>No se pudo autorizar.</strong> {{ error }}
+    {% if force_invoice_id %}
+    <p>
+      <button hx-post="/ui/facturas/{{ force_invoice_id }}/authorize?force=true"
+              hx-target="#resultado" hx-swap="innerHTML">
+        <span class="spinner"></span> Forzar de todos modos (homologación / restore reciente)
+      </button>
+    </p>
+    {% endif %}
+  </div>
 </div>
 {% elif factura and factura["status"] == AUTHORIZED %}
 <div class="panel ok">
-  <span class="cae-grande num">Factura E {{ "%05d"|format(factura["punto_venta"]) }}-{{ "%08d"|format(factura["cbte_nro"]) }} autorizada</span><br>
-  CAE <span class="num">{{ factura["cae"] }}</span>
-  (vence {{ factura["cae_fch_vto"][6:] }}/{{ factura["cae_fch_vto"][4:6] }}/{{ factura["cae_fch_vto"][:4] }})
-  — <a href="/invoices/{{ factura['id'] }}/pdf" target="_blank">Descargar PDF</a>
+  <div>
+    <span class="cae-grande num">Factura E {{ "%05d"|format(factura["punto_venta"]) }}-{{ "%08d"|format(factura["cbte_nro"]) }} autorizada</span><br>
+    CAE <span class="num">{{ factura["cae"] }}</span>
+    (vence {{ factura["cae_fch_vto"][6:] }}/{{ factura["cae_fch_vto"][4:6] }}/{{ factura["cae_fch_vto"][:4] }})
+    — <a href="/invoices/{{ factura['id'] }}/pdf" target="_blank">Descargar PDF</a>
+  </div>
 </div>
 {% elif factura %}
 <div class="panel error">
-  <strong>{{ STATUS_LABELS[factura["status"]] }}.</strong>
-  {{ factura["last_error"] or "" }}
-  {% if factura["status"] in RETRYABLE %}
-  <p class="nota">Se puede reintentar desde el listado: el reintento reusa el
-  mismo Id idempotente, sin riesgo de doble emisión.</p>
-  {% endif %}
+  <div>
+    <strong>{{ STATUS_LABELS[factura["status"]] }}.</strong>
+    {{ factura["last_error"] or "" }}
+    {% if factura["status"] in RETRYABLE %}
+    <p class="nota">Se puede reintentar desde el listado: el reintento reusa el
+    mismo Id idempotente, sin riesgo de doble emisión.</p>
+    {% endif %}
+  </div>
 </div>
 {% endif %}

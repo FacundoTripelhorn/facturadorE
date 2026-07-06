@@ -5,6 +5,7 @@
 
 <section class="card">
   <h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
+  <div class="cuerpo">
   <form method="post" action="/ui/clientes">
     {% if editando %}<input type="hidden" name="client_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
@@ -87,6 +88,7 @@
     <button type="submit">Guardar</button>
     {% if editando %}<a href="/clientes" style="margin-left:1rem">Cancelar</a>{% endif %}
   </form>
+  </div>
 </section>
 
 <section class="card">
