@@ -8,9 +8,15 @@ WSAA/WSFEX SOAP web services. SQLite is the only datastore. There is one
 service; the dev entrypoint is `uv run python -m facturador` (binds
 `127.0.0.1:8399`, port override via `FACTURADOR_PORT`).
 
-Tooling is `uv` (installed at `~/.local/bin`, on PATH via `.bashrc`). The update
-script runs `uv sync`; dev deps live in the `dev` dependency-group. WeasyPrint's
-system libs (pango/cairo/gdk-pixbuf) are already present in the base image.
+Tooling is `uv` (installed at `~/.local/bin`, on PATH via `.bashrc`). Dev deps
+live in the `dev` dependency-group; install/refresh them with `uv sync`.
+WeasyPrint's system libs (pango/cairo/gdk-pixbuf) are already present in the
+base image.
+
+> On Cursor Cloud, dependency refresh is automated by a Cloud-managed **update
+> script** (`uv sync`, bootstrapping `uv` if absent). That script is stored as
+> Cursor Cloud environment metadata, not committed to this repo, so you will not
+> find it in the diff — just run `uv sync` yourself when working locally.
 
 Standard commands (see `pyproject.toml`):
 - Lint: `uv run ruff check .`
