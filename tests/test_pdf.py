@@ -11,6 +11,8 @@ import datetime as dt
 import json
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from facturador import repo
 from facturador.config import Emisor
 from facturador.pdf import render_invoice_html
@@ -90,6 +92,20 @@ def test_qr_exige_factura_con_cae(api, arca):
 # --- endpoint /invoices/:id/pdf ---
 
 
+def _weasyprint_disponible() -> bool:
+    # weasyprint levanta OSError (no ImportError) si faltan las libs nativas
+    # de Pango, así que pytest.importorskip no alcanza.
+    try:
+        import weasyprint  # noqa: F401
+    except (ImportError, OSError):
+        return False
+    return True
+
+
+@pytest.mark.skipif(
+    not _weasyprint_disponible(),
+    reason="weasyprint sin libs nativas (Pango/GTK); el runtime real es Docker",
+)
 def test_pdf_de_factura_autorizada(api, arca, test_config):
     factura = _factura_autorizada(api)
 

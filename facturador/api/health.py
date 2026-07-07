@@ -1,4 +1,4 @@
-"""Salud de la integración con ARCA (FEXDummy)."""
+"""Salud: liveness local (para healthcheck/launcher) y estado de ARCA."""
 
 from __future__ import annotations
 
@@ -10,6 +10,13 @@ from ..schemas import HealthOut
 from .deps import ServiceDep
 
 router = APIRouter(prefix="/health", tags=["health"])
+
+
+@router.get("")
+def health(service: ServiceDep) -> dict[str, str]:
+    """Liveness sin tocar ARCA: la usan el HEALTHCHECK de Docker y el
+    launcher, que corren cada pocos segundos — FEXDummy acá sería spam."""
+    return {"status": "ok", "environment": service.config.env}
 
 
 @router.get("/arca", response_model=HealthOut)

@@ -1,0 +1,16 @@
+# Uso: docker compose up -d  (o doble click en scripts/launch.cmd / .command)
+#
+# FACTURADOR_HOME (host) apunta al directorio de datos del usuario con el
+# layout de design.md §2.5 (.env, secrets/, data/, backups/). Default:
+# ~/facturador. El publish del puerto queda SIEMPRE en 127.0.0.1 — la app
+# no es accesible desde la red aunque el proceso interno escuche en 0.0.0.0.
+services:
+  facturador:
+    build: .
+    image: facturador:local
+    container_name: facturador
+    ports:
+      - "127.0.0.1:${FACTURADOR_PORT:-8399}:8399"
+    volumes:
+      - "${FACTURADOR_HOME:-~/facturador}:/host"
+    restart: unless-stopped

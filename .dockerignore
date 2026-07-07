@@ -1,0 +1,7 @@
+# Nada local ni sensible entra al build context (la imagen solo necesita
+# pyproject.toml, facturador/ y docker/entrypoint.sh).
+*
+!pyproject.toml
+!facturador/
+!docker/entrypoint.sh
+facturador/**/__pycache__/
