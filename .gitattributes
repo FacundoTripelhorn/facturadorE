@@ -1,0 +1,6 @@
+# Los scripts que corren en Linux (contenedor) o macOS deben mantener LF
+# aunque el repo se clone en Windows.
+docker/entrypoint.sh text eol=lf
+scripts/*.command text eol=lf
+scripts/*.sh text eol=lf
+scripts/*.cmd text eol=crlf

@@ -1,6 +1,6 @@
 """Conversiones entre filas SQLite, raw_request (JSON) y el Invoice de WSFEX.
 
-raw_request es el contrato de idempotencia (spike.md §2.3 regla 5): el
+raw_request es el contrato de idempotencia (design.md §2.3 regla 5): el
 reintento reconstruye el request EXACTO persistido, no la fila actual.
 """
 

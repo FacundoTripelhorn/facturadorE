@@ -1,6 +1,6 @@
 """Ensamblado de la app FastAPI: wiring de dependencias, manejo de errores
 de dominio y registro de routers (API JSON + frontend HTML §2.4).
-Servida solo en localhost (spike.md §2.5)."""
+Servida solo en localhost (design.md §2.5)."""
 
 from __future__ import annotations
 

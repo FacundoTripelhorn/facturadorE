@@ -1,0 +1,35 @@
+#!/bin/sh
+# Normaliza el bind mount del host (montado en /host) al layout que espera la
+# app en FACTURADOR_HOME (design.md §2.5).
+#
+# Por qué no se usa /host directo como FACTURADOR_HOME: los bind mounts de
+# Docker Desktop no tienen semántica POSIX confiable (Windows expone todo
+# como 0777 y no acepta chmod), así que el chequeo de permisos de la clave
+# privada fallaría siempre. Los secretos se COPIAN a un directorio interno
+# del contenedor con chmod 400 (ahí el chequeo aplica de verdad y la copia
+# muere con el contenedor); data/ y backups/ quedan como symlinks al mount
+# para que la DB, los PDFs y los backups persistan en el host.
+set -eu
+
+HOME_DIR="${FACTURADOR_HOME:-/facturador}"
+
+if [ ! -d /host/secrets ]; then
+    echo "ERROR: no existe /host/secrets — ¿montaste ~/facturador en /host?" >&2
+    echo "Layout esperado en el host: .env, secrets/, data/, backups/" >&2
+    exit 1
+fi
+
+mkdir -p "$HOME_DIR/secrets" /host/data /host/backups
+cp /host/secrets/* "$HOME_DIR/secrets/"
+chmod 400 "$HOME_DIR/secrets/"*
+ln -sfn /host/data "$HOME_DIR/data"
+ln -sfn /host/backups "$HOME_DIR/backups"
+
+# El .env del host manda, pero FACTURADOR_HOME ya está en el entorno del
+# contenedor y python-dotenv NO pisa variables existentes: un path de
+# Windows en el .env no puede romper el layout interno.
+if [ -f /host/.env ]; then
+    ln -sf /host/.env /app/.env
+fi
+
+exec python -m facturador

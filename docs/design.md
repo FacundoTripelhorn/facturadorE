@@ -1,8 +1,8 @@
-# Spike: API para emisión de Factura E (exportación) en ARCA
+# Diseño: API para emisión de Factura E (exportación) en ARCA
 
-**Objetivo:** validar de punta a punta que podemos autorizar comprobantes tipo E reales contra ARCA (ex AFIP) desde una API propia, como Responsable Inscripto. El frontend es secundario y mínimo.
+> Este documento nació como plan de un spike y quedó como **documento de diseño del producto**. El objetivo del spike se cumplió el 2026-07-03: CAE válido para una Factura E en homologación con el flujo completo automatizado (auth WSAA → autorización WSFEX → persistencia → PDF con QR). Las menciones a "spike" en el texto son históricas; las decisiones siguen vigentes.
 
-**Definición de éxito del spike:** obtener un CAE válido para una Factura E en el ambiente de **homologación**, con el flujo completo automatizado (auth WSAA → autorización WSFEX → persistencia → PDF básico). Producción es un cambio de configuración + trámite de certificado, no de código.
+**Objetivo:** autorizar comprobantes tipo E reales contra ARCA (ex AFIP) desde una API propia, como Responsable Inscripto, reemplazando la emisión manual por Comprobantes en Línea. Producción es un cambio de configuración + trámite de certificado, no de código.
 
 ---
 

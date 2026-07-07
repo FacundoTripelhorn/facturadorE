@@ -1,5 +1,5 @@
 """InvoiceService: validación de dominio, numeración/idempotencia y máquina
-de estados (spike.md §2.2/§2.3).
+de estados (design.md §2.2/§2.3).
 
 Estados: draft → submitting → authorized | rejected | unknown
   - 'unknown' = timeout u otra falla post-envío sin respuesta concluyente;
@@ -87,7 +87,7 @@ class InvoiceService:
         self.wsfex = wsfex
 
     # ------------------------------------------------------------------
-    # Parámetros (cache con refresh lazy de 24 h — spike.md §6.2)
+    # Parámetros (cache con refresh lazy de 24 h — design.md §6.2)
     # ------------------------------------------------------------------
 
     def get_params(self, kind: str) -> list[sqlite3.Row]:
@@ -223,7 +223,7 @@ class InvoiceService:
             "permiso_existente": "",
             "dst_cmp": client["pais_dst"],
             # Snapshot del cliente: el comprobante queda inmutable aunque el
-            # cliente se edite después (spike.md §6.3).
+            # cliente se edite después (design.md §6.3).
             "cliente": client["razon_social"],
             "cuit_pais_cliente": client["cuit_pais"],
             "domicilio_cliente": client["domicilio"],

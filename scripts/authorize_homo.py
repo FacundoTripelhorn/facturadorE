@@ -1,6 +1,6 @@
 """Fase 3: primer CAE en homologación — núcleo del spike.
 
-Flujo completo (spike.md §4 fase 3 + reglas de authorize §2.3):
+Flujo completo (design.md §4 fase 3 + reglas de authorize §2.3):
   1. Lee los datos de la factura de data/invoice_input.json (fuera del repo).
      Si no existe, lo crea con placeholders de homologación y sigue.
   2. Cotización DOL del día vía FEXGetPARAM_Ctz (nunca cotización propia).

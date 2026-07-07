@@ -1,4 +1,4 @@
--- Esquema SQLite del facturador (spike.md §2.2).
+-- Esquema SQLite del facturador (design.md §2.2).
 -- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
 
 CREATE TABLE IF NOT EXISTS arca_params (

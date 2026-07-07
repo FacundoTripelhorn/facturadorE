@@ -16,19 +16,27 @@ Qué incluye:
   el cliente habitual, revisión antes de enviar, listado y detalle read-only.
 - **PDF del comprobante** con QR según RG 4892 (WeasyPrint).
 - **SQLite** como única fuente de verdad local; sin servicios externos.
+- **Empaquetado Docker** (misma imagen para Windows y macOS) con el puerto
+  publicado solo en `127.0.0.1`, y launchers de doble click.
+- **Backups cifrados** del lado del cliente ([age](https://age-encryption.org))
+  con upload opcional a S3.
 
 > El diseño completo, las decisiones tomadas y el mapeo campo por campo contra
-> WSFEX están documentados en [`docs/spike.md`](docs/spike.md).
+> WSFEX están documentados en [`docs/design.md`](docs/design.md).
 
 ## Requisitos
 
-- **Python ≥ 3.12** y [uv](https://docs.astral.sh/uv/) (o `pip` si preferís).
-- **Dependencias de sistema de WeasyPrint** (Pango, Cairo, GDK-PixBuf). En
-  Debian/Ubuntu: `sudo apt install libpango-1.0-0 libpangocairo-1.0-0
-  libgdk-pixbuf-2.0-0`. Ver la [guía de instalación de WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html).
+- **Docker Desktop** (runtime recomendado; trae todo lo demás), o bien
+  **Python ≥ 3.12** + [uv](https://docs.astral.sh/uv/) para correr sin Docker —
+  en ese caso el render de PDF necesita además las **dependencias de sistema de
+  WeasyPrint** (Pango/HarfBuzz; en Debian/Ubuntu: `sudo apt install
+  libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0`). Sin ellas el resto de
+  la app funciona igual; solo la descarga del PDF falla.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
+- Para backups: **[age](https://age-encryption.org)** (`winget install
+  FiloSottile.age` / `brew install age`) y, si se sube a S3, **aws CLI**.
 
 ## Setup por ambiente
 
@@ -44,33 +52,51 @@ configuración local y verificación):
   venta RECE exclusivo de exportación, smoke test y primera factura real, más
   los cuidados operativos (backups, numeración, multi-máquina).
 
-## Instalación y configuración
+## Uso con Docker (recomendado)
 
-```bash
-git clone <url-del-repo> facturador && cd facturador
-uv sync
-```
-
-La app lee toda su configuración de variables de entorno (y de un `.env` si
-existe). El `.env` se carga del **directorio de trabajo** desde donde se
-ejecuta la app — típicamente la raíz del repo, donde ya está en el
-`.gitignore` —, no de `FACTURADOR_HOME`; alternativamente se pueden exportar
-las mismas variables en el shell. Layout de datos esperado bajo
-`FACTURADOR_HOME` (por defecto, el directorio actual):
+El directorio de datos (`FACTURADOR_HOME`, default `~/facturador`) vive fuera
+del repo y del contenedor:
 
 ```
-$FACTURADOR_HOME/
-  secrets/            # chmod 700
+~/facturador/
+  .env                # copiar .env.example del repo y completar
+  secrets/
     homo.key          # chmod 400 — la app se niega a arrancar con permisos laxos
     homo.crt
     prod.key          # solo al pasar a producción
     prod.crt
-  data/               # la crea la app
-    facturador.db     # SQLite
-    pdfs/             # comprobantes emitidos
+  data/               # la crea la app: facturador.db, pdfs/, logs/
+  backups/            # .tar.gz.age generados por facturador.backup
 ```
 
-Variables disponibles (ejemplo de `.env`):
+Levantar: doble click en `scripts/launch.cmd` (Windows) o
+`scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
+`http://localhost:8399`. Equivalente manual: `docker compose up -d`. Si
+`FACTURADOR_HOME` no es `~/facturador`, exportarlo antes de levantar compose.
+
+El puerto se publica **solo en `127.0.0.1`**: la app no es accesible desde la
+red. Dentro del contenedor, el entrypoint copia los secretos a un directorio
+interno con `chmod 400` (los bind mounts de Docker Desktop no tienen semántica
+POSIX confiable) y deja `data/` y `backups/` apuntando al host para que todo
+persista.
+
+## Uso sin Docker
+
+```bash
+git clone <url-del-repo> facturador && cd facturador
+uv sync
+uv run python -m facturador
+```
+
+Abre `http://127.0.0.1:8399`. La app escucha **solo en localhost** por diseño
+(el host no es configurable): la única conexión de red es saliente hacia ARCA.
+
+La app lee toda su configuración de variables de entorno (y de un `.env` si
+existe). Corriendo sin Docker, el `.env` se carga del **directorio de trabajo**
+desde donde se ejecuta la app — típicamente la raíz del repo, donde ya está en
+el `.gitignore` — no de `FACTURADOR_HOME`; con Docker, del `.env` de
+`FACTURADOR_HOME`. Las variables disponibles están documentadas en
+[`.env.example`](.env.example); las centrales:
 
 ```dotenv
 # Ambiente: "homo" o "prod". De este ÚNICO flag se derivan las URLs de
@@ -88,31 +114,16 @@ ARCA_CUIT=20123456789
 # Punto de venta (default 1; en homo es libre, en prod el PV RECE exclusivo)
 ARCA_PUNTO_VTA=1
 
-# Passphrase de la clave privada, solo si la key está protegida
-# ARCA_KEY_PASSPHRASE=...
-
 # Datos del emisor que van al PDF (no viajan a ARCA)
 EMISOR_RAZON_SOCIAL=Mi Empresa S.A.
 EMISOR_DOMICILIO=Calle Falsa 123, CABA
 EMISOR_IIBB=            # vacío => se imprime el CUIT
 EMISOR_INICIO_ACTIVIDADES=01/2020
-
-# Puerto local (default 8399)
-# FACTURADOR_PORT=8399
 ```
 
 En el arranque la app valida que existan `secrets/<env>.crt` y
 `secrets/<env>.key` y que la key tenga permisos `400`/`600`; si no, se niega a
 arrancar con un mensaje explicativo.
-
-## Uso
-
-```bash
-uv run python -m facturador
-```
-
-Abre `http://127.0.0.1:8399`. La app escucha **solo en localhost** por diseño
-(el host no es configurable): la única conexión de red es saliente hacia ARCA.
 
 ### Flujo en la interfaz web
 
@@ -144,6 +155,7 @@ La misma app expone la API (documentación interactiva en `/docs`):
 | `GET /clients` / `POST /clients` / `PUT /clients/{id}` | ABM de clientes |
 | `GET /params/{kind}` | Tablas de parámetros de ARCA cacheadas: `moneda`, `pais`, `cuit_pais`, `cbte_tipo`, `umed`, `incoterms`, `idioma`, `tipo_expo` |
 | `GET /params/currency/{id}/rate?date=AAAAMMDD` | Cotización de ARCA para esa fecha |
+| `GET /health` | Liveness local (sin tocar ARCA; la usan Docker y los launchers) |
 | `GET /health/arca` | Estado de los servidores de ARCA (`FEXDummy`) |
 
 ### Scripts de diagnóstico
@@ -155,6 +167,27 @@ uv run python scripts/get_ta.py         # obtiene (o reutiliza) el ticket WSAA
 uv run python scripts/check_wsfex.py    # FEXDummy + descarga de tablas de parámetros
 uv run python scripts/authorize_homo.py # flujo completo de emisión en homologación
 ```
+
+## Backups
+
+El estado completo (DB + PDFs + secretos + `.env`) se respalda cifrado del
+lado del cliente con age y, opcionalmente, se sube a un bucket S3 privado
+(`BACKUP_S3_BUCKET` en el `.env`). La passphrase es del usuario y no vive en
+ningún lado. Correr en el host después de emitir:
+
+```bash
+uv run python -m facturador.backup --home ~/facturador            # cifra a backups/ y sube si hay bucket
+uv run python -m facturador.restore --home ~/facturador --latest  # máquina secundaria: baja y restaura
+```
+
+`--home` puede omitirse si `FACTURADOR_HOME` está en el entorno o en el
+`.env` del directorio actual; no hay fallback implícito al directorio de
+trabajo. `BACKUP_S3_BUCKET`/`BACKUP_S3_PREFIX` se leen también del `.env`
+del home.
+
+Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
+contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
+primaria → backup → restore → secundaria es responsabilidad del usuario.
 
 ## Desarrollo
 
@@ -176,11 +209,13 @@ facturador/
   repo/         # acceso a datos (SQLite)
   service.py    # lógica de dominio: numeración, idempotencia, estados
   config.py     # carga y validación de configuración
+  backup.py     # backup cifrado (age → S3); restore.py es el inverso
   schema.sql    # esquema de la base
-scripts/        # diagnóstico y flujo de homologación
+docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
+scripts/        # diagnóstico, flujo de homologación y launchers
 tests/          # pytest (incluye ARCA falso en tests/arca_fake.py)
 docs/
-  spike.md              # diseño, decisiones y contexto de dominio
+  design.md             # diseño, decisiones y contexto de dominio
   setup-homologacion.md # guía de setup del ambiente de prueba
   setup-produccion.md   # guía de pasaje a producción
 ```
@@ -193,6 +228,8 @@ docs/
 - El token/sign del WSAA y el CMS firmado nunca se loguean.
 - Los certificados de homologación y producción no pueden cruzarse: URLs y
   paths se derivan del único flag `ARCA_ENV`.
+- Los backups se cifran del lado del cliente **antes** de salir de la máquina;
+  el tarball con la clave fiscal nunca toca el disco ni S3 en claro.
 
 ## Licencia
 
