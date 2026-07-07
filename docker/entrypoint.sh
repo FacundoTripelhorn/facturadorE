@@ -7,29 +7,26 @@
 # como 0777 y no acepta chmod), así que el chequeo de permisos de la clave
 # privada fallaría siempre. Los secretos se COPIAN a un directorio interno
 # del contenedor con chmod 400 (ahí el chequeo aplica de verdad y la copia
-# muere con el contenedor); data/ y backups/ quedan como symlinks al mount
-# para que la DB, los PDFs y los backups persistan en el host.
+# muere con el contenedor); data/, backups/ y .env quedan como symlinks al
+# mount para que todo persista en el host. Si el host viene vacío (primer
+# arranque), la app crea la estructura y el .env de bootstrap a través de
+# esos symlinks.
 set -eu
 
 HOME_DIR="${FACTURADOR_HOME:-/facturador}"
 
-if [ ! -d /host/secrets ]; then
-    echo "ERROR: no existe /host/secrets — ¿montaste ~/facturador en /host?" >&2
-    echo "Layout esperado en el host: .env, secrets/, data/, backups/" >&2
-    exit 1
+mkdir -p /host/secrets /host/data /host/backups "$HOME_DIR/secrets"
+if [ -n "$(ls -A /host/secrets 2>/dev/null)" ]; then
+    cp /host/secrets/* "$HOME_DIR/secrets/"
+    chmod 400 "$HOME_DIR/secrets/"*
 fi
-
-mkdir -p "$HOME_DIR/secrets" /host/data /host/backups
-cp /host/secrets/* "$HOME_DIR/secrets/"
-chmod 400 "$HOME_DIR/secrets/"*
 ln -sfn /host/data "$HOME_DIR/data"
 ln -sfn /host/backups "$HOME_DIR/backups"
-
-# El .env del host manda, pero FACTURADOR_HOME ya está en el entorno del
-# contenedor y python-dotenv NO pisa variables existentes: un path de
-# Windows en el .env no puede romper el layout interno.
-if [ -f /host/.env ]; then
-    ln -sf /host/.env /app/.env
-fi
+# La app lee el .env SOLO de <home>/.env; el symlink apunta al del host (y
+# si no existe, la app lo crea con el bootstrap a través del symlink).
+# FACTURADOR_HOME y FACTURADOR_PORT ya están en el entorno del contenedor y
+# python-dotenv NO pisa variables existentes: un valor en el .env del host
+# no puede mover el layout ni el puerto interno.
+ln -sfn /host/.env "$HOME_DIR/.env"
 
 exec python -m facturador
