@@ -12,9 +12,8 @@ Resolución de configuración (única, sin fallbacks al directorio de trabajo):
    y su estructura (``secrets/``, ``data/``, ``backups/``) en el primer
    arranque.
 2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
-   bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``ARCA_KEY_PASSPHRASE``
-   (es un secreto: no va a la DB) y ``FACTURADOR_PORT``. Si no existe, la
-   app lo crea con ``ARCA_ENV=homo``.
+   bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``FACTURADOR_PORT``.
+   Si no existe, la app lo crea con ``ARCA_ENV=homo``.
 3. El resto de la configuración (datos del emisor, punto de venta, backups)
    vive en la DB y se edita desde la página Configuración (ver settings.py).
 
@@ -40,7 +39,7 @@ VALID_ENVS = ("homo", "prod")
 DEFAULT_HOME = "~/facturador"
 
 # Bootstrap creado en el primer arranque. Solo lo que no puede vivir en la
-# DB: el flag de ambiente, el secreto de la key y el puerto local.
+# DB: el flag de ambiente y el puerto local.
 BOOTSTRAP_ENV = """\
 # Bootstrap del facturador. El resto de la configuración (datos del emisor,
 # punto de venta, backups) se edita desde la app, en la página Configuración.
@@ -48,9 +47,6 @@ BOOTSTRAP_ENV = """\
 # Ambiente ARCA: homo | prod. Deriva URLs de WSAA/WSFEX y qué par cert/key
 # se usa (secrets/<env>.crt + secrets/<env>.key). Único flag: no hay overrides.
 ARCA_ENV=homo
-
-# Passphrase de la clave privada, solo si la key la tiene.
-#ARCA_KEY_PASSPHRASE=
 
 # Puerto local (siempre en 127.0.0.1).
 #FACTURADOR_PORT=8399
@@ -65,7 +61,6 @@ class ConfigError(RuntimeError):
 class Config:
     env: str          # "homo" | "prod"
     home: Path        # raíz de datos (secrets/, data/, backups/)
-    key_passphrase: str | None = None
 
     @property
     def wsaa_url(self) -> str:
@@ -126,11 +121,7 @@ def load_config() -> Config:
             f"ARCA_ENV inválido: {env!r} (valores permitidos: {', '.join(VALID_ENVS)})"
         )
 
-    config = Config(
-        env=env,
-        home=home,
-        key_passphrase=os.environ.get("ARCA_KEY_PASSPHRASE") or None,
-    )
+    config = Config(env=env, home=home)
     validate_config(config)
     return config
 
