@@ -61,7 +61,7 @@ certificados:
 
 ```
 ~/facturador/
-  .env                # lo crea la app: ARCA_ENV (+ passphrase/puerto opcionales)
+  .env                # lo crea la app: ARCA_ENV (+ puerto opcional)
   secrets/            # colocar acá el par del ambiente activo
     homo.key          # chmod 400 — la app se niega a arrancar con permisos laxos
     homo.crt
@@ -110,13 +110,12 @@ directorio de trabajo):
 # es imposible por construcción mezclar cert de homologación con producción.
 ARCA_ENV=homo
 
-# Passphrase de la clave privada (es un secreto: no va a la DB), solo si
-# la key la tiene.
-#ARCA_KEY_PASSPHRASE=
-
 # Puerto local (siempre en 127.0.0.1).
 #FACTURADOR_PORT=8399
 ```
+
+La clave privada va **sin passphrase**: la protegen los permisos `400`, el
+home local y el cifrado del backup al salir de la máquina.
 
 La raíz de datos se elige con la variable de entorno `FACTURADOR_HOME`
 (default `~/facturador`). El CUIT emisor no se configura: se extrae del
