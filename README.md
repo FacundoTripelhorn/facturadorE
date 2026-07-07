@@ -196,4 +196,4 @@ docs/
 
 ## Licencia
 
-Proyecto personal, sin licencia pública definida por el momento.
+[MIT](LICENSE).
