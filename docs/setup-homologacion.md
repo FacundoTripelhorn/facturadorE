@@ -60,43 +60,38 @@ Los nombres son fijos por convención: `secrets/<ambiente>.key` y
 `secrets/<ambiente>.crt`. La app **se niega a arrancar** si falta alguno de los
 dos o si la key tiene permisos más laxos que `400`/`600`.
 
-## 4. Configurar `.env`
+## 4. El `.env` de bootstrap
 
-La app carga el `.env` del **directorio de trabajo** desde donde se ejecuta,
-no de `FACTURADOR_HOME`. Como todos los comandos de esta guía se corren desde
-la raíz del repo, crear el `.env` ahí (ya está en el `.gitignore`):
+La app lee su `.env` **solo de `FACTURADOR_HOME`** (default `~/facturador`),
+nunca del directorio de trabajo. En el primer arranque lo crea sola con
+`ARCA_ENV=homo`, así que para homologación no hay nada que editar. Su
+contenido completo posible:
 
 ```dotenv
+# Ambiente: homo | prod. Único flag: deriva URLs y par de certificados.
 ARCA_ENV=homo
-FACTURADOR_HOME=~/facturador
-
-# CUIT emisor (11 dígitos, sin guiones). Opcional: si falta se extrae del
-# certificado en runtime.
-ARCA_CUIT=20123456789
-
-# En homologación el punto de venta es libre; 1 está bien.
-ARCA_PUNTO_VTA=1
-
-# Datos del emisor que se imprimen en el PDF (no viajan a ARCA)
-EMISOR_RAZON_SOCIAL=Mi Empresa S.A.
-EMISOR_DOMICILIO=Calle Falsa 123, CABA
-EMISOR_IIBB=
-EMISOR_INICIO_ACTIVIDADES=01/2020
+# Passphrase de la clave privada, solo si la key la tiene.
+#ARCA_KEY_PASSPHRASE=
+# Puerto local (siempre en 127.0.0.1).
+#FACTURADOR_PORT=8399
 ```
 
 Del flag `ARCA_ENV=homo` se derivan automáticamente las URLs de homologación
 (`wsaahomo.afip.gov.ar` y `wswhomo.afip.gov.ar`) y los paths
-`secrets/homo.key` / `secrets/homo.crt`. No hay nada más que configurar y no
-existen overrides por URL: es imposible por construcción mezclar ambientes.
+`secrets/homo.key` / `secrets/homo.crt`. No existen overrides por URL: es
+imposible por construcción mezclar ambientes. El CUIT emisor no se configura:
+se extrae del certificado.
 
-> Si preferís no tener un `.env` en el repo, exportá las mismas variables en
-> el shell (`export ARCA_ENV=homo`, etc.): el `.env` es solo una comodidad,
-> las variables de entorno reales siempre mandan.
+El resto de la configuración (datos del emisor que van al PDF, punto de
+venta, backups) **vive en la app**: se completa en la página
+**Configuración** una vez levantada (paso 6).
+
+> Si el home no es `~/facturador`, exportar `FACTURADOR_HOME` en el shell
+> antes de correr cualquier comando.
 
 ## 5. Verificar la conectividad, paso a paso
 
-Todos los comandos se corren desde la raíz del repo (donde quedó el `.env` del
-paso 4):
+Todos los comandos se corren desde la raíz del repo:
 
 ```bash
 uv sync
@@ -129,10 +124,14 @@ uv run python -m facturador
 
 Abrir `http://127.0.0.1:8399` y:
 
-1. Ir a `/clientes` y dar de alta un cliente (marcarlo como default para que el
+1. Ir a `/configuracion` y completar los datos del emisor (razón social,
+   domicilio, IIBB, inicio de actividades): se imprimen en el PDF y la app
+   no permite emitir sin ellos. El punto de venta en homologación es libre
+   (1 está bien).
+2. Ir a `/clientes` y dar de alta un cliente (marcarlo como default para que el
    form lo precargue).
-2. En `/`, completar monto, fecha de pago y descripción → **Revisar**.
-3. Confirmar en la página de revisión → detalle con CAE, vencimiento y PDF.
+3. En `/`, completar monto, fecha de pago y descripción → **Revisar**.
+4. Confirmar en la página de revisión → detalle con CAE, vencimiento y PDF.
 
 ## Problemas frecuentes en homologación
 

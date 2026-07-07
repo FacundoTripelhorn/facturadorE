@@ -48,7 +48,7 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 | Incoterms | `Incoterms` | **Vacío en servicios** — el form lo oculta para tipo_expo=2 |
 | Ítem único: código `0001`, descripción del servicio, cant. `1,000000`, U.Medida "unidades", precio unit. = total | `Items[]`: `Pro_codigo`, `Pro_ds`, `Pro_qty=1`, `Pro_umed=7` (unidades), `Pro_precio_uni`, `Pro_total_item` | Patrón real: 1 línea, qty 1, precio = importe total. El form puede reducirse a descripción (default del cliente) + monto |
 | Importe Total | `Imp_total` | = suma de ítems; validar en dominio |
-| Leyenda "IVA EXENTO OPERACIÓN DE EXPORTACIÓN", IIBB, inicio de actividades | — (no viajan a ARCA) | Datos del emisor para el PDF, desde config local |
+| Leyenda "IVA EXENTO OPERACIÓN DE EXPORTACIÓN", IIBB, inicio de actividades | — (no viajan a ARCA) | Datos del emisor para el PDF, desde la tabla `settings` de la DB (página Configuración) |
 | CAE + Fecha Vto. CAE + QR | respuesta de `FEXAuthorize` | Al PDF junto con QR RG 4892 |
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
@@ -262,19 +262,19 @@ Componentes:
 - **Launcher (experiencia de app de escritorio):** script/acceso directo de doble click que levanta el servidor si no está corriendo y abre `http://localhost:PORT` en el browser. El uso diario es indistinguible de una app nativa. Se evaluó y descartó una desktop app real (Electron/Tauri/Qt): agrega empaquetado, otro stack de GUI y costo de distribución sin beneficio para un único usuario local, y entierra la API que es el objetivo principal. Si a futuro se quiere ventana propia, `pywebview` envuelve el mismo servidor sin cambiar nada más.
 - **Runtime (DECIDIDO): Docker Desktop**, porque el usuario alterna entre Windows y macOS. La misma imagen corre en ambos; los permisos POSIX de la key y el chequeo de arranque se implementan una sola vez dentro del contenedor (Linux). Bind mount de `~/facturador/` (o su equivalente en Windows) al contenedor; bind explícito del puerto a `127.0.0.1` (nunca `0.0.0.0`).
 - **Estado en múltiples máquinas:** el directorio de datos vive en UNA máquina primaria; la app no sincroniza estado entre computadoras. Para emitir desde la secundaria: restaurar el último backup desde S3 (ver bullet de backups) — la numeración se resincroniza sola contra ARCA vía `FEXGetLast_CMP`, y el chequeo de DB desactualizada bloquea la emisión si se olvidó el restore. Nunca correr las dos copias emitiendo en paralelo.
-- **Layout de datos (fuera del repo):**
+- **Layout de datos (fuera del repo):** `FACTURADOR_HOME` (default `~/facturador`; dentro del contenedor, `/facturador` fijado por ENV) es la única raíz de datos — no hay fallback al directorio de trabajo, ni en la app ni en backup/restore. La app crea el home y su estructura en el primer arranque.
   ```
   ~/facturador/
-    .env                  # ARCA_ENV, CUIT, paths
+    .env                  # bootstrap mínimo: ARCA_ENV (+ passphrase/puerto)
     secrets/              # chmod 700
       homo.key / homo.crt # chmod 400
       prod.key / prod.crt
     data/
-      facturador.db       # SQLite
+      facturador.db       # SQLite (incluye la tabla settings)
       pdfs/               # comprobantes emitidos
     backups/
   ```
-- **Configuración:** todo por `.env`. Un solo flag `ARCA_ENV` (`homo`|`prod`) del que se derivan URLs y paths de certificados (checklist §2.1.1 punto 1). La app se niega a arrancar si el par cert/ambiente es inconsistente o si los permisos de la key son laxos.
+- **Configuración: la app es dueña de su configuración.** El `.env` (leído SOLO de `<home>/.env`; si no existe la app lo crea con `ARCA_ENV=homo`) queda reducido al bootstrap que no puede vivir en la DB: el flag `ARCA_ENV` (`homo`|`prod`) del que se derivan URLs y paths de certificados (checklist §2.1.1 punto 1), `ARCA_KEY_PASSPHRASE` (secreto) y `FACTURADOR_PORT`. El CUIT emisor se extrae del certificado. Todo lo demás — datos del emisor que van al PDF, punto de venta, config de backups — vive en la tabla `settings` de la DB y se edita desde la página Configuración de la UI; así viaja dentro del backup cifrado como parte del estado completo. La app se niega a arrancar si el par cert/ambiente es inconsistente o si los permisos de la key son laxos, y no permite emitir hasta que los datos del emisor estén completos.
 - **Backups (DECIDIDO): S3 como depósito cifrado, fuera del camino crítico.** El estado completo es `data/` + `secrets/`. Script post-emisión: snapshot de la DB con `sqlite3 .backup` (nunca `cp` en caliente), tarball de datos + secrets, **cifrado del lado del cliente con `age`** (passphrase del usuario, nunca en el repo ni en AWS) y upload del `.tar.age` a un bucket privado. El backup contiene la clave fiscal: jamás sube en claro; el cifrado server-side de S3 NO alcanza. Config del bucket: Block Public Access, **versioning habilitado** (protege contra pisar un backup bueno con uno corrupto), IAM user dedicado con política mínima (Put/Get/List solo sobre ese bucket). Script inverso de restore para la máquina secundaria. La emisión nunca depende de S3: si está caído, solo se degrada la portabilidad.
 - **Detección de DB desactualizada (obligatorio dado el esquema multi-máquina):** al arrancar (o antes de autorizar), comparar `FEXGetLast_CMP` contra el máximo `cbte_nro` local. Si ARCA conoce comprobantes que la DB local no tiene, warning bloqueante: "registro local desactualizado — restaurar el último backup antes de emitir". Esto hace el flujo primaria/secundaria a prueba de olvidos.
 - **Reloj:** requisito de NTP activo en la máquina (macOS/Linux lo traen por defecto; documentar la verificación). Sin reloj sincronizado, WSAA falla.
