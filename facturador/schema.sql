@@ -1,6 +1,14 @@
 -- Esquema SQLite del facturador (design.md §2.2).
 -- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
 
+-- Configuración de dominio (la app es dueña de su configuración): datos del
+-- emisor que van al PDF, punto de venta y config de backups. Clave/valor
+-- para que agregar un setting no requiera migración de esquema.
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS arca_params (
     kind        TEXT NOT NULL,
     code        TEXT NOT NULL,
