@@ -142,20 +142,35 @@ def test_html_contiene_los_datos_del_comprobante(api, arca):
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items, emisor, int(TEST_CUIT), pais_ds="URUGUAY")
+    html = render_invoice_html(
+        inv,
+        items,
+        emisor,
+        int(TEST_CUIT),
+        pais_ds="URUGUAY",
+        cuit_pais_ds="URUGUAY - Persona Juridica",
+        moneda_ds="Dolar Estadounidense",
+    )
 
     assert "MI EMPRESA S.R.L." in html
     assert "901-123456-7" in html
     assert "IVA Responsable Inscripto" in html
     assert "CLIENTE URUGUAY S.A." in html
-    assert "URUGUAY" in html
+    # Paridad con el comprobante real de Comprobantes en Línea:
+    assert "Destino del Comprobante:</b> URUGUAY" in html
+    assert "(URUGUAY - Persona Juridica)" in html         # CUIT País con descripción
+    assert "USD - Dolar Estadounidense" in html           # divisa con descripción
     assert "00001-00000001" in html
     assert "Servicios de desarrollo de software" in html
-    assert "1500.00" in html
-    assert "IVA EXENTO — OPERACIÓN DE EXPORTACIÓN" in html
-    assert "76100000000001" in html                      # CAE
-    assert "data:image/png;base64," in html              # QR incrustado
-    assert "SIN VALOR FISCAL" in html                    # marca de homologación
+    assert "1500,00" in html                              # importes con coma, 2 dec
+    assert "1,000000" in html                             # cantidad con 6 decimales
+    assert "1500,000000" in html                          # precio unit. con 6 dec
+    assert "1145.569000" in html                          # cotización: punto, 6 dec
+    assert "IVA EXENTO OPERACIÓN DE EXPORTACIÓN" in html
+    assert "Comprobante Autorizado" in html
+    assert "76100000000001" in html                       # CAE
+    assert "data:image/png;base64," in html               # QR incrustado
+    assert "SIN VALOR FISCAL" in html                     # marca de homologación
 
 
 def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
