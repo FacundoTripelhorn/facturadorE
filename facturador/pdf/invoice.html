@@ -37,9 +37,11 @@
   .pie { display: flex; padding: 3mm; align-items: center; }
   .pie .qr { width: 30mm; }
   .pie .qr img { width: 28mm; height: 28mm; }
+  .pie .autorizado { font-weight: bold; margin-left: 6mm; }
   .pie .cae { margin-left: auto; text-align: right; }
   .pie .cae .valor { font-size: 12pt; font-weight: bold; }
   .obs { padding: 3mm; border-bottom: 1pt solid #000; }
+  .descargo { padding: 0 3mm 2mm; font-size: 6.5pt; color: #333; }
 </style>
 </head>
 <body>
@@ -57,11 +59,12 @@
     <div class="cabecera">
       <div class="col izq">
         <h1>{{ emisor.razon_social or "—" }}</h1>
-        <div class="campo"><b>Domicilio:</b> {{ emisor.domicilio }}</div>
+        <div class="campo"><b>Razón Social:</b> {{ emisor.razon_social }}</div>
+        <div class="campo"><b>Domicilio Comercial:</b> {{ emisor.domicilio }}</div>
         <div class="campo"><b>Condición frente al IVA:</b> {{ emisor.condicion_iva }}</div>
         <div class="campo"><b>CUIT:</b> {{ cuit_emisor }}</div>
         <div class="campo"><b>Ingresos Brutos:</b> {{ emisor.iibb }}</div>
-        <div class="campo"><b>Inicio de Actividades:</b> {{ emisor.inicio_actividades }}</div>
+        <div class="campo"><b>Fecha de Inicio de Actividades:</b> {{ emisor.inicio_actividades }}</div>
       </div>
       <div class="col">
         <h2>FACTURA DE EXPORTACIÓN</h2>
@@ -74,27 +77,26 @@
 
   <div class="bloque dos-col">
     <div>
-      <div class="campo"><b>Apellido y Nombre / Razón Social:</b> {{ inv["cliente"] }}</div>
+      <div class="campo"><b>Señor(es):</b> {{ inv["cliente"] }}</div>
       <div class="campo"><b>Domicilio:</b> {{ inv["domicilio_cliente"] }}</div>
-      <div class="campo"><b>País Destino:</b> {{ pais_ds }}</div>
+      {# "Destino del Comprobante" es el PAÍS en el comprobante real
+         (design.md §0.1: Dst_cmp), no el tipo de exportación. #}
+      <div class="campo"><b>Destino del Comprobante:</b> {{ pais_ds }}</div>
     </div>
     <div>
-      <div class="campo"><b>CUIT País:</b> {{ inv["cuit_pais_cliente"] }}</div>
+      <div class="campo"><b>CUIT País:</b> {{ inv["cuit_pais_cliente"] }}{% if cuit_pais_ds %} ({{ cuit_pais_ds }}){% endif %}</div>
       <div class="campo"><b>ID Impositivo:</b> {{ inv["id_impositivo"] }}</div>
-      <div class="campo"><b>Destino del comprobante:</b> {{ tipo_expo_ds }}</div>
     </div>
   </div>
 
   <div class="bloque dos-col">
     <div>
-      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}</div>
-      <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] }}</div>
+      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}{% if moneda_ds %} - {{ moneda_ds }}{% endif %}</div>
+      <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] | ctz }}</div>
     </div>
     <div>
       <div class="campo"><b>Forma de Pago:</b> {{ inv["forma_pago"] }}</div>
-      {% if inv["incoterms"] %}
       <div class="campo"><b>Incoterms:</b> {{ inv["incoterms"] }}</div>
-      {% endif %}
     </div>
   </div>
 
@@ -102,12 +104,12 @@
     <table class="items">
       <thead>
         <tr>
-          <th>Código</th>
+          <th>Ítem</th>
           <th>Descripción</th>
           <th class="num">Cantidad</th>
           <th>U. Medida</th>
-          <th class="num">Precio Unit.</th>
-          <th class="num">Importe</th>
+          <th class="num">Precio Unit. ({{ inv["moneda_id"] | moneda }})</th>
+          <th class="num">Total por ítem ({{ inv["moneda_id"] | moneda }})</th>
         </tr>
       </thead>
       <tbody>
@@ -115,18 +117,18 @@
         <tr>
           <td>{{ item["pro_codigo"] }}</td>
           <td>{{ item["pro_ds"] }}</td>
-          <td class="num">{{ item["pro_qty"] }}</td>
+          <td class="num">{{ item["pro_qty"] | num(6) }}</td>
           <td>{{ "unidades" if item["pro_umed"] == UMED_UNIDADES else item["pro_umed"] }}</td>
-          <td class="num">{{ item["pro_precio_uni"] }}</td>
-          <td class="num">{{ item["pro_total_item"] }}</td>
+          <td class="num">{{ item["pro_precio_uni"] | num(6) }}</td>
+          <td class="num">{{ item["pro_total_item"] | num(2) }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    <div class="total">Importe Total: {{ inv["moneda_id"] | moneda }} {{ inv["imp_total"] }}</div>
+    <div class="total">Importe Total: {{ inv["moneda_id"] | moneda }} {{ inv["imp_total"] | num(2) }}</div>
   </div>
 
-  <div class="leyenda">IVA EXENTO — OPERACIÓN DE EXPORTACIÓN</div>
+  <div class="leyenda">IVA EXENTO OPERACIÓN DE EXPORTACIÓN</div>
 
   {% if inv["obs"] %}
   <div class="obs"><b>Observaciones:</b> {{ inv["obs"] }}</div>
@@ -134,11 +136,13 @@
 
   <div class="pie">
     <div class="qr"><img src="{{ qr_data_uri }}" alt="QR RG 4892"></div>
+    <div class="autorizado">Comprobante Autorizado</div>
     <div class="cae">
-      <div class="campo"><b>CAE Nº:</b> <span class="valor">{{ inv["cae"] }}</span></div>
-      <div class="campo"><b>Fecha Vto. CAE:</b> {{ inv["cae_fch_vto"] | fecha }}</div>
+      <div class="campo"><b>CAE N°:</b> <span class="valor">{{ inv["cae"] }}</span></div>
+      <div class="campo"><b>Fecha de Vto. de CAE:</b> {{ inv["cae_fch_vto"] | fecha }}</div>
     </div>
   </div>
+  <div class="descargo">Esta Agencia no se responsabiliza por la veracidad de los datos ingresados en el detalle de la operación</div>
 </div>
 
 </body>
