@@ -58,14 +58,16 @@ cp prod.key prod.crt ~/facturador/secrets/
 chmod 400 ~/facturador/secrets/prod.key
 ```
 
-Actualizar el `.env` de la raíz del repo (el que se creó en la guía de
-homologación; la app lo carga del directorio de trabajo, no de
-`FACTURADOR_HOME`):
+Actualizar el `.env` del directorio de datos (`~/facturador/.env`, el que la
+app creó en el primer arranque; es el único `.env` que se lee):
 
 ```dotenv
 ARCA_ENV=prod
-ARCA_PUNTO_VTA=7          # el número del punto de venta RECE creado en el paso 3
 ```
+
+Y en la página **Configuración** de la app, cambiar el **punto de venta** al
+número del PV RECE creado en el paso 3 (el resto de la configuración —
+emisor, backups — ya quedó cargada desde homologación y viaja en la DB).
 
 Con `ARCA_ENV=prod` la app deriva automáticamente las URLs productivas
 (`wsaa.afip.gov.ar` y `servicios1.afip.gov.ar`) y los paths
@@ -136,7 +138,8 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
 - [ ] Certificado asociado a "Facturación Electrónica de Exportación" (paso 2).
 - [ ] Punto de venta RECE exclusivo de exportación creado y anotado (paso 3).
 - [ ] `secrets/prod.key` (chmod 400) y `secrets/prod.crt` en su lugar (paso 4).
-- [ ] `.env` con `ARCA_ENV=prod` y `ARCA_PUNTO_VTA` del PV nuevo (paso 4).
+- [ ] `~/facturador/.env` con `ARCA_ENV=prod` y el punto de venta del PV
+      nuevo cargado en Configuración (paso 4).
 - [ ] `get_ta.py` y `check_wsfex.py` OK contra producción (paso 5).
 - [ ] Primera factura de monto chico emitida y CAE constatado en el portal (paso 6).
 - [ ] Backup post-emisión funcionando.
