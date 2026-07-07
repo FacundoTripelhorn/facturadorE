@@ -172,7 +172,7 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
 6. **Verificación post-emisión:** pyafipws recomienda constatar el CAE. Implementar: tras autorizar, `FEXGetCMP` y comparar CAE + importe + número; opcionalmente WSCDC en producción.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.
 8. **Clock sync:** generación del TRA con ventana amplia (gen -10 min / exp +10 min) y NTP contra `time.afip.gov.ar`, como documenta el manual WSAA.
-9. **Manejo de clave privada protegida:** pyafipws soporta passphrase en la key. Soportarlo también (parámetro opcional), y nunca loguear ni el CMS firmado ni el token/sign del TA (tratarlos como credenciales en los logs — redactar).
+9. **Manejo de la clave privada:** pyafipws soporta passphrase en la key; acá se DECIDIÓ no usarla (la app es local y sin operador que la tipee: la protegen los permisos 400, el home local y el cifrado del backup al salir de la máquina). Nunca loguear ni el CMS firmado ni el token/sign del TA (tratarlos como credenciales en los logs — redactar).
 
 ### 2.2 Modelo de datos (mínimo)
 
@@ -265,7 +265,7 @@ Componentes:
 - **Layout de datos (fuera del repo):** `FACTURADOR_HOME` (default `~/facturador`; dentro del contenedor, `/facturador` fijado por ENV) es la única raíz de datos — no hay fallback al directorio de trabajo, ni en la app ni en backup/restore. La app crea el home y su estructura en el primer arranque.
   ```
   ~/facturador/
-    .env                  # bootstrap mínimo: ARCA_ENV (+ passphrase/puerto)
+    .env                  # bootstrap mínimo: ARCA_ENV (+ puerto opcional)
     secrets/              # chmod 700
       homo.key / homo.crt # chmod 400
       prod.key / prod.crt
@@ -274,7 +274,7 @@ Componentes:
       pdfs/               # comprobantes emitidos
     backups/
   ```
-- **Configuración: la app es dueña de su configuración.** El `.env` (leído SOLO de `<home>/.env`; si no existe la app lo crea con `ARCA_ENV=homo`) queda reducido al bootstrap que no puede vivir en la DB: el flag `ARCA_ENV` (`homo`|`prod`) del que se derivan URLs y paths de certificados (checklist §2.1.1 punto 1), `ARCA_KEY_PASSPHRASE` (secreto) y `FACTURADOR_PORT`. El CUIT emisor se extrae del certificado. Todo lo demás — datos del emisor que van al PDF, punto de venta, config de backups — vive en la tabla `settings` de la DB y se edita desde la página Configuración de la UI; así viaja dentro del backup cifrado como parte del estado completo. La app se niega a arrancar si el par cert/ambiente es inconsistente o si los permisos de la key son laxos, y no permite emitir hasta que los datos del emisor estén completos.
+- **Configuración: la app es dueña de su configuración.** El `.env` (leído SOLO de `<home>/.env`; si no existe la app lo crea con `ARCA_ENV=homo`) queda reducido al bootstrap que no puede vivir en la DB: el flag `ARCA_ENV` (`homo`|`prod`) del que se derivan URLs y paths de certificados (checklist §2.1.1 punto 1) y `FACTURADOR_PORT`. El CUIT emisor se extrae del certificado. Todo lo demás — datos del emisor que van al PDF, punto de venta, config de backups — vive en la tabla `settings` de la DB y se edita desde la página Configuración de la UI; así viaja dentro del backup cifrado como parte del estado completo. La app se niega a arrancar si el par cert/ambiente es inconsistente o si los permisos de la key son laxos, y no permite emitir hasta que los datos del emisor estén completos.
 - **Backups (DECIDIDO): S3 como depósito cifrado, fuera del camino crítico.** El estado completo es `data/` + `secrets/`. Script post-emisión: snapshot de la DB con `sqlite3 .backup` (nunca `cp` en caliente), tarball de datos + secrets, **cifrado del lado del cliente con `age`** (passphrase del usuario, nunca en el repo ni en AWS) y upload del `.tar.age` a un bucket privado. El backup contiene la clave fiscal: jamás sube en claro; el cifrado server-side de S3 NO alcanza. Config del bucket: Block Public Access, **versioning habilitado** (protege contra pisar un backup bueno con uno corrupto), IAM user dedicado con política mínima (Put/Get/List solo sobre ese bucket). Script inverso de restore para la máquina secundaria. La emisión nunca depende de S3: si está caído, solo se degrada la portabilidad.
 - **Detección de DB desactualizada (obligatorio dado el esquema multi-máquina):** al arrancar (o antes de autorizar), comparar `FEXGetLast_CMP` contra el máximo `cbte_nro` local. Si ARCA conoce comprobantes que la DB local no tiene, warning bloqueante: "registro local desactualizado — restaurar el último backup antes de emitir". Esto hace el flujo primaria/secundaria a prueba de olvidos.
 - **Reloj:** requisito de NTP activo en la máquina (macOS/Linux lo traen por defecto; documentar la verificación). Sin reloj sincronizado, WSAA falla.

@@ -70,8 +70,6 @@ contenido completo posible:
 ```dotenv
 # Ambiente: homo | prod. Único flag: deriva URLs y par de certificados.
 ARCA_ENV=homo
-# Passphrase de la clave privada, solo si la key la tiene.
-#ARCA_KEY_PASSPHRASE=
 # Puerto local (siempre en 127.0.0.1).
 #FACTURADOR_PORT=8399
 ```
