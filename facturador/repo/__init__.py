@@ -27,6 +27,7 @@ from .invoices import (
     update_invoice,
 )
 from .params import get_params, replace_params
+from .settings import get_settings, save_settings
 
 __all__ = [
     "CLIENT_FIELDS",
@@ -41,11 +42,13 @@ __all__ = [
     "get_invoice",
     "get_invoice_items",
     "get_params",
+    "get_settings",
     "list_clients",
     "list_invoices",
     "max_arca_id",
     "max_authorized_cbte_nro",
     "replace_params",
+    "save_settings",
     "try_transition_to_submitting",
     "update_client",
     "update_invoice",
