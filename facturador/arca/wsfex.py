@@ -283,13 +283,14 @@ class WsfexClient:
         self.wsaa = wsaa or WsaaClient(config)
         # TLS verify en default de httpx (activo) — checklist punto 5.
         self.http = http or httpx.Client(timeout=60.0)
-        self._cuit: int | None = config.cuit
+        self._cuit: int | None = None
         self.last_events: list[tuple[str, str]] = []
 
     @property
     def cuit(self) -> int:
         if self._cuit is None:
-            # Nunca hardcodeado: viene de ARCA_CUIT o del propio certificado.
+            # Nunca hardcodeado ni configurable: el certificado ya lo trae
+            # en el subject (serialNumber=CUIT NNNNNNNNNNN).
             self._cuit = cuit_from_certificate(self.config.cert_path.read_bytes())
         return self._cuit
 
