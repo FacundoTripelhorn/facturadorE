@@ -4,13 +4,18 @@ tarball y extracción segura. El cifrado age y el upload S3 quedan afuera
 """
 
 import io
-import os
 import sqlite3
 import tarfile
 
 import pytest
 
-from facturador.backup import BackupError, build_tar, resolve_home, snapshot_db
+from facturador.backup import (
+    BackupError,
+    backup_s3_settings,
+    build_tar,
+    resolve_home,
+    snapshot_db,
+)
 from facturador.restore import extract
 
 
@@ -116,27 +121,49 @@ def test_resolve_home_exige_directorio_existente(tmp_path):
         resolve_home(str(tmp_path / "no-existe"))
 
 
-def test_resolve_home_sin_fuente_explicita_falla(tmp_path, monkeypatch):
-    """Review PR #8: sin --home ni FACTURADOR_HOME no hay fallback al CWD —
-    backup/restore sobre un directorio implícito equivocado son destructivos."""
-    monkeypatch.chdir(tmp_path)  # sin .env que defina FACTURADOR_HOME
+def test_resolve_home_misma_resolucion_que_la_app(tmp_path, monkeypatch):
+    """Un solo home: --home, FACTURADOR_HOME o el default ~/facturador.
+    Nunca el directorio de trabajo (review PR #8: backup/restore sobre un
+    directorio implícito equivocado son destructivos)."""
+    monkeypatch.chdir(tmp_path)  # el CWD no participa de la resolución
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("FACTURADOR_HOME", raising=False)
-    with pytest.raises(BackupError, match="--home o FACTURADOR_HOME"):
-        resolve_home()
+
+    (tmp_path / "facturador").mkdir()
+    assert resolve_home() == tmp_path / "facturador"
+
+    (tmp_path / "otro").mkdir()
+    monkeypatch.setenv("FACTURADOR_HOME", str(tmp_path / "otro"))
+    assert resolve_home() == tmp_path / "otro"
 
 
-def test_resolve_home_carga_el_env_del_home(home, monkeypatch):
-    """Review PR #8: BACKUP_S3_* vive en <home>/.env en el layout Docker;
-    debe cargarse aunque se corra desde otro directorio."""
-    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
-    (home / ".env").write_text(
-        "ARCA_ENV=homo\nBACKUP_S3_BUCKET=bucket-de-prueba\n", encoding="utf-8"
+def test_resolve_home_create_para_la_maquina_secundaria(tmp_path):
+    """El restore puede correr en una máquina sin home todavía."""
+    destino = tmp_path / "nuevo-home"
+    assert resolve_home(str(destino), create=True) == destino
+    assert destino.is_dir()
+
+
+def test_bucket_y_prefijo_salen_de_la_db(home):
+    """La config de backups vive en la app (tabla settings), no en el
+    entorno: se lee del mismo snapshot que se respalda."""
+    conn = sqlite3.connect(home / "data" / "facturador.db")
+    conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
+    conn.executemany(
+        "INSERT INTO settings VALUES (?, ?)",
+        [("backup_s3_bucket", "bucket-de-prueba"), ("backup_s3_prefix", "pfx")],
     )
-    try:
-        assert resolve_home(str(home)) == home
-        assert os.environ.get("BACKUP_S3_BUCKET") == "bucket-de-prueba"
-    finally:
-        os.environ.pop("BACKUP_S3_BUCKET", None)
+    conn.commit()
+    conn.close()
+
+    snapshot = snapshot_db(home / "data" / "facturador.db")
+    assert backup_s3_settings(snapshot) == ("bucket-de-prueba", "pfx")
+
+
+def test_db_vieja_sin_tabla_settings_deja_el_backup_solo_local(home):
+    snapshot = snapshot_db(home / "data" / "facturador.db")
+    assert backup_s3_settings(snapshot) == ("", "facturador")
+    assert backup_s3_settings(None) == ("", "facturador")
 
 
 def test_backup_rechaza_un_home_sin_secrets(tmp_path, capsys):

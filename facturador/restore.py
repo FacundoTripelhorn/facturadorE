@@ -9,16 +9,20 @@ desactualizada bloquea la emisión si el restore quedó viejo.
 Se niega a pisar una DB existente sin ``--force``: restaurar arriba de la
 máquina primaria por error destruiría el registro bueno.
 
-Uso (con --home o FACTURADOR_HOME; no hay fallback implícito al CWD):
-  uv run python -m facturador.restore --home ~/facturador <backup.tar.gz.age>
-  uv run python -m facturador.restore --home ~/facturador --latest
+El home se resuelve igual que en la app (--home, FACTURADOR_HOME o
+~/facturador; nunca el CWD). Con ``--latest`` el bucket se pasa por
+``--bucket``: en una máquina recién estrenada todavía no hay DB de la cual
+leer la config de backups (que vive en la app).
+
+Uso:
+  uv run python -m facturador.restore <backup.tar.gz.age>
+  uv run python -m facturador.restore --latest --bucket mi-bucket
 """
 
 from __future__ import annotations
 
 import argparse
 import io
-import os
 import shutil
 import stat
 import subprocess
@@ -27,6 +31,7 @@ import tarfile
 from pathlib import Path
 
 from .backup import DB_NAME, BackupError, resolve_home
+from .settings import BACKUP_PREFIX_DEFAULT
 
 
 def download_latest(bucket: str, prefix: str, dest_dir: Path) -> Path:
@@ -93,23 +98,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--latest", action="store_true", help="bajar el último backup del bucket"
     )
-    parser.add_argument("--home", help="FACTURADOR_HOME (default: env o CWD)")
+    parser.add_argument(
+        "--bucket", help="bucket S3 del backup (requerido con --latest)"
+    )
+    parser.add_argument(
+        "--prefix", default=BACKUP_PREFIX_DEFAULT, help="prefijo en el bucket"
+    )
+    parser.add_argument(
+        "--home", help="directorio de datos (default: FACTURADOR_HOME o ~/facturador)"
+    )
     parser.add_argument(
         "--force", action="store_true", help="pisar una DB local existente"
     )
     args = parser.parse_args(argv)
 
     try:
-        home = resolve_home(args.home)
+        home = resolve_home(args.home, create=True)
 
         if args.latest == bool(args.archive):
             raise BackupError("Indicar un archivo O --latest (exactamente uno).")
         if args.latest:
-            bucket = os.environ.get("BACKUP_S3_BUCKET", "").strip()
-            if not bucket:
-                raise BackupError("--latest necesita BACKUP_S3_BUCKET definido.")
-            prefix = os.environ.get("BACKUP_S3_PREFIX", "facturador").strip()
-            archive = download_latest(bucket, prefix, home / "backups")
+            if not args.bucket:
+                raise BackupError(
+                    "--latest necesita --bucket: en una máquina nueva no hay "
+                    "DB todavía de la cual leer la config de backups."
+                )
+            archive = download_latest(args.bucket, args.prefix, home / "backups")
             print(f"Descargado: {archive}")
         else:
             archive = Path(args.archive)
