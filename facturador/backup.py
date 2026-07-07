@@ -16,7 +16,9 @@ Corre en el HOST (no en el contenedor): requiere ``age`` en el PATH y, para
 el upload, ``aws`` CLI con credenciales del IAM user dedicado al bucket.
 La emisión nunca depende de esto (S3 caído solo degrada portabilidad).
 
-Uso:  uv run python -m facturador.backup [--home DIR]
+Uso:  uv run python -m facturador.backup --home ~/facturador
+(--home puede omitirse si FACTURADOR_HOME está en el entorno o en el .env
+del directorio actual; no hay fallback implícito al CWD)
 """
 
 from __future__ import annotations
@@ -45,13 +47,24 @@ class BackupError(RuntimeError):
 
 
 def resolve_home(cli_home: str | None = None) -> Path:
-    """Misma resolución que config.load_config, sin exigir config completa:
-    restore corre en máquinas donde todavía no hay nada que validar."""
+    """Home EXPLÍCITO: --home o FACTURADOR_HOME (del entorno o del .env del
+    CWD). A diferencia del servidor, acá no hay fallback al directorio
+    actual: backup/restore sobre un directorio implícito equivocado son
+    silenciosamente destructivos (review del PR #8). Además carga el .env
+    del home, donde vive BACKUP_S3_* en el layout Docker."""
     load_dotenv(".env")
-    raw = cli_home or os.environ.get("FACTURADOR_HOME") or str(Path.cwd())
+    raw = cli_home or os.environ.get("FACTURADOR_HOME")
+    if not raw:
+        raise BackupError(
+            "Indicar el directorio de datos con --home o FACTURADOR_HOME "
+            "(no hay default: operar sobre un directorio implícito "
+            "equivocado dejaría un backup/restore inservible)."
+        )
     home = Path(raw).expanduser()
     if not home.is_dir():
         raise BackupError(f"FACTURADOR_HOME no existe: {home}")
+    # No pisa variables ya definidas (el entorno y el .env del CWD ganan).
+    load_dotenv(home / ".env")
     return home
 
 

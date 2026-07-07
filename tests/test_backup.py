@@ -4,6 +4,7 @@ tarball y extracción segura. El cifrado age y el upload S3 quedan afuera
 """
 
 import io
+import os
 import sqlite3
 import tarfile
 
@@ -113,6 +114,29 @@ def test_extract_rechaza_paths_hostiles(tmp_path):
 def test_resolve_home_exige_directorio_existente(tmp_path):
     with pytest.raises(BackupError):
         resolve_home(str(tmp_path / "no-existe"))
+
+
+def test_resolve_home_sin_fuente_explicita_falla(tmp_path, monkeypatch):
+    """Review PR #8: sin --home ni FACTURADOR_HOME no hay fallback al CWD —
+    backup/restore sobre un directorio implícito equivocado son destructivos."""
+    monkeypatch.chdir(tmp_path)  # sin .env que defina FACTURADOR_HOME
+    monkeypatch.delenv("FACTURADOR_HOME", raising=False)
+    with pytest.raises(BackupError, match="--home o FACTURADOR_HOME"):
+        resolve_home()
+
+
+def test_resolve_home_carga_el_env_del_home(home, monkeypatch):
+    """Review PR #8: BACKUP_S3_* vive en <home>/.env en el layout Docker;
+    debe cargarse aunque se corra desde otro directorio."""
+    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
+    (home / ".env").write_text(
+        "ARCA_ENV=homo\nBACKUP_S3_BUCKET=bucket-de-prueba\n", encoding="utf-8"
+    )
+    try:
+        assert resolve_home(str(home)) == home
+        assert os.environ.get("BACKUP_S3_BUCKET") == "bucket-de-prueba"
+    finally:
+        os.environ.pop("BACKUP_S3_BUCKET", None)
 
 
 def test_backup_rechaza_un_home_sin_secrets(tmp_path, capsys):

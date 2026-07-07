@@ -176,9 +176,14 @@ lado del cliente con age y, opcionalmente, se sube a un bucket S3 privado
 ningún lado. Correr en el host después de emitir:
 
 ```bash
-uv run python -m facturador.backup            # cifra a backups/ y sube si hay bucket
-uv run python -m facturador.restore --latest  # máquina secundaria: baja y restaura
+uv run python -m facturador.backup --home ~/facturador            # cifra a backups/ y sube si hay bucket
+uv run python -m facturador.restore --home ~/facturador --latest  # máquina secundaria: baja y restaura
 ```
+
+`--home` puede omitirse si `FACTURADOR_HOME` está en el entorno o en el
+`.env` del directorio actual; no hay fallback implícito al directorio de
+trabajo. `BACKUP_S3_BUCKET`/`BACKUP_S3_PREFIX` se leen también del `.env`
+del home.
 
 Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
 contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
