@@ -55,12 +55,14 @@ configuración local y verificación):
 ## Uso con Docker (recomendado)
 
 El directorio de datos (`FACTURADOR_HOME`, default `~/facturador`) vive fuera
-del repo y del contenedor:
+del repo y del contenedor. **La app lo crea sola en el primer arranque**,
+incluido el `.env` de bootstrap; lo único que se coloca a mano son los
+certificados:
 
 ```
 ~/facturador/
-  .env                # copiar .env.example del repo y completar
-  secrets/
+  .env                # lo crea la app: ARCA_ENV (+ passphrase/puerto opcionales)
+  secrets/            # colocar acá el par del ambiente activo
     homo.key          # chmod 400 — la app se niega a arrancar con permisos laxos
     homo.crt
     prod.key          # solo al pasar a producción
@@ -91,12 +93,16 @@ uv run python -m facturador
 Abre `http://127.0.0.1:8399`. La app escucha **solo en localhost** por diseño
 (el host no es configurable): la única conexión de red es saliente hacia ARCA.
 
-La app lee toda su configuración de variables de entorno (y de un `.env` si
-existe). Corriendo sin Docker, el `.env` se carga del **directorio de trabajo**
-desde donde se ejecuta la app — típicamente la raíz del repo, donde ya está en
-el `.gitignore` — no de `FACTURADOR_HOME`; con Docker, del `.env` de
-`FACTURADOR_HOME`. Las variables disponibles están documentadas en
-[`.env.example`](.env.example); las centrales:
+### Configuración
+
+La app es dueña de su configuración: casi todo se edita desde la página
+**Configuración** de la UI y se guarda en la DB (datos del emisor que van al
+PDF, punto de venta, bucket S3 de backups), así viaja dentro del backup
+cifrado como parte del estado.
+
+Lo único que queda afuera es el **bootstrap**, en `<FACTURADOR_HOME>/.env`
+(la app lo crea en el primer arranque; **nunca** se lee un `.env` del
+directorio de trabajo):
 
 ```dotenv
 # Ambiente: "homo" o "prod". De este ÚNICO flag se derivan las URLs de
@@ -104,37 +110,40 @@ el `.gitignore` — no de `FACTURADOR_HOME`; con Docker, del `.env` de
 # es imposible por construcción mezclar cert de homologación con producción.
 ARCA_ENV=homo
 
-# Raíz de datos (default: directorio actual)
-FACTURADOR_HOME=~/facturador
+# Passphrase de la clave privada (es un secreto: no va a la DB), solo si
+# la key la tiene.
+#ARCA_KEY_PASSPHRASE=
 
-# CUIT emisor, 11 dígitos sin guiones. Opcional: si falta, se extrae del
-# certificado en runtime.
-ARCA_CUIT=20123456789
-
-# Punto de venta (default 1; en homo es libre, en prod el PV RECE exclusivo)
-ARCA_PUNTO_VTA=1
-
-# Datos del emisor que van al PDF (no viajan a ARCA)
-EMISOR_RAZON_SOCIAL=Mi Empresa S.A.
-EMISOR_DOMICILIO=Calle Falsa 123, CABA
-EMISOR_IIBB=            # vacío => se imprime el CUIT
-EMISOR_INICIO_ACTIVIDADES=01/2020
+# Puerto local (siempre en 127.0.0.1).
+#FACTURADOR_PORT=8399
 ```
 
-En el arranque la app valida que existan `secrets/<env>.crt` y
-`secrets/<env>.key` y que la key tenga permisos `400`/`600`; si no, se niega a
-arrancar con un mensaje explicativo.
+La raíz de datos se elige con la variable de entorno `FACTURADOR_HOME`
+(default `~/facturador`). El CUIT emisor no se configura: se extrae del
+certificado.
+
+En el arranque la app crea el home y su estructura si no existen, y valida
+que existan `secrets/<env>.crt` y `secrets/<env>.key` con la key en permisos
+`400`/`600`; si no, se niega a arrancar con un mensaje explicativo. Sin datos
+de emisor cargados, la UI dirige a Configuración antes de permitir emitir.
+
+> Upgrade desde versiones que configuraban el emisor por variables de entorno
+> (`EMISOR_*`, `ARCA_PUNTO_VTA`, `BACKUP_S3_*`): en el primer arranque esos
+> valores se importan automáticamente a la DB (queda avisado en el log) y las
+> variables pueden borrarse del `.env`.
 
 ### Flujo en la interfaz web
 
-1. **`/`** — form de nueva factura, precargado con el cliente default. El caso
+1. **`/configuracion`** — primera vez: completar los datos del emisor (se
+   imprimen en el PDF), punto de venta y, opcionalmente, el bucket de backups.
+2. **`/`** — form de nueva factura, precargado con el cliente default. El caso
    habitual se reduce a monto + fecha de pago + descripción; la cotización de la
    moneda la trae ARCA automáticamente para la fecha.
-2. **Revisar** — página que muestra exactamente qué se va a enviar a ARCA. Nada
+3. **Revisar** — página que muestra exactamente qué se va a enviar a ARCA. Nada
    viaja sin pasar por acá.
-3. **Confirmar** — ejecuta la autorización (WSFEX `FEXAuthorize`) y redirige al
+4. **Confirmar** — ejecuta la autorización (WSFEX `FEXAuthorize`) y redirige al
    detalle con el CAE, su vencimiento y el botón de descarga del PDF.
-4. **`/comprobantes`** — listado con tabs por estado (borradores, autorizadas,
+5. **`/comprobantes`** — listado con tabs por estado (borradores, autorizadas,
    que requieren atención) y **`/clientes`** para el ABM de clientes.
 
 Estados posibles de una factura: `draft` → `submitting` → `authorized` /
@@ -170,20 +179,21 @@ uv run python scripts/authorize_homo.py # flujo completo de emisión en homologa
 
 ## Backups
 
-El estado completo (DB + PDFs + secretos + `.env`) se respalda cifrado del
-lado del cliente con age y, opcionalmente, se sube a un bucket S3 privado
-(`BACKUP_S3_BUCKET` en el `.env`). La passphrase es del usuario y no vive en
-ningún lado. Correr en el host después de emitir:
+El estado completo (DB — configuración incluida — + PDFs + secretos + `.env`)
+se respalda cifrado del lado del cliente con age y, opcionalmente, se sube a
+un bucket S3 privado (se configura en la página Configuración de la app). La
+passphrase es del usuario y no vive en ningún lado. Correr en el host después
+de emitir:
 
 ```bash
-uv run python -m facturador.backup --home ~/facturador            # cifra a backups/ y sube si hay bucket
-uv run python -m facturador.restore --home ~/facturador --latest  # máquina secundaria: baja y restaura
+uv run python -m facturador.backup                                # cifra a backups/ y sube si hay bucket
+uv run python -m facturador.restore --latest --bucket mi-bucket   # máquina secundaria: baja y restaura
 ```
 
-`--home` puede omitirse si `FACTURADOR_HOME` está en el entorno o en el
-`.env` del directorio actual; no hay fallback implícito al directorio de
-trabajo. `BACKUP_S3_BUCKET`/`BACKUP_S3_PREFIX` se leen también del `.env`
-del home.
+El home se resuelve igual que en la app: `--home`, `FACTURADOR_HOME` o el
+default `~/facturador` — nunca el directorio de trabajo. El bucket del backup
+sale de la DB (dentro del propio backup); el restore con `--latest` lo recibe
+por `--bucket` porque en una máquina nueva todavía no hay DB.
 
 Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
 contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
@@ -208,7 +218,8 @@ facturador/
   pdf/          # render del comprobante + QR RG 4892
   repo/         # acceso a datos (SQLite)
   service.py    # lógica de dominio: numeración, idempotencia, estados
-  config.py     # carga y validación de configuración
+  config.py     # bootstrap de arranque: home, .env mínimo, certificados
+  settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
   backup.py     # backup cifrado (age → S3); restore.py es el inverso
   schema.sql    # esquema de la base
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
