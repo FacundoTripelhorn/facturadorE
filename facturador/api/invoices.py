@@ -52,10 +52,11 @@ def list_invoices(
     ]
 
 
-def _pais_ds(conn: sqlite3.Connection, dst_cmp: int) -> str:
-    """Nombre del país destino desde el cache de params (mejor esfuerzo)."""
-    for row in repo.get_params(conn, "pais"):
-        if row["code"] == str(dst_cmp):
+def _param_ds(conn: sqlite3.Connection, kind: str, code: object) -> str:
+    """Descripción de un código desde el cache de params (mejor esfuerzo):
+    si falta, el PDF imprime solo el código."""
+    for row in repo.get_params(conn, kind):
+        if row["code"] == str(code):
             return row["description"] or ""
     return ""
 
@@ -76,7 +77,11 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
         # emisor de producción.
         load_settings(service.conn, inv["environment"]).emisor,
         service.wsfex.cuit,
-        pais_ds=_pais_ds(service.conn, inv["dst_cmp"]),
+        pais_ds=_param_ds(service.conn, "pais", inv["dst_cmp"]),
+        cuit_pais_ds=_param_ds(
+            service.conn, "cuit_pais", inv["cuit_pais_cliente"]
+        ),
+        moneda_ds=_param_ds(service.conn, "moneda", inv["moneda_id"]),
     )
     filename = invoice_pdf_filename(inv)
     # Copia persistida en data/pdfs (layout §2.5); la respuesta no depende
