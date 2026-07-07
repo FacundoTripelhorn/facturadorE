@@ -105,7 +105,7 @@ class InvoiceItem:
 
 @dataclass(frozen=True)
 class Invoice:
-    """Factura E de exportación de servicios (caso canónico de spike §0.1)."""
+    """Factura E de exportación de servicios (caso canónico de design.md §0.1)."""
 
     arca_id: int              # Id idempotente de FEXAuthorize
     fecha_cbte: str           # AAAAMMDD

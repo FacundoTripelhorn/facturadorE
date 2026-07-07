@@ -1,4 +1,4 @@
-"""Conexión SQLite (spike.md §2.2). El esquema vive en schema.sql y las
+"""Conexión SQLite (design.md §2.2). El esquema vive en schema.sql y las
 queries en el paquete repo/."""
 
 from __future__ import annotations

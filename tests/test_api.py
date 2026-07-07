@@ -1,6 +1,6 @@
 """Fase 4 — API + máquina de estados.
 
-Cubre los tests exigidos por spike.md §4 fase 4: idempotencia de authorize,
+Cubre los tests exigidos por design.md §4 fase 4: idempotencia de authorize,
 reproceso verificado, escaping XML con datos hostiles vía API, rechazo con
 errores legibles; más lock anti doble-submit, reconciliación de 'unknown' y
 chequeo de DB desactualizada.

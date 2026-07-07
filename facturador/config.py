@@ -1,6 +1,6 @@
 """Configuración del facturador.
 
-Regla central (spike.md §2.1.1 punto 1): TODO se deriva de un único flag
+Regla central (design.md §2.1.1 punto 1): TODO se deriva de un único flag
 ``ARCA_ENV``. Las URLs de WSAA/WSFEX y los paths de certificado salen del
 mismo valor, por lo que es imposible por construcción usar el certificado de
 homologación contra producción o viceversa. No existen overrides por URL.
@@ -27,7 +27,7 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Emisor:
-    """Datos del emisor que van al PDF y no viajan a ARCA (spike.md §0.1):
+    """Datos del emisor que van al PDF y no viajan a ARCA (design.md §0.1):
     leyenda de IVA, IIBB e inicio de actividades salen de config local."""
 
     razon_social: str = ""
@@ -127,7 +127,7 @@ def validate_config(config: Config) -> None:
 
 
 def _check_key_permissions(key_path: Path) -> None:
-    # Chequeo POSIX (dentro del contenedor Linux, spike.md §2.5). En Windows
+    # Chequeo POSIX (dentro del contenedor Linux, design.md §2.5). En Windows
     # los bits de modo no aplican; el layout definitivo corre en Docker.
     if sys.platform == "win32":
         return

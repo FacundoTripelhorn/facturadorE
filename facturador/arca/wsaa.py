@@ -1,6 +1,6 @@
 """Cliente WSAA: obtención y cache del Ticket de Acceso (TA).
 
-Flujo (spike.md §1.2):
+Flujo (design.md §1.2):
   1. Armar LoginTicketRequest.xml (TRA) con service=wsfex y ventana amplia
      de tiempos (gen -10 min / exp +10 min, checklist §2.1.1 punto 8).
   2. Firmarlo como CMS/PKCS#7 con `cryptography` (sin subprocesos openssl).
@@ -216,7 +216,7 @@ def _parse_fault(body: bytes | str) -> tuple[str, str] | None:
 
 
 class TicketCache:
-    """Cache persistente del TA (spike.md §3: sobrevive reinicios)."""
+    """Cache persistente del TA (design.md §3: sobrevive reinicios)."""
 
     def __init__(self, path: Path):
         self.path = path

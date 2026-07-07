@@ -1,6 +1,6 @@
 """Constantes de dominio compartidas entre módulos.
 
-Acá viven solo los valores que el spike fija por diseño (§0.1) y que se
+Acá viven solo los valores que design.md fija por diseño (§0.1) y que se
 usan desde más de un módulo. Los códigos de comprobante/expo/unidad son de
 las tablas dinámicas de ARCA (consultables vía /params/:kind); si ARCA los
 cambiara, el lugar de la verdad es la tabla, no este archivo.
@@ -10,7 +10,7 @@ import enum
 
 
 class InvoiceStatus(enum.StrEnum):
-    """Estados de la máquina de estados de facturas (spike.md §2.2).
+    """Estados de la máquina de estados de facturas (design.md §2.2).
 
     Es un StrEnum: cada miembro ES su valor TEXT, así que entra sin
     conversión en la columna ``invoices.status`` y en el JSON de la API.
@@ -24,7 +24,7 @@ class InvoiceStatus(enum.StrEnum):
     REJECTED = "rejected"
     UNKNOWN = "unknown"  # timeout post-envío, pendiente de reconciliar
 
-# Endpoints de ARCA por ambiente (spike.md §1.3). NO son configurables por
+# Endpoints de ARCA por ambiente (design.md §1.3). NO son configurables por
 # separado: Config los deriva del único flag ARCA_ENV (checklist §2.1.1
 # punto 1), imposible mezclar cert de homo con URL de prod por construcción.
 WSAA_URLS = {
@@ -42,7 +42,7 @@ SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 
 # Tipos de comprobante de exportación (FEXGetPARAM_Cbte_Tipo)
 CBTE_TIPO_FACTURA_E = 19
-CBTE_TIPO_NOTA_DEBITO_E = 20   # fuera del spike; modelado desde el día 1 (§6.4)
+CBTE_TIPO_NOTA_DEBITO_E = 20   # fuera de alcance hoy; modelado desde el día 1 (§6.4)
 CBTE_TIPO_NOTA_CREDITO_E = 21
 
 # Tipos de exportación (FEXGetPARAM_Tipo_Expo)

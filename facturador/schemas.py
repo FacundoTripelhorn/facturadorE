@@ -1,4 +1,4 @@
-"""Esquemas Pydantic del contrato REST (spike.md §2.3)."""
+"""Esquemas Pydantic del contrato REST (design.md §2.3)."""
 
 from __future__ import annotations
 
