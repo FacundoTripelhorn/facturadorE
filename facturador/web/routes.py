@@ -30,8 +30,9 @@ from .. import repo
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
-from ..schemas import ClientIn, InvoiceCreate
+from ..schemas import ClientIn, InvoiceCreate, SettingsIn
 from ..service import NotFoundError, ServiceError, StaleRegistryError
+from ..settings import BACKUP_PREFIX_DEFAULT, CONDICION_IVA_DEFAULT
 
 router = APIRouter(include_in_schema=False)
 
@@ -93,10 +94,13 @@ AVISOS = {
 
 
 def _contexto_form(service, error: str | None = None, aviso: str | None = None):
+    # Sin datos de emisor no hay form: la UI dirige a Configuración (los
+    # datos van al PDF y create_invoice los exige).
+    emisor_ok = service.get_settings().emisor.completo
     clientes = repo.list_clients(service.conn)
     default = next((c for c in clientes if c["is_default"]), None)
     ctz = ctz_fecha = None
-    if clientes:
+    if emisor_ok and clientes:
         try:
             # Cotización ARCA del día, informativa (§0: nunca se carga a mano).
             ctz_dec, ctz_fecha = service.wsfex.get_ctz(MONEDA_DOL)
@@ -105,6 +109,7 @@ def _contexto_form(service, error: str | None = None, aviso: str | None = None):
             pass  # sin cotización el form sigue usable; authorize revalida
     return {
         "env": service.config.env,
+        "emisor_ok": emisor_ok,
         "clientes": clientes,
         "default": default,
         "ctz": ctz,
@@ -370,3 +375,70 @@ def guardar_cliente(
     except (ValidationError, ServiceError) as exc:
         return _pagina_clientes(request, service, error=str(exc), status_code=422)
     return RedirectResponse("/clientes", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Configuración (settings de dominio: viven en la DB, no en el .env)
+# ---------------------------------------------------------------------------
+
+
+def _pagina_configuracion(
+    request: Request,
+    service,
+    error: str | None = None,
+    aviso: str | None = None,
+    status_code: int = 200,
+):
+    return templates.TemplateResponse(
+        request,
+        "configuracion.html",
+        {
+            "env": service.config.env,
+            "s": service.get_settings(),
+            "error": error,
+            "aviso": aviso,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/configuracion", response_class=HTMLResponse)
+def configuracion(request: Request, service: ServiceDep, aviso: str = ""):
+    return _pagina_configuracion(
+        request,
+        service,
+        aviso="Configuración guardada." if aviso == "guardado" else None,
+    )
+
+
+@router.post("/ui/configuracion", response_class=HTMLResponse)
+def guardar_configuracion(
+    request: Request,
+    service: ServiceDep,
+    emisor_razon_social: str = Form(""),
+    emisor_domicilio: str = Form(""),
+    emisor_iibb: str = Form(""),
+    emisor_inicio_actividades: str = Form(""),
+    emisor_condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
+    punto_venta: int = Form(1),
+    backup_s3_bucket: str = Form(""),
+    backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
+):
+    try:
+        payload = SettingsIn(
+            emisor_razon_social=emisor_razon_social,
+            emisor_domicilio=emisor_domicilio,
+            emisor_iibb=emisor_iibb,
+            emisor_inicio_actividades=emisor_inicio_actividades,
+            emisor_condicion_iva=emisor_condicion_iva,
+            punto_venta=punto_venta,
+            backup_s3_bucket=backup_s3_bucket,
+            backup_s3_prefix=backup_s3_prefix,
+        )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return _pagina_configuracion(
+            request, service, error=f"Datos inválidos: {detalles}", status_code=422
+        )
+    service.update_settings(payload)
+    return RedirectResponse("/configuracion?aviso=guardado", status_code=303)
