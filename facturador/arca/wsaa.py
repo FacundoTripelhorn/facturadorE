@@ -134,7 +134,8 @@ def cuit_from_certificate(cert_pem: bytes) -> int:
         if match:
             return int(match.group(1))
     raise WsaaError(
-        "No se pudo extraer el CUIT del certificado; definir ARCA_CUIT en .env"
+        "No se pudo extraer el CUIT del certificado: el subject debe incluir "
+        "serialNumber=CUIT <11 dígitos> (así lo emite ARCA)."
     )
 
 

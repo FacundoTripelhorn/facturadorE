@@ -60,7 +60,7 @@ def test_config(tmp_path, test_cert_and_key) -> Config:
     (secrets / "homo.crt").write_bytes(cert_pem)
     (secrets / "homo.key").write_bytes(key_pem)
     (tmp_path / "data").mkdir()
-    return Config(env="homo", home=tmp_path, cuit=None, key_passphrase=None)
+    return Config(env="homo", home=tmp_path)
 
 
 @pytest.fixture
@@ -72,6 +72,7 @@ def arca() -> FakeArca:
 def api(test_config, arca, tmp_path):
     conn = db.connect(tmp_path / "data" / "test.db")
     seed_params(conn)
+    seed_settings(conn)
     wsfex = WsfexClient(
         test_config,
         wsaa=FakeWsaa(),
@@ -81,6 +82,21 @@ def api(test_config, arca, tmp_path):
     client = TestClient(app)
     client.conn = conn  # para asserts directos sobre la DB
     return client
+
+
+EMISOR_PRUEBA = {
+    "razon_social": "MI EMPRESA S.R.L.",
+    "domicilio": "Calle Falsa 123, CABA",
+    "iibb": "901-123456-7",
+    "inicio_actividades": "01/2020",
+}
+
+
+def seed_settings(conn) -> None:
+    """Settings de dominio con el emisor completo (sin él no se emite)."""
+    from facturador.settings import Emisor, Settings, save_settings
+
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA)))
 
 
 def seed_params(conn) -> None:

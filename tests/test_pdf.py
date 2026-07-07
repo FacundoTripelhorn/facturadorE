@@ -6,7 +6,6 @@ hostiles en el HTML del comprobante.
 """
 
 import base64
-import dataclasses
 import datetime as dt
 import json
 from urllib.parse import parse_qs, urlparse
@@ -14,9 +13,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from facturador import repo
-from facturador.config import Emisor
 from facturador.pdf import render_invoice_html
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
+from facturador.settings import Emisor, load_settings
 from tests.conftest import TEST_CUIT
 
 CLIENTE = {
@@ -135,21 +134,15 @@ def test_pdf_inexistente_es_404(api):
 # --- contenido y escaping del HTML ---
 
 
-def test_html_contiene_los_datos_del_comprobante(api, arca, test_config):
-    config = dataclasses.replace(
-        test_config,
-        emisor=Emisor(
-            razon_social="MI EMPRESA S.R.L.",
-            domicilio="Calle Falsa 123, CABA",
-            iibb="901-123456-7",
-            inicio_actividades="01/2020",
-        ),
-    )
+def test_html_contiene_los_datos_del_comprobante(api, arca):
+    # Los datos del emisor salen de la DB (sembrados por seed_settings en
+    # el fixture), no del entorno.
+    emisor = load_settings(api.conn).emisor
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items, config, int(TEST_CUIT), pais_ds="URUGUAY")
+    html = render_invoice_html(inv, items, emisor, int(TEST_CUIT), pais_ds="URUGUAY")
 
     assert "MI EMPRESA S.R.L." in html
     assert "901-123456-7" in html
@@ -165,14 +158,35 @@ def test_html_contiene_los_datos_del_comprobante(api, arca, test_config):
     assert "SIN VALOR FISCAL" in html                    # marca de homologación
 
 
-def test_datos_hostiles_quedan_escapados_en_el_html(api, arca, test_config):
+def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
     factura = _factura_autorizada(
         api, razon_social='PYME <script>alert(1)</script> & "CO"'
     )
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items, test_config, int(TEST_CUIT))
+    html = render_invoice_html(
+        inv, items, load_settings(api.conn).emisor, int(TEST_CUIT)
+    )
 
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_datos_hostiles_del_emisor_quedan_escapados_en_el_html(api, arca):
+    """Los datos del emisor ahora también son texto libre (vienen de la DB
+    vía la UI): mismo tratamiento que los del cliente (checklist §2.1.1
+    punto 4 aplicado al HTML)."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+    emisor = Emisor(
+        razon_social='EMISORA <img src=x onerror=alert(1)> & "SA"',
+        domicilio="Av. <b>Negrita</b> 1",
+    )
+
+    html = render_invoice_html(inv, items, emisor, int(TEST_CUIT))
+
+    assert "<img src=x" not in html
+    assert "&lt;img src=x" in html
+    assert "<b>Negrita</b>" not in html

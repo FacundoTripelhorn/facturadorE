@@ -70,7 +70,7 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
     pdf = render_invoice_pdf(
         inv,
         repo.get_invoice_items(service.conn, invoice_id),
-        service.config,
+        service.get_settings().emisor,
         service.wsfex.cuit,
         pais_ds=_pais_ds(service.conn, inv["dst_cmp"]),
     )
