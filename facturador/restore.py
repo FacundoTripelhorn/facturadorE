@@ -9,9 +9,9 @@ desactualizada bloquea la emisión si el restore quedó viejo.
 Se niega a pisar una DB existente sin ``--force``: restaurar arriba de la
 máquina primaria por error destruiría el registro bueno.
 
-Uso:
-  uv run python -m facturador.restore backups/facturador-XXXX.tar.gz.age
-  uv run python -m facturador.restore --latest   # último del bucket S3
+Uso (con --home o FACTURADOR_HOME; no hay fallback implícito al CWD):
+  uv run python -m facturador.restore --home ~/facturador <backup.tar.gz.age>
+  uv run python -m facturador.restore --home ~/facturador --latest
 """
 
 from __future__ import annotations
