@@ -9,16 +9,18 @@ El estado es ``data/`` + ``secrets/`` + ``.env`` bajo FACTURADOR_HOME. Pasos:
    disco en claro: el backup contiene la clave fiscal.
 3. Cifrado del lado del cliente con ``age -p`` (passphrase interactiva del
    usuario; nunca en el repo, el entorno ni AWS). El SSE de S3 NO alcanza.
-4. Upload a S3 con ``aws s3 cp`` si BACKUP_S3_BUCKET está definido; si no,
-   el ``.tar.gz.age`` queda solo en ``backups/``.
+4. Upload a S3 con ``aws s3 cp`` si el bucket está configurado en la app
+   (página Configuración → tabla ``settings`` de la DB); si no, el
+   ``.tar.gz.age`` queda solo en ``backups/``.
 
 Corre en el HOST (no en el contenedor): requiere ``age`` en el PATH y, para
 el upload, ``aws`` CLI con credenciales del IAM user dedicado al bucket.
 La emisión nunca depende de esto (S3 caído solo degrada portabilidad).
 
-Uso:  uv run python -m facturador.backup --home ~/facturador
-(--home puede omitirse si FACTURADOR_HOME está en el entorno o en el .env
-del directorio actual; no hay fallback implícito al CWD)
+Uso:  uv run python -m facturador.backup [--home ~/facturador]
+El home se resuelve igual que en la app: --home, FACTURADOR_HOME o el
+default ~/facturador. No se lee ningún .env: el bucket/prefijo de S3 salen
+de la DB, dentro del propio backup.
 """
 
 from __future__ import annotations
@@ -34,7 +36,8 @@ import sys
 import tarfile
 from pathlib import Path
 
-from dotenv import load_dotenv
+from .config import DEFAULT_HOME
+from .settings import BACKUP_PREFIX_DEFAULT
 
 DB_NAME = "facturador.db"
 # Derivados de SQLite que no tiene sentido llevar (el snapshot ya es
@@ -46,26 +49,43 @@ class BackupError(RuntimeError):
     pass
 
 
-def resolve_home(cli_home: str | None = None) -> Path:
-    """Home EXPLÍCITO: --home o FACTURADOR_HOME (del entorno o del .env del
-    CWD). A diferencia del servidor, acá no hay fallback al directorio
-    actual: backup/restore sobre un directorio implícito equivocado son
-    silenciosamente destructivos (review del PR #8). Además carga el .env
-    del home, donde vive BACKUP_S3_* en el layout Docker."""
-    load_dotenv(".env")
-    raw = cli_home or os.environ.get("FACTURADOR_HOME")
-    if not raw:
-        raise BackupError(
-            "Indicar el directorio de datos con --home o FACTURADOR_HOME "
-            "(no hay default: operar sobre un directorio implícito "
-            "equivocado dejaría un backup/restore inservible)."
-        )
+def resolve_home(cli_home: str | None = None, create: bool = False) -> Path:
+    """Misma resolución que la app: --home, FACTURADOR_HOME o ~/facturador.
+    Nunca el directorio de trabajo: backup/restore sobre un directorio
+    implícito equivocado son silenciosamente destructivos (review del PR #8);
+    el guard de secrets/ en main() corta el resto de los casos.
+
+    ``create=True`` (restore): la máquina secundaria puede no tener el home
+    todavía."""
+    raw = cli_home or os.environ.get("FACTURADOR_HOME") or DEFAULT_HOME
     home = Path(raw).expanduser()
+    if create:
+        home.mkdir(parents=True, exist_ok=True)
     if not home.is_dir():
         raise BackupError(f"FACTURADOR_HOME no existe: {home}")
-    # No pisa variables ya definidas (el entorno y el .env del CWD ganan).
-    load_dotenv(home / ".env")
     return home
+
+
+def backup_s3_settings(snapshot: bytes | None) -> tuple[str, str]:
+    """Bucket/prefijo de S3 desde la tabla settings del snapshot de la DB.
+
+    La config de backups vive en la app (DB), no en el entorno: se lee del
+    mismo snapshot que se está respaldando. Sin DB, o con una DB anterior a
+    la tabla settings, el backup queda solo local."""
+    if snapshot is None:
+        return "", BACKUP_PREFIX_DEFAULT
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.deserialize(snapshot)
+        try:
+            rows = dict(conn.execute("SELECT key, value FROM settings"))
+        except sqlite3.OperationalError:
+            return "", BACKUP_PREFIX_DEFAULT
+    finally:
+        conn.close()
+    bucket = (rows.get("backup_s3_bucket") or "").strip()
+    prefix = (rows.get("backup_s3_prefix") or "").strip() or BACKUP_PREFIX_DEFAULT
+    return bucket, prefix
 
 
 def snapshot_db(db_path: Path) -> bytes:
@@ -134,14 +154,16 @@ def upload_s3(archive: Path, bucket: str, prefix: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--home", help="FACTURADOR_HOME (default: env o CWD)")
+    parser.add_argument(
+        "--home", help="directorio de datos (default: FACTURADOR_HOME o ~/facturador)"
+    )
     args = parser.parse_args(argv)
 
     try:
         home = resolve_home(args.home)
-        # Guardia contra respaldar el directorio equivocado (p.ej. correr
-        # desde el repo sin FACTURADOR_HOME apuntando a ~/facturador): sin
-        # secrets/ esto no es un FACTURADOR_HOME y el archivo saldría vacío.
+        # Guardia contra respaldar el directorio equivocado (p.ej. un typo
+        # en --home): sin secrets/ esto no es un FACTURADOR_HOME y el
+        # archivo saldría vacío.
         if not (home / "secrets").is_dir():
             raise BackupError(
                 f"{home} no parece un FACTURADOR_HOME (no tiene secrets/). "
@@ -159,12 +181,15 @@ def main(argv: list[str] | None = None) -> int:
         encrypt_age(build_tar(home, snapshot), archive)
         print(f"Backup cifrado: {archive}")
 
-        bucket = os.environ.get("BACKUP_S3_BUCKET", "").strip()
+        # El destino S3 sale de la config guardada en la app (en la DB).
+        bucket, prefix = backup_s3_settings(snapshot)
         if bucket:
-            prefix = os.environ.get("BACKUP_S3_PREFIX", "facturador").strip()
             print(f"Subido a {upload_s3(archive, bucket, prefix)}")
         else:
-            print("BACKUP_S3_BUCKET no definido: el backup queda solo local.")
+            print(
+                "Sin bucket S3 configurado (página Configuración): "
+                "el backup queda solo local."
+            )
         return 0
     except (BackupError, subprocess.CalledProcessError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
