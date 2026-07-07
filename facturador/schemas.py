@@ -9,6 +9,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .constants import MONEDA_DOL, UMED_UNIDADES
+from .settings import BACKUP_PREFIX_DEFAULT, CONDICION_IVA_DEFAULT
 
 _FECHA_RE = re.compile(r"^\d{8}$")
 
@@ -18,6 +19,19 @@ def _validar_fecha(value: str, campo: str) -> str:
         raise ValueError(f"{campo} debe ser AAAAMMDD")
     dt.datetime.strptime(value, "%Y%m%d")  # fecha real, no 20261399
     return value
+
+
+class SettingsIn(BaseModel):
+    """Configuración de dominio editable desde la UI (vive en la DB)."""
+
+    emisor_razon_social: str = Field(min_length=1, max_length=200)
+    emisor_domicilio: str = Field(min_length=1, max_length=200)
+    emisor_iibb: str = ""                    # vacío => se imprime el CUIT
+    emisor_inicio_actividades: str = ""      # texto libre, p.ej. "01/2020"
+    emisor_condicion_iva: str = CONDICION_IVA_DEFAULT
+    punto_venta: int = Field(default=1, ge=1)
+    backup_s3_bucket: str = ""
+    backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 
 class ClientIn(BaseModel):

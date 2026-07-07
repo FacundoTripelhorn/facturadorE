@@ -37,7 +37,8 @@ from .mappers import (
     row_to_wsfex_invoice,
     wsfex_invoice_to_raw,
 )
-from .schemas import ClientIn, InvoiceCreate
+from .schemas import ClientIn, InvoiceCreate, SettingsIn
+from .settings import Emisor, Settings, load_settings, save_settings
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,31 @@ class InvoiceService:
         self.config = config
         self.conn = conn
         self.wsfex = wsfex
+
+    # ------------------------------------------------------------------
+    # Configuración de dominio (vive en la DB, se edita desde la UI)
+    # ------------------------------------------------------------------
+
+    def get_settings(self) -> Settings:
+        return load_settings(self.conn)
+
+    def update_settings(self, payload: SettingsIn) -> Settings:
+        save_settings(
+            self.conn,
+            Settings(
+                emisor=Emisor(
+                    razon_social=payload.emisor_razon_social.strip(),
+                    domicilio=payload.emisor_domicilio.strip(),
+                    iibb=payload.emisor_iibb.strip(),
+                    inicio_actividades=payload.emisor_inicio_actividades.strip(),
+                    condicion_iva=payload.emisor_condicion_iva.strip(),
+                ),
+                punto_venta=payload.punto_venta,
+                backup_s3_bucket=payload.backup_s3_bucket.strip(),
+                backup_s3_prefix=payload.backup_s3_prefix.strip(),
+            ),
+        )
+        return self.get_settings()
 
     # ------------------------------------------------------------------
     # Parámetros (cache con refresh lazy de 24 h — design.md §6.2)
@@ -144,6 +170,14 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def create_invoice(self, payload: InvoiceCreate) -> sqlite3.Row:
+        # Sin datos de emisor no se emite: el PDF del comprobante los
+        # necesita y la UI dirige a Configuración a completarlos.
+        settings = self.get_settings()
+        if not settings.emisor.completo:
+            raise ConflictError(
+                "Faltan los datos del emisor (razón social y domicilio): "
+                "completarlos en Configuración antes de emitir."
+            )
         if payload.client_id is not None:
             client = repo.get_client(self.conn, payload.client_id)
             if client is None:
@@ -216,7 +250,7 @@ class InvoiceService:
         data = {
             "client_id": client["id"],
             "cbte_tipo": CBTE_TIPO_FACTURA_E,
-            "punto_venta": self.config.punto_venta,
+            "punto_venta": settings.punto_venta,
             "fecha_cbte": fecha_cbte,
             "fecha_pago": fecha_pago,
             "tipo_expo": TIPO_EXPO_SERVICIOS,
