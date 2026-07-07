@@ -113,3 +113,12 @@ def test_extract_rechaza_paths_hostiles(tmp_path):
 def test_resolve_home_exige_directorio_existente(tmp_path):
     with pytest.raises(BackupError):
         resolve_home(str(tmp_path / "no-existe"))
+
+
+def test_backup_rechaza_un_home_sin_secrets(tmp_path, capsys):
+    """Review PR #8: correr desde un directorio que no es FACTURADOR_HOME
+    debe fallar fuerte, no producir un backup vacío en silencio."""
+    from facturador.backup import main
+
+    assert main(["--home", str(tmp_path)]) == 1
+    assert "no parece un FACTURADOR_HOME" in capsys.readouterr().err
