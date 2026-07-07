@@ -18,7 +18,7 @@ from facturador.config import (
 def _entorno_limpio():
     """load_dotenv escribe en os.environ: aislar cada test para que un .env
     leído en uno no contamine a los demás."""
-    claves = ("ARCA_ENV", "FACTURADOR_HOME", "ARCA_KEY_PASSPHRASE")
+    claves = ("ARCA_ENV", "FACTURADOR_HOME")
     previo = {k: os.environ.get(k) for k in claves}
     for k in claves:
         os.environ.pop(k, None)
@@ -66,11 +66,7 @@ def test_no_existe_forma_de_mezclar_ambiente_y_certificado(tmp_path):
     # configuración (emisor, punto de venta, backups) vive en la DB.
     config = Config(env="homo", home=tmp_path)
     assert not hasattr(config, "wsaa_url_override")
-    assert config.__dataclass_fields__.keys() == {
-        "env",
-        "home",
-        "key_passphrase",
-    }
+    assert config.__dataclass_fields__.keys() == {"env", "home"}
 
 
 def test_env_invalido_rechazado(monkeypatch, tmp_path):
@@ -143,12 +139,7 @@ def test_env_se_lee_del_home_nunca_del_cwd(monkeypatch, tmp_path):
 
 def test_env_del_home_configura_el_ambiente(monkeypatch, tmp_path):
     home = _con_certs(tmp_path, env="prod")
-    (home / ".env").write_text(
-        "ARCA_ENV=prod\nARCA_KEY_PASSPHRASE=secreta\n", encoding="utf-8"
-    )
+    (home / ".env").write_text("ARCA_ENV=prod\n", encoding="utf-8")
     monkeypatch.setenv("FACTURADOR_HOME", str(home))
 
-    config = load_config()
-
-    assert config.env == "prod"
-    assert config.key_passphrase == "secreta"
+    assert load_config().env == "prod"

@@ -100,15 +100,14 @@ def build_tra(service: str = SERVICE, now: dt.datetime | None = None) -> bytes:
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def sign_tra_cms(
-    tra: bytes,
-    cert_pem: bytes,
-    key_pem: bytes,
-    key_passphrase: bytes | None = None,
-) -> bytes:
-    """Firma el TRA como CMS/PKCS#7 (DER). Soporta key con passphrase."""
+def sign_tra_cms(tra: bytes, cert_pem: bytes, key_pem: bytes) -> bytes:
+    """Firma el TRA como CMS/PKCS#7 (DER).
+
+    La key se guarda sin passphrase (decisión de producto): la protegen los
+    permisos 400 y el home local; el backup cifrado la cubre al salir de la
+    máquina."""
     cert = x509.load_pem_x509_certificate(cert_pem)
-    key = load_pem_private_key(key_pem, password=key_passphrase)
+    key = load_pem_private_key(key_pem, password=None)
     if not isinstance(key, rsa.RSAPrivateKey | ec.EllipticCurvePrivateKey):
         raise WsaaError("La clave privada debe ser RSA o EC para firmar el CMS")
     return (
@@ -286,7 +285,6 @@ class WsaaClient:
             tra,
             self.config.cert_path.read_bytes(),
             self.config.key_path.read_bytes(),
-            self.config.key_passphrase.encode() if self.config.key_passphrase else None,
         )
         request_body = build_login_request(cms)
         response = self.http.post(
