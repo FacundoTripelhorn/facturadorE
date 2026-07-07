@@ -96,6 +96,17 @@ def test_sin_cliente_default_ni_client_id_es_conflicto(api):
     assert r.status_code == 409
 
 
+def test_sin_datos_de_emisor_no_se_emite(api):
+    """Primer arranque sin configurar: los datos del emisor van al PDF y la
+    app exige completarlos (en Configuración) antes de emitir."""
+    with api.conn:
+        api.conn.execute("DELETE FROM settings")
+    _crear_cliente(api)
+    r = api.post("/invoices", json={"imp_total": "100.00"})
+    assert r.status_code == 409
+    assert "emisor" in r.json()["detail"]
+
+
 def test_imp_total_distinto_de_items_es_error_de_dominio(api):
     _crear_cliente(api)
     r = api.post(

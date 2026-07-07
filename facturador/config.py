@@ -1,9 +1,26 @@
-"""Configuración del facturador.
+"""Configuración de arranque del facturador.
 
 Regla central (design.md §2.1.1 punto 1): TODO se deriva de un único flag
 ``ARCA_ENV``. Las URLs de WSAA/WSFEX y los paths de certificado salen del
 mismo valor, por lo que es imposible por construcción usar el certificado de
 homologación contra producción o viceversa. No existen overrides por URL.
+
+Resolución de configuración (única, sin fallbacks al directorio de trabajo):
+
+1. ``FACTURADOR_HOME`` (default ``~/facturador``; en Docker, ``/facturador``
+   fijado por ENV en el Dockerfile) es LA raíz de datos. La app crea el home
+   y su estructura (``secrets/``, ``data/``, ``backups/``) en el primer
+   arranque.
+2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
+   bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``ARCA_KEY_PASSPHRASE``
+   (es un secreto: no va a la DB) y ``FACTURADOR_PORT``. Si no existe, la
+   app lo crea con ``ARCA_ENV=homo``.
+3. El resto de la configuración (datos del emisor, punto de venta, backups)
+   vive en la DB y se edita desde la página Configuración (ver settings.py).
+
+Los certificados siguen siendo archivos en ``<home>/secrets/<env>.{crt,key}``
+colocados a mano; los chequeos de arranque (permisos 400/600, par cert/env
+consistente) se mantienen intactos.
 """
 
 from __future__ import annotations
@@ -20,31 +37,35 @@ from .constants import WSAA_URLS, WSFEX_URLS
 
 VALID_ENVS = ("homo", "prod")
 
+DEFAULT_HOME = "~/facturador"
+
+# Bootstrap creado en el primer arranque. Solo lo que no puede vivir en la
+# DB: el flag de ambiente, el secreto de la key y el puerto local.
+BOOTSTRAP_ENV = """\
+# Bootstrap del facturador. El resto de la configuración (datos del emisor,
+# punto de venta, backups) se edita desde la app, en la página Configuración.
+
+# Ambiente ARCA: homo | prod. Deriva URLs de WSAA/WSFEX y qué par cert/key
+# se usa (secrets/<env>.crt + secrets/<env>.key). Único flag: no hay overrides.
+ARCA_ENV=homo
+
+# Passphrase de la clave privada, solo si la key la tiene.
+#ARCA_KEY_PASSPHRASE=
+
+# Puerto local (siempre en 127.0.0.1).
+#FACTURADOR_PORT=8399
+"""
+
 
 class ConfigError(RuntimeError):
     pass
 
 
 @dataclass(frozen=True)
-class Emisor:
-    """Datos del emisor que van al PDF y no viajan a ARCA (design.md §0.1):
-    leyenda de IVA, IIBB e inicio de actividades salen de config local."""
-
-    razon_social: str = ""
-    domicilio: str = ""
-    iibb: str = ""                 # vacío => se imprime el CUIT
-    inicio_actividades: str = ""   # texto libre, p.ej. "01/2020"
-    condicion_iva: str = "IVA Responsable Inscripto"
-
-
-@dataclass(frozen=True)
 class Config:
     env: str          # "homo" | "prod"
     home: Path        # raíz de datos (secrets/, data/, backups/)
-    cuit: int | None  # emisor; None => se extrae del certificado en runtime
-    key_passphrase: str | None
-    punto_venta: int = 1  # en homo es libre; en prod, el PV RECE exclusivo
-    emisor: Emisor = Emisor()
+    key_passphrase: str | None = None
 
     @property
     def wsaa_url(self) -> str:
@@ -71,10 +92,33 @@ class Config:
         return self.data_dir / "pdfs"
 
 
-def load_config(env_file: str | Path | None = ".env") -> Config:
-    """Carga la config desde el entorno (y .env si existe) y la valida."""
-    if env_file is not None:
-        load_dotenv(env_file)
+def resolve_home() -> Path:
+    """Único punto de resolución del home: FACTURADOR_HOME o ~/facturador.
+    Sin fallback al directorio de trabajo, acá ni en backup/restore."""
+    return Path(os.environ.get("FACTURADOR_HOME") or DEFAULT_HOME).expanduser()
+
+
+def ensure_home(home: Path) -> None:
+    """Crea el home y su estructura en el primer arranque, incluido el .env
+    de bootstrap si no existe."""
+    secrets = home / "secrets"
+    secrets.mkdir(parents=True, exist_ok=True)
+    if sys.platform != "win32":
+        secrets.chmod(0o700)
+    (home / "data").mkdir(exist_ok=True)
+    (home / "backups").mkdir(exist_ok=True)
+    env_file = home / ".env"
+    if not env_file.exists():
+        env_file.write_text(BOOTSTRAP_ENV, encoding="utf-8")
+
+
+def load_config() -> Config:
+    """Resuelve el home, carga <home>/.env (nunca el del CWD) y valida."""
+    home = resolve_home()
+    ensure_home(home)
+    # No pisa variables ya presentes en el entorno (p.ej. FACTURADOR_PORT
+    # fijado por el Dockerfile).
+    load_dotenv(home / ".env")
 
     env = os.environ.get("ARCA_ENV", "homo").strip().lower()
     if env not in VALID_ENVS:
@@ -82,33 +126,10 @@ def load_config(env_file: str | Path | None = ".env") -> Config:
             f"ARCA_ENV inválido: {env!r} (valores permitidos: {', '.join(VALID_ENVS)})"
         )
 
-    home = Path(os.environ.get("FACTURADOR_HOME", Path.cwd())).expanduser()
-
-    cuit_raw = os.environ.get("ARCA_CUIT", "").strip()
-    cuit: int | None = None
-    if cuit_raw:
-        if not cuit_raw.isdigit() or len(cuit_raw) != 11:
-            raise ConfigError("ARCA_CUIT debe ser 11 dígitos sin guiones")
-        cuit = int(cuit_raw)
-
-    punto_venta_raw = os.environ.get("ARCA_PUNTO_VTA", "1").strip()
-    if not punto_venta_raw.isdigit() or int(punto_venta_raw) < 1:
-        raise ConfigError("ARCA_PUNTO_VTA debe ser un entero >= 1")
-
-    emisor = Emisor(
-        razon_social=os.environ.get("EMISOR_RAZON_SOCIAL", "").strip(),
-        domicilio=os.environ.get("EMISOR_DOMICILIO", "").strip(),
-        iibb=os.environ.get("EMISOR_IIBB", "").strip(),
-        inicio_actividades=os.environ.get("EMISOR_INICIO_ACTIVIDADES", "").strip(),
-    )
-
     config = Config(
         env=env,
         home=home,
-        cuit=cuit,
         key_passphrase=os.environ.get("ARCA_KEY_PASSPHRASE") or None,
-        punto_venta=int(punto_venta_raw),
-        emisor=emisor,
     )
     validate_config(config)
     return config
@@ -120,7 +141,8 @@ def validate_config(config: Config) -> None:
         if not path.is_file():
             raise ConfigError(
                 f"Falta {path.name} para ARCA_ENV={config.env}: {path}. "
-                "El par cert/key debe llamarse <env>.crt / <env>.key."
+                "Colocar el par cert/key en <home>/secrets/ con los nombres "
+                "<env>.crt / <env>.key."
             )
     _check_key_permissions(config.key_path)
     config.data_dir.mkdir(parents=True, exist_ok=True)

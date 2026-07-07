@@ -4,6 +4,7 @@ Servida solo en localhost (design.md §2.5)."""
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 from fastapi import FastAPI, Request
@@ -20,6 +21,7 @@ from ..service import (
     InvoiceService,
     NotFoundError,
 )
+from ..settings import migrate_env_settings
 from . import clients, health, invoices, params
 
 _ERROR_STATUS = {
@@ -38,6 +40,9 @@ def create_app(
     config = config or load_config()
     conn = conn or db.connect(config.data_dir / "facturador.db")
     wsfex = wsfex or WsfexClient(config)
+    # Upgrade desde el esquema viejo (EMISOR_* y compañía en el .env): los
+    # settings que sigan viniendo del entorno se importan a la DB una vez.
+    migrate_env_settings(conn, os.environ)
 
     app = FastAPI(title="facturador", version="0.1.0")
     app.state.service = InvoiceService(config, conn, wsfex)
