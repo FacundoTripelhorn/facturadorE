@@ -308,3 +308,83 @@ def test_alta_de_cliente_invalida_no_pierde_la_pagina(api, arca):
     r = api.post("/ui/clientes", data={**CLIENTE_FORM, "pais_dst": "999"})
     assert r.status_code == 422
     assert "pais_dst" in r.text               # error legible en la misma página
+
+
+# --- configuración (settings de dominio: viven en la DB) ---
+
+CONFIG_FORM = {
+    "emisor_razon_social": "MI EMPRESA S.R.L.",
+    "emisor_domicilio": "Calle Falsa 123, CABA",
+    "emisor_iibb": "901-123456-7",
+    "emisor_inicio_actividades": "01/2020",
+    "emisor_condicion_iva": "IVA Responsable Inscripto",
+    "punto_venta": "1",
+    "backup_s3_bucket": "",
+    "backup_s3_prefix": "facturador",
+}
+
+
+def _sin_settings(api):
+    """Estado de primer arranque: la tabla settings vacía."""
+    with api.conn:
+        api.conn.execute("DELETE FROM settings")
+
+
+def test_primer_arranque_dirige_a_configuracion_antes_de_emitir(api, arca):
+    _sin_settings(api)
+    _crear_cliente_por_form(api)
+
+    home = api.get("/")
+    assert home.status_code == 200
+    assert "datos del emisor" in home.text
+    assert 'href="/configuracion"' in home.text
+    assert "Generar borrador" not in home.text   # sin form hasta completar
+
+    # El guard también existe en el dominio, no solo en la UI.
+    r = api.post("/ui/facturas", data=FACTURA_FORM)
+    assert r.status_code == 422
+    assert "emisor" in r.text
+
+
+def test_pagina_de_configuracion_carga_y_guarda(api, arca):
+    _sin_settings(api)
+    pagina = api.get("/configuracion")
+    assert pagina.status_code == 200
+    assert "Completar los datos del emisor" in pagina.text
+
+    r = api.post("/ui/configuracion", data=CONFIG_FORM, follow_redirects=False)
+    assert r.status_code == 303
+
+    guardada = api.get("/configuracion?aviso=guardado")
+    assert "Configuración guardada" in guardada.text
+    assert 'value="MI EMPRESA S.R.L."' in guardada.text
+    assert 'value="901-123456-7"' in guardada.text
+
+    # Con el emisor completo, el form de emisión vuelve a estar disponible.
+    _crear_cliente_por_form(api)
+    assert "Generar borrador" in api.get("/").text
+
+
+def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
+    r = api.post(
+        "/ui/configuracion", data={**CONFIG_FORM, "emisor_razon_social": ""}
+    )
+    assert r.status_code == 422
+    assert "Datos inválidos" in r.text
+
+
+def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
+    r = api.post(
+        "/ui/configuracion",
+        data={**CONFIG_FORM, "punto_venta": "7"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    factura = api.get(f"/invoices/{invoice_id}").json()
+    assert factura["punto_venta"] == 7
+
+
+def test_nav_incluye_configuracion(api):
+    assert 'href="/configuracion"' in api.get("/").text
