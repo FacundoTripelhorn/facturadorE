@@ -8,7 +8,12 @@
 <div class="panel error"><div>{{ error }}</div></div>
 {% endif %}
 
-{% if not clientes %}
+{% if not emisor_ok %}
+<div class="panel error">
+  <div>Faltan los datos del emisor (van impresos en el PDF).
+  <a href="/configuracion">Completarlos en Configuración</a> para poder facturar.</div>
+</div>
+{% elif not clientes %}
 <div class="panel error">
   <div>No hay clientes cargados. <a href="/clientes">Crear el primero</a> para poder facturar.</div>
 </div>
