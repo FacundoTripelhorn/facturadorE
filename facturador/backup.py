@@ -126,6 +126,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         home = resolve_home(args.home)
+        # Guardia contra respaldar el directorio equivocado (p.ej. correr
+        # desde el repo sin FACTURADOR_HOME apuntando a ~/facturador): sin
+        # secrets/ esto no es un FACTURADOR_HOME y el archivo saldría vacío.
+        if not (home / "secrets").is_dir():
+            raise BackupError(
+                f"{home} no parece un FACTURADOR_HOME (no tiene secrets/). "
+                "Definir FACTURADOR_HOME o pasar --home apuntando al "
+                "directorio de datos real."
+            )
+        print(f"FACTURADOR_HOME: {home}")
         db_path = home / "data" / DB_NAME
         snapshot = snapshot_db(db_path) if db_path.is_file() else None
         if snapshot is None:

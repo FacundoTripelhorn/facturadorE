@@ -26,8 +26,13 @@ RUN chmod +x /entrypoint.sh
 # macOS con el uid del host, así que un usuario propio no podría ni leer la
 # key ni pasar el chequeo de permisos. El entrypoint copia los secretos a un
 # directorio interno con chmod 400, que es donde el chequeo sí aplica.
+# FACTURADOR_PORT queda fijado acá para que un valor en el .env montado no
+# pueda moverlo (python-dotenv no pisa variables ya presentes): el publish
+# de compose y el HEALTHCHECK asumen 8399 adentro. El puerto del lado del
+# host sí es configurable, vía FACTURADOR_PORT en el shell del host.
 ENV FACTURADOR_HOME=/facturador \
     FACTURADOR_IN_DOCKER=1 \
+    FACTURADOR_PORT=8399 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8399
