@@ -1,0 +1,39 @@
+# CI mínimo: lint + types + tests + build de la imagen.
+#
+# Deliberadamente NO corre contract tests contra homologación (design.md
+# §2.5): eso requeriría subir el certificado fiscal a un runner externo.
+# Los contract tests se corren localmente (scripts/{get_ta,check_wsfex}.py).
+# La suite acá es autocontenida: certificado autofirmado de prueba y ARCA
+# simulada con MockTransport — cero red, cero secretos.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Libs nativas de weasyprint: acá el test del PDF real corre de
+      # verdad (en Windows sin GTK se skipea).
+      - name: Dependencias de weasyprint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest -q
+
+  docker:
+    # La imagen es el runtime real (design.md §2.5); un Dockerfile roto se
+    # detectaría recién al levantar la app si no se buildea acá.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t facturador:ci .
