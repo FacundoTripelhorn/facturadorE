@@ -29,15 +29,22 @@ class Emisor:
 
     razon_social: str = ""
     domicilio: str = ""
-    iibb: str = ""                 # vacío => se imprime el CUIT
-    inicio_actividades: str = ""   # texto libre, p.ej. "01/2020"
+    iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
+    inicio_actividades: str = ""   # DD/MM/AAAA, como lo imprime el comprobante
     condicion_iva: str = CONDICION_IVA_DEFAULT
 
     @property
     def completo(self) -> bool:
-        """Mínimo para que el PDF salga bien formado; sin esto la UI dirige
-        a Configuración antes de permitir emitir."""
-        return bool(self.razon_social and self.domicilio)
+        """Todas las líneas del encabezado del comprobante real salen de acá;
+        con alguna vacía el PDF queda con un hueco, así que la UI dirige a
+        Configuración antes de permitir emitir. El comprobante imprime el
+        texto literal de IIBB (p.ej. "Exento"), nunca el CUIT como reemplazo."""
+        return bool(
+            self.razon_social
+            and self.domicilio
+            and self.iibb
+            and self.inicio_actividades
+        )
 
 
 @dataclass(frozen=True)

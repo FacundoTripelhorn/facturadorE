@@ -87,8 +87,8 @@ def api(test_config, arca, tmp_path):
 EMISOR_PRUEBA = {
     "razon_social": "MI EMPRESA S.R.L.",
     "domicilio": "Calle Falsa 123, CABA",
-    "iibb": "901-123456-7",
-    "inicio_actividades": "01/2020",
+    "iibb": "Exento",
+    "inicio_actividades": "01/08/2020",
 }
 
 

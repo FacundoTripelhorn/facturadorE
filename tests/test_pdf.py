@@ -145,7 +145,10 @@ def test_html_contiene_los_datos_del_comprobante(api, arca):
     html = render_invoice_html(inv, items, emisor, int(TEST_CUIT), pais_ds="URUGUAY")
 
     assert "MI EMPRESA S.R.L." in html
-    assert "901-123456-7" in html
+    # IIBB sale literal de la config ("Exento" en el comprobante real),
+    # nunca el CUIT como reemplazo.
+    assert "Exento" in html
+    assert "01/08/2020" in html
     assert "IVA Responsable Inscripto" in html
     assert "CLIENTE URUGUAY S.A." in html
     assert "URUGUAY" in html
