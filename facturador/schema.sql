@@ -1,10 +1,10 @@
 -- Esquema SQLite del facturador (design.md §2.2).
 -- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
 
--- Configuración de dominio (la app es dueña de su configuración): datos del
--- emisor con su punto de venta (claves por ambiente, p.ej.
--- "homo.emisor_razon_social") y config de backups (global). Clave/valor
--- para que agregar un setting no requiera migración de esquema.
+-- Configuración de dominio (la app es dueña de su configuración): el emisor
+-- declara su ambiente y sus puntos de venta (claves "<ambiente>.emisor_*",
+-- p.ej. "homo.emisor_razon_social") y la config de backups es global.
+-- Clave/valor para que agregar un setting no requiera migración de esquema.
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL

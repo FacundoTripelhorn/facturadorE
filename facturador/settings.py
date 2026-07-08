@@ -1,20 +1,21 @@
 """Configuración de dominio: vive en la DB (tabla ``settings``), no en el entorno.
 
-La app es dueña de su configuración: los datos del emisor que van al PDF, el
-punto de venta y la config de backups se editan desde la página Configuración
+La app es dueña de su configuración: los datos del emisor que van al PDF, sus
+puntos de venta y la config de backups se editan desde la página Configuración
 y viajan en el backup cifrado junto con el resto del estado. En el ``.env``
 de bootstrap queda SOLO lo que no puede vivir en la DB: ``ARCA_ENV`` (deriva
 el pareo cert/URL, design.md §2.1.1 punto 1) y ``FACTURADOR_PORT``.
 
-El emisor (punto de venta incluido) se guarda POR AMBIENTE: en homo se
-factura con un PV libre y datos de prueba sin ensuciar los de producción, y
-la numeración local nunca mezcla ambientes. La config de backups es global:
-el backup cubre la DB entera, no un ambiente.
+Cada emisor declara con qué ambiente interactúa y qué puntos de venta tiene
+habilitados; hoy existe a lo sumo un emisor por ambiente y se emite con el
+primer PV, pero el modelo ya soporta el alta de emisores (cada uno con su
+ambiente) sin cambiar el esquema. La config de backups es global: el backup
+cubre la DB entera, no un emisor.
 """
 
 from __future__ import annotations
 
-import dataclasses
+import json
 import sqlite3
 from dataclasses import dataclass
 
@@ -26,16 +27,24 @@ BACKUP_PREFIX_DEFAULT = "facturador"
 
 @dataclass(frozen=True)
 class Emisor:
-    """Datos del emisor, uno por ambiente. Las líneas de texto van al PDF y
-    no viajan a ARCA (design.md §0.1); el punto de venta define la numeración
-    de los comprobantes de ese ambiente."""
+    """Un emisor factura contra UN ambiente (se elige al darlo de alta) con
+    sus propios puntos de venta; los datos de texto van al PDF y no viajan a
+    ARCA (design.md §0.1)."""
 
     razon_social: str = ""
     domicilio: str = ""
     iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
     inicio_actividades: str = ""   # DD/MM/AAAA, como lo imprime el comprobante
     condicion_iva: str = CONDICION_IVA_DEFAULT
-    punto_venta: int = 1           # en homo es libre; en prod, el PV RECE exclusivo
+    ambiente: str = "homo"         # con qué ambiente interactúa este emisor
+    # Habilitados para este emisor. En homo el PV es libre; en prod, el PV
+    # RECE exclusivo.
+    puntos_venta: tuple[int, ...] = (1,)
+
+    @property
+    def punto_venta(self) -> int:
+        """PV con el que se emite: por ahora, siempre el primero."""
+        return self.puntos_venta[0]
 
     @property
     def completo(self) -> bool:
@@ -58,17 +67,39 @@ class Settings:
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 
-_EMISOR_FIELDS = tuple(f.name for f in dataclasses.fields(Emisor))
+_EMISOR_TEXT_FIELDS = (
+    "razon_social",
+    "domicilio",
+    "iibb",
+    "inicio_actividades",
+    "condicion_iva",
+)
 
 
-def _emisor_key(env: str, field: str) -> str:
-    # Clave por ambiente: "homo.emisor_razon_social", "prod.emisor_punto_venta".
-    return f"{env}.emisor_{field}"
+def _emisor_key(ambiente: str, campo: str) -> str:
+    # El ambiente del emisor namespacea sus claves: "homo.emisor_razon_social",
+    # "prod.emisor_puntos_venta". El alta de varios emisores solo necesita
+    # sumar un identificador acá.
+    return f"{ambiente}.emisor_{campo}"
+
+
+def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
+    try:
+        valores = json.loads(raw_value)
+    except ValueError:
+        return (1,)
+    if (
+        isinstance(valores, list)
+        and valores
+        and all(isinstance(v, int) and v >= 1 for v in valores)
+    ):
+        return tuple(valores)
+    return (1,)
 
 
 def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
+    """Settings con el emisor que factura contra ``env`` (hoy, a lo sumo uno)."""
     raw = repo.get_settings(conn)
-    punto_venta_raw = raw.get(_emisor_key(env, "punto_venta"), "1")
     return Settings(
         emisor=Emisor(
             razon_social=raw.get(_emisor_key(env, "razon_social"), ""),
@@ -79,20 +110,26 @@ def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
             ),
             condicion_iva=raw.get(_emisor_key(env, "condicion_iva"))
             or CONDICION_IVA_DEFAULT,
-            punto_venta=int(punto_venta_raw) if punto_venta_raw.isdigit() else 1,
+            ambiente=env,
+            puntos_venta=_parse_puntos_venta(
+                raw.get(_emisor_key(env, "puntos_venta"), "")
+            ),
         ),
         backup_s3_bucket=raw.get("backup_s3_bucket", ""),
         backup_s3_prefix=raw.get("backup_s3_prefix") or BACKUP_PREFIX_DEFAULT,
     )
 
 
-def save_settings(
-    conn: sqlite3.Connection, env: str, settings: Settings
-) -> None:
+def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
+    """Guarda el emisor bajo el ambiente que él mismo declara."""
+    emisor = settings.emisor
     valores = {
-        _emisor_key(env, field): str(getattr(settings.emisor, field))
-        for field in _EMISOR_FIELDS
+        _emisor_key(emisor.ambiente, campo): getattr(emisor, campo)
+        for campo in _EMISOR_TEXT_FIELDS
     }
+    valores[_emisor_key(emisor.ambiente, "puntos_venta")] = json.dumps(
+        list(emisor.puntos_venta)
+    )
     valores["backup_s3_bucket"] = settings.backup_s3_bucket
     valores["backup_s3_prefix"] = settings.backup_s3_prefix
     repo.save_settings(conn, valores)
