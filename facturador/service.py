@@ -96,22 +96,24 @@ class InvoiceService:
         return load_settings(self.conn, self.config.env)
 
     def update_settings(self, payload: SettingsIn) -> Settings:
+        # SettingsIn ya llega stripeado (str_strip_whitespace): acá no se
+        # vuelve a limpiar, solo se mapea.
         save_settings(
             self.conn,
             Settings(
                 emisor=Emisor(
-                    razon_social=payload.emisor_razon_social.strip(),
-                    domicilio=payload.emisor_domicilio.strip(),
-                    iibb=payload.emisor_iibb.strip(),
-                    inicio_actividades=payload.emisor_inicio_actividades.strip(),
-                    condicion_iva=payload.emisor_condicion_iva.strip(),
+                    razon_social=payload.emisor_razon_social,
+                    domicilio=payload.emisor_domicilio,
+                    iibb=payload.emisor_iibb,
+                    inicio_actividades=payload.emisor_inicio_actividades,
+                    condicion_iva=payload.emisor_condicion_iva,
                     # La UI edita el emisor del ambiente activo; el alta de
                     # emisores con ambiente propio llega con su feature.
                     ambiente=self.config.env,
                     puntos_venta=tuple(payload.puntos_venta),
                 ),
-                backup_s3_bucket=payload.backup_s3_bucket.strip(),
-                backup_s3_prefix=payload.backup_s3_prefix.strip(),
+                backup_s3_bucket=payload.backup_s3_bucket,
+                backup_s3_prefix=payload.backup_s3_prefix,
             ),
         )
         return self.get_settings()
