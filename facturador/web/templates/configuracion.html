@@ -31,14 +31,14 @@
     <div class="fila">
       <div>
         <label for="emisor_iibb">Ingresos Brutos</label>
-        <input id="emisor_iibb" name="emisor_iibb"
-               placeholder="vacío = se imprime el CUIT"
+        <input id="emisor_iibb" name="emisor_iibb" required
+               placeholder="tal como se imprime, p.ej. Exento"
                value="{{ s.emisor.iibb }}">
       </div>
       <div>
         <label for="emisor_inicio_actividades">Inicio de actividades</label>
-        <input id="emisor_inicio_actividades" name="emisor_inicio_actividades"
-               placeholder="p.ej. 01/2020"
+        <input id="emisor_inicio_actividades" name="emisor_inicio_actividades" required
+               placeholder="DD/MM/AAAA"
                value="{{ s.emisor.inicio_actividades }}">
       </div>
       <div>

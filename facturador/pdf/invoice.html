@@ -3,45 +3,59 @@
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: A4; margin: 12mm; }
-  body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #111; }
+  /* Layout replicado del comprobante real de Comprobantes en Línea
+     (design.md §0.1): reglas horizontales mínimas (sin marco exterior),
+     divisor central solo en la cabecera, tabla de ítems con recuadro
+     únicamente en el encabezado y bloque de totales/CAE anclado al pie. */
+  @page { size: A4; margin: 10mm; }
+  body {
+    font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #111;
+    display: flex; flex-direction: column; min-height: 272mm; margin: 0;
+  }
   .homo-banner {
     border: 1.5pt dashed #b00; color: #b00; text-align: center;
     font-weight: bold; padding: 2mm; margin-bottom: 3mm; font-size: 10pt;
   }
-  .marco { border: 1pt solid #000; }
-  .cabecera { display: flex; border-bottom: 1pt solid #000; }
-  .cabecera .col { padding: 3mm; width: 50%; }
-  .cabecera .col.izq { border-right: none; }
+  .comprobante { display: flex; flex-direction: column; flex: 1; }
+  .cabecera-wrap { position: relative; border-top: 1pt solid #000; }
   .tipo-box {
-    position: absolute; left: 50%; transform: translateX(-50%);
-    border: 1pt solid #000; background: #fff; text-align: center;
-    width: 14mm; padding: 1mm 0;
+    position: absolute; left: 50%; transform: translateX(-50%); top: 0;
+    border: 1pt solid #000; border-top: none; background: #fff;
+    text-align: center; width: 16mm; padding: 1mm 0;
   }
   .tipo-box .letra { font-size: 20pt; font-weight: bold; line-height: 1; }
   .tipo-box .cod { font-size: 6pt; }
-  .cabecera-wrap { position: relative; }
-  h1 { font-size: 13pt; margin: 0 0 2mm; }
-  h2 { font-size: 11pt; margin: 0 0 2mm; text-align: right; }
-  .campo { margin: 0.8mm 0; }
+  .cabecera { display: flex; }
+  .cabecera .col { width: 50%; padding: 2mm 3mm 2mm 0; }
+  .cabecera .col.der { border-left: 1pt solid #000; padding: 2mm 0 2mm 3mm; }
+  h1 { font-size: 13pt; margin: 9mm 0 3mm; text-align: center; }
+  h2 { font-size: 12pt; margin: 9mm 0 3mm; text-align: center; }
+  .campo { margin: 1mm 0; }
   .campo b { display: inline-block; }
-  .bloque { padding: 3mm; border-bottom: 1pt solid #000; }
-  .dos-col { display: flex; }
-  .dos-col > div { width: 50%; }
+  .leyenda-exento { font-weight: bold; margin-top: 2mm; }
+  .bloque { padding: 2mm 0; border-top: 0.5pt solid #000; }
+  .fila { display: flex; }
+  .fila > div { flex: 1; }
   table.items { width: 100%; border-collapse: collapse; margin-top: 1mm; }
-  table.items th, table.items td { border: 0.5pt solid #444; padding: 1.5mm; }
-  table.items th { background: #eee; font-size: 8pt; }
+  table.items th {
+    border: 0.5pt solid #000; background: #eee; font-size: 8pt;
+    padding: 1.5mm;
+  }
+  table.items td { padding: 1.5mm; vertical-align: top; }
   td.num, th.num { text-align: right; }
-  .total { text-align: right; font-size: 11pt; font-weight: bold; padding: 3mm; }
-  .leyenda { font-weight: bold; text-align: center; padding: 2mm; border-bottom: 1pt solid #000; }
-  .pie { display: flex; padding: 3mm; align-items: center; }
+  .umedida { font-size: 8pt; }
+  .zona-items { flex: 1; }
+  .totales { padding: 2mm 0; }
+  .totales .rotulado { border-bottom: 0.5pt solid #000; padding-bottom: 1mm; }
+  .total { text-align: right; font-size: 11pt; font-weight: bold; margin-top: 2mm; }
+  .pie { display: flex; padding: 2mm 0; align-items: center; }
   .pie .qr { width: 30mm; }
   .pie .qr img { width: 28mm; height: 28mm; }
-  .pie .autorizado { font-weight: bold; margin-left: 6mm; }
+  .pie .autorizado { font-weight: bold; margin-left: 4mm; }
   .pie .cae { margin-left: auto; text-align: right; }
   .pie .cae .valor { font-size: 12pt; font-weight: bold; }
-  .obs { padding: 3mm; border-bottom: 1pt solid #000; }
-  .descargo { padding: 0 3mm 2mm; font-size: 6.5pt; color: #333; }
+  .obs { padding: 2mm 0; border-top: 0.5pt solid #000; }
+  .descargo { padding: 1mm 0 0; font-size: 6.5pt; color: #333; }
 </style>
 </head>
 <body>
@@ -50,7 +64,7 @@
 <div class="homo-banner">COMPROBANTE DE HOMOLOGACIÓN — SIN VALOR FISCAL</div>
 {% endif %}
 
-<div class="marco">
+<div class="comprobante">
   <div class="cabecera-wrap">
     <div class="tipo-box">
       <div class="letra">E</div>
@@ -62,52 +76,50 @@
         <div class="campo"><b>Razón Social:</b> {{ emisor.razon_social }}</div>
         <div class="campo"><b>Domicilio Comercial:</b> {{ emisor.domicilio }}</div>
         <div class="campo"><b>Condición frente al IVA:</b> {{ emisor.condicion_iva }}</div>
+      </div>
+      <div class="col der">
+        <h2>FACTURA DE EXPORTACIÓN</h2>
+        <div class="campo"><b>Compr. Nro:</b> {{ nro_completo }}</div>
+        <div class="campo"><b>Fecha de Emisión:</b> {{ inv["fecha_cbte"] | fecha }}</div>
         <div class="campo"><b>CUIT:</b> {{ cuit_emisor }}</div>
         <div class="campo"><b>Ingresos Brutos:</b> {{ emisor.iibb }}</div>
         <div class="campo"><b>Fecha de Inicio de Actividades:</b> {{ emisor.inicio_actividades }}</div>
+        {# En el comprobante real la leyenda cierra la columna derecha de la
+           cabecera; no es una banda centrada después de los ítems. #}
+        <div class="leyenda-exento">IVA EXENTO OPERACIÓN DE EXPORTACIÓN</div>
       </div>
-      <div class="col">
-        <h2>FACTURA DE EXPORTACIÓN</h2>
-        <div class="campo" style="text-align:right"><b>Comp. Nro:</b> {{ nro_completo }}</div>
-        <div class="campo" style="text-align:right"><b>Fecha de Emisión:</b> {{ inv["fecha_cbte"] | fecha }}</div>
-        <div class="campo" style="text-align:right"><b>Fecha de Pago:</b> {{ inv["fecha_pago"] | fecha }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="bloque dos-col">
-    <div>
-      <div class="campo"><b>Señor(es):</b> {{ inv["cliente"] }}</div>
-      <div class="campo"><b>Domicilio:</b> {{ inv["domicilio_cliente"] }}</div>
-      {# "Destino del Comprobante" es el PAÍS en el comprobante real
-         (design.md §0.1: Dst_cmp), no el tipo de exportación. #}
-      <div class="campo"><b>Destino del Comprobante:</b> {{ pais_ds }}</div>
-    </div>
-    <div>
-      <div class="campo"><b>CUIT País:</b> {{ inv["cuit_pais_cliente"] }}{% if cuit_pais_ds %} ({{ cuit_pais_ds }}){% endif %}</div>
-      <div class="campo"><b>ID Impositivo:</b> {{ inv["id_impositivo"] }}</div>
-    </div>
-  </div>
-
-  <div class="bloque dos-col">
-    <div>
-      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}{% if moneda_ds %} - {{ moneda_ds }}{% endif %}</div>
-      <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] | ctz }}</div>
-    </div>
-    <div>
-      <div class="campo"><b>Forma de Pago:</b> {{ inv["forma_pago"] }}</div>
-      <div class="campo"><b>Incoterms:</b> {{ inv["incoterms"] }}</div>
     </div>
   </div>
 
   <div class="bloque">
+    <div class="fila">
+      <div class="campo"><b>Señor(es):</b> {{ inv["cliente"] }}</div>
+      <div class="campo"><b>Domicilio:</b> {{ inv["domicilio_cliente"] }}</div>
+    </div>
+    <div class="campo"><b>CUIT País:</b> {{ inv["cuit_pais_cliente"] }}{% if cuit_pais_ds %} ({{ cuit_pais_ds }}){% endif %}</div>
+    <div class="campo"><b>ID Impositivo:</b> {{ inv["id_impositivo"] }}</div>
+  </div>
+
+  <div class="bloque">
+    <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}{% if moneda_ds %} - {{ moneda_ds }}{% endif %}</div>
+    {# "Destino del Comprobante" es el PAÍS en el comprobante real
+       (design.md §0.1: Dst_cmp), no el tipo de exportación. #}
+    <div class="campo"><b>Destino del Comprobante:</b> {{ pais_ds }}</div>
+  </div>
+
+  <div class="bloque fila">
+    <div class="campo"><b>Forma de Pago:</b> {{ inv["forma_pago"] }}</div>
+    <div class="campo"><b>Fecha de Pago:</b> {{ inv["fecha_pago"] | fecha }}</div>
+    <div class="campo"><b>Incoterms:</b> {{ inv["incoterms"] }}</div>
+  </div>
+
+  <div class="bloque zona-items">
     <table class="items">
       <thead>
         <tr>
           <th>Ítem</th>
           <th>Descripción</th>
           <th class="num">Cantidad</th>
-          <th>U. Medida</th>
           <th class="num">Precio Unit. ({{ inv["moneda_id"] | moneda }})</th>
           <th class="num">Total por ítem ({{ inv["moneda_id"] | moneda }})</th>
         </tr>
@@ -115,24 +127,36 @@
       <tbody>
         {% for item in items %}
         <tr>
-          <td>{{ item["pro_codigo"] }}</td>
-          <td>{{ item["pro_ds"] }}</td>
-          <td class="num">{{ item["pro_qty"] | num(6) }}</td>
-          <td>{{ "unidades" if item["pro_umed"] == UMED_UNIDADES else item["pro_umed"] }}</td>
+          <td>{{ "%04d" | format(loop.index) }}</td>
+          {# El comprobante real imprime "código - descripción" en la
+             columna Descripción. #}
+          <td>{% if item["pro_codigo"] %}{{ item["pro_codigo"] }} - {% endif %}{{ item["pro_ds"] }}</td>
+          {# U. Medida no es columna propia: va como segunda línea bajo la
+             cantidad, igual que en el comprobante real. #}
+          <td class="num">{{ item["pro_qty"] | num(6) }}<br>
+            <span class="umedida">U. Medida: {{ "unidades" if item["pro_umed"] == UMED_UNIDADES else item["pro_umed"] }}</span></td>
           <td class="num">{{ item["pro_precio_uni"] | num(6) }}</td>
           <td class="num">{{ item["pro_total_item"] | num(2) }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    <div class="total">Importe Total: {{ inv["moneda_id"] | moneda }} {{ inv["imp_total"] | num(2) }}</div>
   </div>
-
-  <div class="leyenda">IVA EXENTO OPERACIÓN DE EXPORTACIÓN</div>
 
   {% if inv["obs"] %}
   <div class="obs"><b>Observaciones:</b> {{ inv["obs"] }}</div>
   {% endif %}
+
+  <div class="totales">
+    {# La divisa se repite junto a la cotización en el bloque de totales,
+       como en el comprobante real; la cotización es el único número con
+       punto decimal. #}
+    <div class="fila rotulado">
+      <div class="campo"><b>Tipo de Cambio:</b> {{ inv["moneda_ctz"] | ctz }}</div>
+      <div class="campo"><b>Divisa:</b> {{ inv["moneda_id"] | moneda }}{% if moneda_ds %} - {{ moneda_ds }}{% endif %}</div>
+    </div>
+    <div class="total">Importe Total: {{ inv["moneda_id"] | moneda }} {{ inv["imp_total"] | num(2) }}</div>
+  </div>
 
   <div class="pie">
     <div class="qr"><img src="{{ qr_data_uri }}" alt="QR RG 4892"></div>
