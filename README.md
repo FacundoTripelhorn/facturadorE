@@ -126,11 +126,6 @@ que existan `secrets/<env>.crt` y `secrets/<env>.key` con la key en permisos
 `400`/`600`; si no, se niega a arrancar con un mensaje explicativo. Sin datos
 de emisor cargados, la UI dirige a Configuración antes de permitir emitir.
 
-> Upgrade desde versiones que configuraban el emisor por variables de entorno
-> (`EMISOR_*`, `ARCA_PUNTO_VTA`, `BACKUP_S3_*`): en el primer arranque esos
-> valores se importan automáticamente a la DB (queda avisado en el log) y las
-> variables pueden borrarse del `.env`.
-
 ### Flujo en la interfaz web
 
 1. **`/configuracion`** — primera vez: completar los datos del emisor (se
