@@ -14,7 +14,7 @@
 <form method="post" action="/ui/configuracion">
 
 <section class="card">
-  <h2>Emisor <span class="sub">se imprime en el PDF; no viaja a ARCA</span></h2>
+  <h2>Emisor <span class="sub">del ambiente {{ env }}; se imprime en el PDF, no viaja a ARCA</span></h2>
   <div class="cuerpo">
     <div class="fila">
       <div>
@@ -47,21 +47,16 @@
                value="{{ s.emisor.condicion_iva }}">
       </div>
     </div>
-  </div>
-</section>
-
-<section class="card">
-  <h2>Emisión</h2>
-  <div class="cuerpo">
     <div class="fila">
       <div>
         <label for="punto_venta">Punto de venta</label>
         <input id="punto_venta" name="punto_venta" type="number" min="1"
-               class="num" required value="{{ s.punto_venta }}">
+               class="num" required value="{{ s.emisor.punto_venta }}">
       </div>
     </div>
-    <p class="nota">En homologación es libre; en producción, el número del
-    punto de venta RECE exclusivo de exportación (ver la guía de producción).</p>
+    <p class="nota">En homologación el punto de venta es libre; en producción,
+    el número del punto de venta RECE exclusivo de exportación (ver la guía de
+    producción).</p>
   </div>
 </section>
 
