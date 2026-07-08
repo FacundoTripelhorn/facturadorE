@@ -189,8 +189,12 @@ def test_html_contiene_los_datos_del_comprobante(api, arca):
     assert "Destino del Comprobante:</b> URUGUAY" in html
     assert "(URUGUAY - Persona Juridica)" in html         # CUIT País con descripción
     assert "USD - Dolar Estadounidense" in html           # divisa con descripción
-    assert "00001-00000001" in html
-    assert "Servicios de desarrollo de software" in html
+    assert "Compr. Nro:</b> 00001-00000001" in html       # rótulo real, con la "r"
+    # Descripción con el código adelante, como imprime Comprobantes en Línea.
+    assert "0001 - Servicios de desarrollo de software" in html
+    # U. Medida no es columna propia: va como sub-línea bajo la cantidad.
+    assert "U. Medida: unidades" in html
+    assert "<th>U. Medida</th>" not in html
     assert "1500,00" in html                              # importes con coma, 2 dec
     assert "1,000000" in html                             # cantidad con 6 decimales
     assert "1500,000000" in html                          # precio unit. con 6 dec
