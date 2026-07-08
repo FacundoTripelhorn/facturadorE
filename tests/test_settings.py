@@ -1,11 +1,12 @@
-"""Settings de dominio: viven en la DB. Cada emisor declara su ambiente y
-sus puntos de venta, así homo y prod nunca mezclan datos ni numeración."""
+"""Settings de dominio: viven en la DB. El emisor es una entidad (tabla
+emisores) que declara su ambiente y sus puntos de venta, así homo y prod
+nunca mezclan datos ni numeración."""
 
 import dataclasses
 
 import pytest
 
-from facturador import db
+from facturador import db, repo
 from facturador.settings import Emisor, Settings, load_settings, save_settings
 
 
@@ -44,6 +45,14 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
     assert releido.emisor.punto_venta == 7  # se emite con el primero
 
 
+def test_guardar_dos_veces_actualiza_el_mismo_emisor(conn):
+    save_settings(conn, Settings(emisor=Emisor(razon_social="V1")))
+    save_settings(conn, Settings(emisor=Emisor(razon_social="V2")))
+    assert load_settings(conn, "homo").emisor.razon_social == "V2"
+    filas = conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0]
+    assert filas == 1
+
+
 def test_cada_emisor_declara_su_ambiente(conn):
     """El emisor se guarda bajo el ambiente que él mismo declara: configurar
     el de homo no toca el de prod, así la numeración y los datos de prueba
@@ -75,16 +84,31 @@ def test_cada_emisor_declara_su_ambiente(conn):
     assert load_settings(conn, "prod").emisor.punto_venta == 3
 
 
+def test_un_ambiente_puede_tener_varios_emisores(conn):
+    """La relación real: varios emisores pueden operar en el mismo ambiente.
+    Hasta que llegue el alta con selección, la app usa el más antiguo."""
+    repo.upsert_emisor(
+        conn,
+        dict.fromkeys(repo.EMISOR_FIELDS, "")
+        | {"razon_social": "PRIMERO", "ambiente": "homo", "puntos_venta": "[1]"},
+    )
+    with conn:  # segundo emisor del mismo ambiente, insertado directo
+        conn.execute(
+            "INSERT INTO emisores (id, razon_social, ambiente, puntos_venta,"
+            " created_at, updated_at)"
+            " VALUES ('z-nuevo', 'SEGUNDO', 'homo', '[4]',"
+            " '2099-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00')"
+        )
+    assert load_settings(conn, "homo").emisor.razon_social == "PRIMERO"
+
+
 @pytest.mark.parametrize(
     "corrupto", ["nueve", "[]", "[0]", '["7"]', "7", "[1.5]"]
 )
 def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
     save_settings(conn, Settings())
     with conn:
-        conn.execute(
-            "UPDATE settings SET value = ? WHERE key = ?",
-            (corrupto, "homo.emisor_puntos_venta"),
-        )
+        conn.execute("UPDATE emisores SET puntos_venta = ?", (corrupto,))
     assert load_settings(conn, "homo").emisor.puntos_venta == (1,)
 
 

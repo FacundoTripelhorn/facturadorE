@@ -12,6 +12,7 @@ from .clients import (
     list_clients,
     update_client,
 )
+from .emisores import EMISOR_FIELDS, get_emisor_por_ambiente, upsert_emisor
 from .invoices import (
     INVOICE_FIELDS,
     UPDATABLE_INVOICE_FIELDS,
@@ -32,6 +33,7 @@ from .settings import get_settings, save_settings
 __all__ = [
     "CLIENT_FIELDS",
     "count_invoices_by_status",
+    "EMISOR_FIELDS",
     "INVOICE_FIELDS",
     "UPDATABLE_INVOICE_FIELDS",
     "create_client",
@@ -39,6 +41,7 @@ __all__ = [
     "delete_draft",
     "get_client",
     "get_default_client",
+    "get_emisor_por_ambiente",
     "get_invoice",
     "get_invoice_items",
     "get_params",
@@ -52,4 +55,5 @@ __all__ = [
     "try_transition_to_submitting",
     "update_client",
     "update_invoice",
+    "upsert_emisor",
 ]
