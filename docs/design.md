@@ -53,6 +53,16 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
 
+**Layout impreso del comprobante real** (replicado en `facturador/pdf/invoice.html`; posiciones verificadas contra el PDF de Comprobantes en Línea):
+
+- **Cabecera** partida al medio por la caja `E / COD. 19`. Izquierda: razón social en grande y los rótulos `Razón Social:`, `Domicilio Comercial:`, `Condición frente al IVA:`. Derecha: `FACTURA DE EXPORTACIÓN`, `Compr. Nro:` (con "r", número completo `PPPPP-NNNNNNNN`), `Fecha de Emisión:`, `CUIT:`, `Ingresos Brutos:` (texto literal de la condición, p.ej. "Exento" — nunca el CUIT como reemplazo), `Fecha de Inicio de Actividades:` (DD/MM/AAAA) y la leyenda `IVA EXENTO OPERACIÓN DE EXPORTACIÓN` cerrando la columna. La leyenda NO es una banda centrada después de los ítems.
+- **Receptor**: `Señor(es):` y `Domicilio:` comparten fila; `CUIT País:` (con la descripción del cache de params entre paréntesis) e `ID Impositivo:` a línea completa debajo.
+- **Operación**: `Divisa:` (código display + descripción) con `Destino del Comprobante:` apilado debajo; después una fila de tres columnas `Forma de Pago: | Fecha de Pago: | Incoterms:` (Incoterms se imprime aunque esté vacío). La cotización NO va en este bloque.
+- **Ítems**: columnas `Ítem | Descripción | Cantidad | Precio Unit. (USD) | Total por ítem (USD)` — U. Medida no es columna: va como segunda línea bajo la cantidad (`U. Medida: unidades`). La columna Ítem lleva el ordinal de 4 dígitos y la descripción va con el código adelante (`0001 - …`). Recuadro solo en la fila de encabezado; el comprobante casi no tiene marcos (tampoco marco exterior de página).
+- **Totales anclados al pie de la página** (la zona de ítems se estira): `Tipo de Cambio:` (el único número con punto decimal, 6 decimales) junto a `Divisa:` repetida, y debajo `Importe Total: USD n,nn`. Resto de números: coma decimal, 6 decimales en cantidades/precios unitarios y 2 en importes.
+- **Pie**: QR RG 4892 abajo a la izquierda, logo de ARCA + `Comprobante Autorizado` al lado (el logo está pendiente: FAC-7), `CAE N°:` y `Fecha de Vto. de CAE:` a la derecha, y el descargo estándar en letra chica.
+- El PDF real sale en **tirada de tres copias** (ORIGINAL / DUPLICADO / COPIA, rótulo en caja arriba al centro); nuestro render de una sola copia queda en FAC-6.
+
 ---
 
 ## 1. Contexto de dominio (leer antes de codear)
