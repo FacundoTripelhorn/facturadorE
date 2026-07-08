@@ -16,6 +16,10 @@ set -eu
 HOME_DIR="${FACTURADOR_HOME:-/facturador}"
 
 mkdir -p /host/secrets /host/data /host/backups "$HOME_DIR/secrets"
+# La copia interna es un espejo del mount, no un cache: en un restart del
+# contenedor podría sobrevivir una copia de secretos que ya no están en el
+# host, y la app arrancaría contra ARCA con certificados viejos.
+rm -f "$HOME_DIR/secrets/"*
 if [ -n "$(ls -A /host/secrets 2>/dev/null)" ]; then
     cp /host/secrets/* "$HOME_DIR/secrets/"
     chmod 400 "$HOME_DIR/secrets/"*
