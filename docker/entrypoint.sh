@@ -25,11 +25,11 @@ chmod 400 "$HOME_DIR/secrets/"*
 ln -sfn /host/data "$HOME_DIR/data"
 ln -sfn /host/backups "$HOME_DIR/backups"
 
-# El .env del host manda, pero FACTURADOR_HOME ya está en el entorno del
-# contenedor y python-dotenv NO pisa variables existentes: un path de
-# Windows en el .env no puede romper el layout interno.
-if [ -f /host/.env ]; then
-    ln -sf /host/.env /app/.env
-fi
+# La app lee el .env SOLO de <home>/.env; el symlink apunta al del host (y
+# si no existe, la app lo crea con el bootstrap a través del symlink).
+# FACTURADOR_HOME y FACTURADOR_PORT ya están en el entorno del contenedor y
+# python-dotenv NO pisa variables existentes: un valor en el .env del host
+# no puede mover el layout ni el puerto interno.
+ln -sfn /host/.env "$HOME_DIR/.env"
 
 exec python -m facturador

@@ -15,7 +15,7 @@ import pytest
 from facturador import repo
 from facturador.pdf import render_invoice_html
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
-from facturador.settings import Emisor, load_settings
+from facturador.settings import Emisor, Settings, load_settings, save_settings
 from tests.conftest import TEST_CUIT
 
 CLIENTE = {
@@ -129,6 +129,32 @@ def test_pdf_de_draft_es_conflicto(api, arca):
 
 def test_pdf_inexistente_es_404(api):
     assert api.get("/invoices/inexistente/pdf").status_code == 404
+
+
+def test_el_pdf_usa_el_emisor_del_ambiente_del_comprobante(api, arca, monkeypatch):
+    """El comprobante es un snapshot: su PDF usa el emisor del ambiente en
+    que se emitió (inv["environment"]), no el del ambiente activo — mismo
+    criterio que es_homo. Acá la factura es de homo y aparece un emisor de
+    prod que no debe filtrarse al PDF."""
+    factura = _factura_autorizada(api)
+    save_settings(
+        api.conn,
+        Settings(emisor=Emisor(razon_social="OTRA S.R.L.", ambiente="prod")),
+    )
+    capturado = {}
+
+    def fake_render(inv, items, emisor, cuit_emisor, pais_ds=""):
+        capturado["emisor"] = emisor
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(
+        "facturador.api.invoices.render_invoice_pdf", fake_render
+    )
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+
+    assert r.status_code == 200, r.text
+    assert capturado["emisor"].ambiente == "homo"
+    assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
 
 
 # --- contenido y escaping del HTML ---
