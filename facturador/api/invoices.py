@@ -11,6 +11,7 @@ from ..constants import InvoiceStatus
 from ..pdf import invoice_pdf_filename, render_invoice_pdf
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
+from ..settings import load_settings
 from .deps import ServiceDep
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -70,7 +71,10 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
     pdf = render_invoice_pdf(
         inv,
         repo.get_invoice_items(service.conn, invoice_id),
-        service.get_settings().emisor,
+        # El emisor es el del ambiente del comprobante, no el activo: igual
+        # que es_homo, un PDF de homologación no debe mostrar los datos del
+        # emisor de producción.
+        load_settings(service.conn, inv["environment"]).emisor,
         service.wsfex.cuit,
         pais_ds=_pais_ds(service.conn, inv["dst_cmp"]),
     )
