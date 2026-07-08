@@ -420,10 +420,22 @@ def guardar_configuracion(
     emisor_iibb: str = Form(""),
     emisor_inicio_actividades: str = Form(""),
     emisor_condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
-    punto_venta: int = Form(1),
+    puntos_venta: str = Form("1"),
     backup_s3_bucket: str = Form(""),
     backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
 ):
+    try:
+        # "1, 3" del input → [1, 3]; SettingsIn valida el >= 1 y rechaza
+        # la lista vacía.
+        pvs = [int(v) for v in puntos_venta.split(",") if v.strip()]
+    except ValueError:
+        return _pagina_configuracion(
+            request,
+            service,
+            error="Datos inválidos: los puntos de venta deben ser números"
+            " separados por coma",
+            status_code=422,
+        )
     try:
         payload = SettingsIn(
             emisor_razon_social=emisor_razon_social,
@@ -431,7 +443,7 @@ def guardar_configuracion(
             emisor_iibb=emisor_iibb,
             emisor_inicio_actividades=emisor_inicio_actividades,
             emisor_condicion_iva=emisor_condicion_iva,
-            punto_venta=punto_venta,
+            puntos_venta=pvs,
             backup_s3_bucket=backup_s3_bucket,
             backup_s3_prefix=backup_s3_prefix,
         )

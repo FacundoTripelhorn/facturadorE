@@ -49,14 +49,15 @@
     </div>
     <div class="fila">
       <div>
-        <label for="punto_venta">Punto de venta</label>
-        <input id="punto_venta" name="punto_venta" type="number" min="1"
-               class="num" required value="{{ s.emisor.punto_venta }}">
+        <label for="puntos_venta">Puntos de venta</label>
+        <input id="puntos_venta" name="puntos_venta" required
+               placeholder="separados por coma, p.ej. 1, 3"
+               value="{{ s.emisor.puntos_venta | join(', ') }}">
       </div>
     </div>
-    <p class="nota">En homologación el punto de venta es libre; en producción,
-    el número del punto de venta RECE exclusivo de exportación (ver la guía de
-    producción).</p>
+    <p class="nota">Habilitados para este emisor; se emite con el primero.
+    En homologación el punto de venta es libre; en producción, el número del
+    punto de venta RECE exclusivo de exportación (ver la guía de producción).</p>
   </div>
 </section>
 
