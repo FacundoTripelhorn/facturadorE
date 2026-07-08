@@ -1,6 +1,7 @@
 """Settings de dominio: viven en la DB, con migración desde el entorno para
 usuarios que venían del esquema viejo (EMISOR_* y compañía en el .env)."""
 
+import dataclasses
 import logging
 
 import pytest
@@ -45,10 +46,19 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
     assert load_settings(conn).emisor.completo
 
 
-def test_emisor_completo_exige_razon_social_y_domicilio():
-    assert not Emisor(razon_social="X").completo
-    assert not Emisor(domicilio="Y").completo
-    assert Emisor(razon_social="X", domicilio="Y").completo
+def test_emisor_completo_exige_todas_las_lineas_del_encabezado():
+    """El comprobante real imprime razón social, domicilio, IIBB (literal,
+    p.ej. "Exento") e inicio de actividades: con cualquiera vacío el PDF
+    queda con un hueco."""
+    completo = Emisor(
+        razon_social="X",
+        domicilio="Y",
+        iibb="Exento",
+        inicio_actividades="01/08/2020",
+    )
+    assert completo.completo
+    for campo in ("razon_social", "domicilio", "iibb", "inicio_actividades"):
+        assert not dataclasses.replace(completo, **{campo: ""}).completo
 
 
 # --- migración desde el entorno (primer arranque post-upgrade) ---

@@ -26,8 +26,10 @@ class SettingsIn(BaseModel):
 
     emisor_razon_social: str = Field(min_length=1, max_length=200)
     emisor_domicilio: str = Field(min_length=1, max_length=200)
-    emisor_iibb: str = ""                    # vacío => se imprime el CUIT
-    emisor_inicio_actividades: str = ""      # texto libre, p.ej. "01/2020"
+    # Literal del comprobante, p.ej. "Exento" o el nro de inscripción.
+    emisor_iibb: str = Field(min_length=1, max_length=50)
+    # DD/MM/AAAA, como lo imprime el comprobante.
+    emisor_inicio_actividades: str = Field(min_length=1, max_length=20)
     emisor_condicion_iva: str = CONDICION_IVA_DEFAULT
     punto_venta: int = Field(default=1, ge=1)
     backup_s3_bucket: str = ""
