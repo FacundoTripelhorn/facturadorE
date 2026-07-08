@@ -23,7 +23,8 @@ def _validar_fecha(value: str, campo: str) -> str:
 
 class SettingsIn(BaseModel):
     """Configuración de dominio editable desde la UI (vive en la DB).
-    El bloque del emisor (punto de venta incluido) es del ambiente activo."""
+    El bloque del emisor es el del emisor que factura contra el ambiente
+    activo (el ambiente lo declara el emisor, no este payload)."""
 
     emisor_razon_social: str = Field(min_length=1, max_length=200)
     emisor_domicilio: str = Field(min_length=1, max_length=200)
@@ -32,9 +33,17 @@ class SettingsIn(BaseModel):
     # DD/MM/AAAA, como lo imprime el comprobante.
     emisor_inicio_actividades: str = Field(min_length=1, max_length=20)
     emisor_condicion_iva: str = CONDICION_IVA_DEFAULT
-    punto_venta: int = Field(default=1, ge=1)
+    # Puntos de venta habilitados del emisor; se emite con el primero.
+    puntos_venta: list[int] = Field(default=[1], min_length=1)
     backup_s3_bucket: str = ""
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
+
+    @field_validator("puntos_venta")
+    @classmethod
+    def _puntos_venta_positivos(cls, valores: list[int]) -> list[int]:
+        if any(pv < 1 for pv in valores):
+            raise ValueError("los puntos de venta deben ser >= 1")
+        return valores
 
 
 class ClientIn(BaseModel):
