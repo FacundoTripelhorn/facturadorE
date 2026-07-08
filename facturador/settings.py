@@ -1,16 +1,18 @@
-"""Configuración de dominio: vive en la DB (tabla ``settings``), no en el entorno.
+"""Configuración de dominio: vive en la DB, no en el entorno.
 
-La app es dueña de su configuración: los datos del emisor que van al PDF, sus
-puntos de venta y la config de backups se editan desde la página Configuración
-y viajan en el backup cifrado junto con el resto del estado. En el ``.env``
-de bootstrap queda SOLO lo que no puede vivir en la DB: ``ARCA_ENV`` (deriva
-el pareo cert/URL, design.md §2.1.1 punto 1) y ``FACTURADOR_PORT``.
+La app es dueña de su configuración: los datos del emisor que van al PDF,
+sus puntos de venta y la config de backups se editan desde la página
+Configuración y viajan en el backup cifrado junto con el resto del estado.
+En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
+``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1) y
+``FACTURADOR_PORT``.
 
-Cada emisor declara con qué ambiente interactúa y qué puntos de venta tiene
-habilitados; hoy existe a lo sumo un emisor por ambiente y se emite con el
-primer PV, pero el modelo ya soporta el alta de emisores (cada uno con su
-ambiente) sin cambiar el esquema. La config de backups es global: el backup
-cubre la DB entera, no un emisor.
+El emisor es una entidad (tabla ``emisores``): cada uno declara con qué
+ambiente interactúa y qué puntos de venta tiene habilitados, y un mismo
+ambiente puede tener varios. Hoy la app opera con el emisor más antiguo del
+ambiente activo y emite con su primer PV; el alta/selección de emisores
+llega con su feature. La config de backups es global (tabla ``settings``,
+clave/valor): el backup cubre la DB entera, no un emisor.
 """
 
 from __future__ import annotations
@@ -67,22 +69,6 @@ class Settings:
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 
-_EMISOR_TEXT_FIELDS = (
-    "razon_social",
-    "domicilio",
-    "iibb",
-    "inicio_actividades",
-    "condicion_iva",
-)
-
-
-def _emisor_key(ambiente: str, campo: str) -> str:
-    # El ambiente del emisor namespacea sus claves: "homo.emisor_razon_social",
-    # "prod.emisor_puntos_venta". El alta de varios emisores solo necesita
-    # sumar un identificador acá.
-    return f"{ambiente}.emisor_{campo}"
-
-
 def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
     try:
         valores = json.loads(raw_value)
@@ -97,39 +83,50 @@ def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
     return (1,)
 
 
+def _row_to_emisor(row: sqlite3.Row) -> Emisor:
+    return Emisor(
+        razon_social=row["razon_social"],
+        domicilio=row["domicilio"],
+        iibb=row["iibb"],
+        inicio_actividades=row["inicio_actividades"],
+        condicion_iva=row["condicion_iva"] or CONDICION_IVA_DEFAULT,
+        ambiente=row["ambiente"],
+        puntos_venta=_parse_puntos_venta(row["puntos_venta"]),
+    )
+
+
 def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
-    """Settings con el emisor que factura contra ``env`` (hoy, a lo sumo uno)."""
+    """Settings con el emisor que opera en ``env`` (el más antiguo, si hay
+    varios) y la config global de backups."""
+    row = repo.get_emisor_por_ambiente(conn, env)
     raw = repo.get_settings(conn)
     return Settings(
-        emisor=Emisor(
-            razon_social=raw.get(_emisor_key(env, "razon_social"), ""),
-            domicilio=raw.get(_emisor_key(env, "domicilio"), ""),
-            iibb=raw.get(_emisor_key(env, "iibb"), ""),
-            inicio_actividades=raw.get(
-                _emisor_key(env, "inicio_actividades"), ""
-            ),
-            condicion_iva=raw.get(_emisor_key(env, "condicion_iva"))
-            or CONDICION_IVA_DEFAULT,
-            ambiente=env,
-            puntos_venta=_parse_puntos_venta(
-                raw.get(_emisor_key(env, "puntos_venta"), "")
-            ),
-        ),
+        emisor=Emisor(ambiente=env) if row is None else _row_to_emisor(row),
         backup_s3_bucket=raw.get("backup_s3_bucket", ""),
         backup_s3_prefix=raw.get("backup_s3_prefix") or BACKUP_PREFIX_DEFAULT,
     )
 
 
 def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
-    """Guarda el emisor bajo el ambiente que él mismo declara."""
+    """Guarda el emisor como entidad (bajo el ambiente que él mismo declara)
+    y la config de backups como settings globales."""
     emisor = settings.emisor
-    valores = {
-        _emisor_key(emisor.ambiente, campo): getattr(emisor, campo)
-        for campo in _EMISOR_TEXT_FIELDS
-    }
-    valores[_emisor_key(emisor.ambiente, "puntos_venta")] = json.dumps(
-        list(emisor.puntos_venta)
+    repo.upsert_emisor(
+        conn,
+        {
+            "razon_social": emisor.razon_social,
+            "domicilio": emisor.domicilio,
+            "iibb": emisor.iibb,
+            "inicio_actividades": emisor.inicio_actividades,
+            "condicion_iva": emisor.condicion_iva,
+            "ambiente": emisor.ambiente,
+            "puntos_venta": json.dumps(list(emisor.puntos_venta)),
+        },
     )
-    valores["backup_s3_bucket"] = settings.backup_s3_bucket
-    valores["backup_s3_prefix"] = settings.backup_s3_prefix
-    repo.save_settings(conn, valores)
+    repo.save_settings(
+        conn,
+        {
+            "backup_s3_bucket": settings.backup_s3_bucket,
+            "backup_s3_prefix": settings.backup_s3_prefix,
+        },
+    )

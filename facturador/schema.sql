@@ -1,13 +1,28 @@
 -- Esquema SQLite del facturador (design.md §2.2).
 -- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
 
--- Configuración de dominio (la app es dueña de su configuración): el emisor
--- declara su ambiente y sus puntos de venta (claves "<ambiente>.emisor_*",
--- p.ej. "homo.emisor_razon_social") y la config de backups es global.
--- Clave/valor para que agregar un setting no requiera migración de esquema.
+-- Configuración global de la app (hoy: backups). Clave/valor para que
+-- agregar un setting no requiera migración de esquema.
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+-- Emisores (la app es dueña de su configuración): la entidad es el emisor,
+-- y cada uno declara con qué ambiente interactúa y qué puntos de venta
+-- tiene habilitados (JSON). Un mismo ambiente puede tener varios emisores;
+-- hoy la app opera con el más antiguo del ambiente activo.
+CREATE TABLE IF NOT EXISTS emisores (
+    id                 TEXT PRIMARY KEY,
+    razon_social       TEXT NOT NULL DEFAULT '',
+    domicilio          TEXT NOT NULL DEFAULT '',
+    iibb               TEXT NOT NULL DEFAULT '',
+    inicio_actividades TEXT NOT NULL DEFAULT '',
+    condicion_iva      TEXT NOT NULL DEFAULT '',
+    ambiente           TEXT NOT NULL CHECK (ambiente IN ('homo', 'prod')),
+    puntos_venta       TEXT NOT NULL DEFAULT '[1]',
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS arca_params (

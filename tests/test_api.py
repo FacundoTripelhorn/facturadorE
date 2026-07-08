@@ -100,7 +100,7 @@ def test_sin_datos_de_emisor_no_se_emite(api):
     """Primer arranque sin configurar: los datos del emisor van al PDF y la
     app exige completarlos (en Configuración) antes de emitir."""
     with api.conn:
-        api.conn.execute("DELETE FROM settings")
+        api.conn.execute("DELETE FROM emisores")
     _crear_cliente(api)
     r = api.post("/invoices", json={"imp_total": "100.00"})
     assert r.status_code == 409
