@@ -143,7 +143,7 @@ def test_el_pdf_usa_el_emisor_del_ambiente_del_comprobante(api, arca, monkeypatc
     )
     capturado = {}
 
-    def fake_render(inv, items, emisor, cuit_emisor, pais_ds=""):
+    def fake_render(inv, items, emisor, cuit_emisor, **kwargs):
         capturado["emisor"] = emisor
         return b"%PDF-fake"
 

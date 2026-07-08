@@ -318,15 +318,16 @@ CONFIG_FORM = {
     "emisor_iibb": "901-123456-7",
     "emisor_inicio_actividades": "01/2020",
     "emisor_condicion_iva": "IVA Responsable Inscripto",
-    "punto_venta": "1",
+    "puntos_venta": "1",
     "backup_s3_bucket": "",
     "backup_s3_prefix": "facturador",
 }
 
 
 def _sin_settings(api):
-    """Estado de primer arranque: la tabla settings vacía."""
+    """Estado de primer arranque: sin emisores y la tabla settings vacía."""
     with api.conn:
+        api.conn.execute("DELETE FROM emisores")
         api.conn.execute("DELETE FROM settings")
 
 
@@ -374,9 +375,10 @@ def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
 
 
 def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
+    # Varios PV habilitados separados por coma: se emite con el primero.
     r = api.post(
         "/ui/configuracion",
-        data={**CONFIG_FORM, "punto_venta": "7"},
+        data={**CONFIG_FORM, "puntos_venta": "7, 3"},
         follow_redirects=False,
     )
     assert r.status_code == 303
@@ -384,6 +386,14 @@ def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
     invoice_id = _generar_borrador(api)
     factura = api.get(f"/invoices/{invoice_id}").json()
     assert factura["punto_venta"] == 7
+
+
+def test_puntos_venta_no_numericos_rechazados(api, arca):
+    r = api.post(
+        "/ui/configuracion", data={**CONFIG_FORM, "puntos_venta": "1, dos"}
+    )
+    assert r.status_code == 422
+    assert "Datos inválidos" in r.text
 
 
 def test_nav_incluye_configuracion(api):
