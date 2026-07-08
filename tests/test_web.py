@@ -374,6 +374,18 @@ def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
     assert "Datos inválidos" in r.text
 
 
+def test_configuracion_con_solo_espacios_es_invalida(api, arca):
+    # El strip corre antes de validar: "   " no debe guardarse como vacío
+    # con un "Configuración guardada" que deja al emisor incompleto.
+    r = api.post(
+        "/ui/configuracion", data={**CONFIG_FORM, "emisor_razon_social": "   "}
+    )
+    assert r.status_code == 422
+    assert "Datos inválidos" in r.text
+    # El emisor sembrado sigue intacto: el intento fallido no pisó nada.
+    assert 'value="MI EMPRESA S.R.L."' in api.get("/configuracion").text
+
+
 def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
     # Varios PV habilitados separados por coma: se emite con el primero.
     r = api.post(

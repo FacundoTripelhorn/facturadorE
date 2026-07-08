@@ -26,6 +26,10 @@ class SettingsIn(BaseModel):
     El bloque del emisor es el del emisor que factura contra el ambiente
     activo (el ambiente lo declara el emisor, no este payload)."""
 
+    # Strip ANTES de validar: sin esto, un campo con solo espacios pasa el
+    # min_length, se guarda vacío y el emisor queda incompleto en silencio.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     emisor_razon_social: str = Field(min_length=1, max_length=200)
     emisor_domicilio: str = Field(min_length=1, max_length=200)
     # Literal del comprobante, p.ej. "Exento" o el nro de inscripción.
