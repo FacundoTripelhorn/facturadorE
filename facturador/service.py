@@ -92,13 +92,12 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_settings(self) -> Settings:
-        # El emisor es el del ambiente activo: homo y prod no se mezclan.
+        # El emisor es el que factura contra el ambiente activo.
         return load_settings(self.conn, self.config.env)
 
     def update_settings(self, payload: SettingsIn) -> Settings:
         save_settings(
             self.conn,
-            self.config.env,
             Settings(
                 emisor=Emisor(
                     razon_social=payload.emisor_razon_social.strip(),
@@ -106,7 +105,10 @@ class InvoiceService:
                     iibb=payload.emisor_iibb.strip(),
                     inicio_actividades=payload.emisor_inicio_actividades.strip(),
                     condicion_iva=payload.emisor_condicion_iva.strip(),
-                    punto_venta=payload.punto_venta,
+                    # La UI edita el emisor del ambiente activo; el alta de
+                    # emisores con ambiente propio llega con su feature.
+                    ambiente=self.config.env,
+                    puntos_venta=tuple(payload.puntos_venta),
                 ),
                 backup_s3_bucket=payload.backup_s3_bucket.strip(),
                 backup_s3_prefix=payload.backup_s3_prefix.strip(),
