@@ -43,7 +43,7 @@ def _setup_logging(config: Config) -> None:
 
 
 def main() -> None:
-    config = load_config()  # ya cargó <home>/.env (FACTURADOR_PORT incluido)
+    config = load_config()
     _setup_logging(config)
     port = int(os.environ.get("FACTURADOR_PORT", "8399"))
     host = "0.0.0.0" if os.environ.get("FACTURADOR_IN_DOCKER") else "127.0.0.1"

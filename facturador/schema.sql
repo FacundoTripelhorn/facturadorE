@@ -2,7 +2,8 @@
 -- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
 
 -- Configuración de dominio (la app es dueña de su configuración): datos del
--- emisor que van al PDF, punto de venta y config de backups. Clave/valor
+-- emisor con su punto de venta (claves por ambiente, p.ej.
+-- "homo.emisor_razon_social") y config de backups (global). Clave/valor
 -- para que agregar un setting no requiera migración de esquema.
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,

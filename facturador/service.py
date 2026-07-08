@@ -92,11 +92,13 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_settings(self) -> Settings:
-        return load_settings(self.conn)
+        # El emisor es el del ambiente activo: homo y prod no se mezclan.
+        return load_settings(self.conn, self.config.env)
 
     def update_settings(self, payload: SettingsIn) -> Settings:
         save_settings(
             self.conn,
+            self.config.env,
             Settings(
                 emisor=Emisor(
                     razon_social=payload.emisor_razon_social.strip(),
@@ -104,8 +106,8 @@ class InvoiceService:
                     iibb=payload.emisor_iibb.strip(),
                     inicio_actividades=payload.emisor_inicio_actividades.strip(),
                     condicion_iva=payload.emisor_condicion_iva.strip(),
+                    punto_venta=payload.punto_venta,
                 ),
-                punto_venta=payload.punto_venta,
                 backup_s3_bucket=payload.backup_s3_bucket.strip(),
                 backup_s3_prefix=payload.backup_s3_prefix.strip(),
             ),
@@ -250,7 +252,7 @@ class InvoiceService:
         data = {
             "client_id": client["id"],
             "cbte_tipo": CBTE_TIPO_FACTURA_E,
-            "punto_venta": settings.punto_venta,
+            "punto_venta": settings.emisor.punto_venta,
             "fecha_cbte": fecha_cbte,
             "fecha_pago": fecha_pago,
             "tipo_expo": TIPO_EXPO_SERVICIOS,

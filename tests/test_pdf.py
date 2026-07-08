@@ -137,7 +137,7 @@ def test_pdf_inexistente_es_404(api):
 def test_html_contiene_los_datos_del_comprobante(api, arca):
     # Los datos del emisor salen de la DB (sembrados por seed_settings en
     # el fixture), no del entorno.
-    emisor = load_settings(api.conn).emisor
+    emisor = load_settings(api.conn, "homo").emisor
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
@@ -169,7 +169,7 @@ def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
     items = repo.get_invoice_items(api.conn, factura["id"])
 
     html = render_invoice_html(
-        inv, items, load_settings(api.conn).emisor, int(TEST_CUIT)
+        inv, items, load_settings(api.conn, "homo").emisor, int(TEST_CUIT)
     )
 
     assert "<script>" not in html

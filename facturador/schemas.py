@@ -22,7 +22,8 @@ def _validar_fecha(value: str, campo: str) -> str:
 
 
 class SettingsIn(BaseModel):
-    """Configuración de dominio editable desde la UI (vive en la DB)."""
+    """Configuración de dominio editable desde la UI (vive en la DB).
+    El bloque del emisor (punto de venta incluido) es del ambiente activo."""
 
     emisor_razon_social: str = Field(min_length=1, max_length=200)
     emisor_domicilio: str = Field(min_length=1, max_length=200)
