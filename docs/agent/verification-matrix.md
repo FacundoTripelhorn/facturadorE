@@ -16,9 +16,14 @@ need full confidence (or before opening a PR):
 
 | Step | Command | When required |
 |------|---------|---------------|
-| 1 | `uv run ruff check .` | Any Python change |
-| 2 | `uv run mypy` | Any Python change |
-| 3 | `uv run pytest` | Any behavior change |
+| 1 | `uv run ruff check .` or `./scripts/agent/lint.sh` | Any Python change |
+| 2 | `uv run mypy` or `./scripts/agent/typecheck.sh` | Any Python change |
+| 3 | `uv run pytest` or `./scripts/agent/test.sh` | Any behavior change |
+
+**Helper scripts** under `scripts/agent/` wrap the same `uv` commands so agents
+do not need to guess tooling. Run `./scripts/agent/doctor.sh` for a full
+environment check: Python and `uv` versions, `uv sync`, then lint, typecheck,
+and tests in order.
 
 CI runs the same three steps in `.github/workflows/ci.yml` (`checks` job). A
 separate `docker` job runs `docker build -t facturador:ci .` — add that
