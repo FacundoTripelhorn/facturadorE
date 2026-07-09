@@ -14,12 +14,15 @@ of exploring the repo blindly.
 4. [`docs/agent/architecture-graphs.md`](docs/agent/architecture-graphs.md) — **Mermaid
    diagrams** for runtime shape, boundaries, flows, and security (navigation aids;
    code/tests/`docs/design.md` are authoritative).
-5. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
-6. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
-7. Setup for the active environment:
+5. [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md) — **intentional
+   behaviors and environment limits** agents often misdiagnose as bugs (localhost
+   bind, Docker publish, ARCA credentials, WSFEX vs WSFEv1).
+6. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
+7. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
+8. Setup for the active environment:
    - [`docs/setup-homologacion.md`](docs/setup-homologacion.md) — homologación (start here).
    - [`docs/setup-produccion.md`](docs/setup-produccion.md) — production.
-8. Other agent supplements: [`docs/agent/`](docs/agent/).
+9. Other agent supplements: [`docs/agent/`](docs/agent/).
 
 ## Project shape
 
@@ -98,6 +101,8 @@ Do not regress these without an explicit design change in `docs/design.md`:
 - **Redact sensitive values in logs** (TA token/sign, CMS payloads).
 
 ## Known environment limitations (not product bugs)
+
+Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
 
 - Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints.
   This is expected — fix credentials, not application error handling, unless the
