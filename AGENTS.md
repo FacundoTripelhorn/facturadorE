@@ -7,12 +7,14 @@ of exploring the repo blindly.
 ## Mandatory first reads
 
 1. This file (`AGENTS.md`) — project shape, commands, constraints, output format.
-2. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
-3. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
-4. Setup for the active environment:
+2. [`docs/agent/repo-map.md`](docs/agent/repo-map.md) — **where code lives by task type**;
+   read this before broad repository search or exploratory greps.
+3. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
+4. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
+5. Setup for the active environment:
    - [`docs/setup-homologacion.md`](docs/setup-homologacion.md) — homologación (start here).
    - [`docs/setup-produccion.md`](docs/setup-produccion.md) — production.
-5. Future agent supplements (when present): [`docs/agent/`](docs/agent/).
+6. Other agent supplements: [`docs/agent/`](docs/agent/).
 
 ## Project shape
 
