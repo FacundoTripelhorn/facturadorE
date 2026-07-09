@@ -9,15 +9,17 @@ of exploring the repo blindly.
 1. This file (`AGENTS.md`) — project shape, commands, constraints, output format.
 2. [`docs/agent/repo-map.md`](docs/agent/repo-map.md) — **where code lives by task type**;
    read this before broad repository search or exploratory greps.
-3. [`docs/agent/architecture-graphs.md`](docs/agent/architecture-graphs.md) — **Mermaid
+3. [`docs/agent/verification-matrix.md`](docs/agent/verification-matrix.md) — **which
+   checks to run** by task type (default lint/types/tests order and narrow scopes).
+4. [`docs/agent/architecture-graphs.md`](docs/agent/architecture-graphs.md) — **Mermaid
    diagrams** for runtime shape, boundaries, flows, and security (navigation aids;
    code/tests/`docs/design.md` are authoritative).
-4. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
-5. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
-6. Setup for the active environment:
+5. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
+6. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
+7. Setup for the active environment:
    - [`docs/setup-homologacion.md`](docs/setup-homologacion.md) — homologación (start here).
    - [`docs/setup-produccion.md`](docs/setup-produccion.md) — production.
-7. Other agent supplements: [`docs/agent/`](docs/agent/).
+8. Other agent supplements: [`docs/agent/`](docs/agent/).
 
 ## Project shape
 
@@ -44,6 +46,8 @@ Run from the repo root after `uv sync`:
 
 Tests use an in-process ARCA fake (`tests/arca_fake.py`); no network or real
 credentials required. CI runs the same three checks (see `.github/workflows/ci.yml`).
+For narrower scopes by task type, see
+[`docs/agent/verification-matrix.md`](docs/agent/verification-matrix.md).
 
 ## Local dev prerequisites
 

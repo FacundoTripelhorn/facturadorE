@@ -7,8 +7,9 @@ Curated Mermaid diagrams for **orientation and architectural intent**. They are
 `tests/`, and [`docs/design.md`](../design.md). When a diagram disagrees with
 those, trust the code and design doc.
 
-For file-level navigation, see [`repo-map.md`](repo-map.md). For commands,
-constraints, and verification, see [`AGENTS.md`](../../AGENTS.md).
+For file-level navigation, see [`repo-map.md`](repo-map.md). For commands and
+constraints, see [`AGENTS.md`](../../AGENTS.md). For verification scopes by task,
+see [`verification-matrix.md`](verification-matrix.md).
 
 ---
 
