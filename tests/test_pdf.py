@@ -132,10 +132,8 @@ def test_pdf_inexistente_es_404(api):
 
 
 def test_el_pdf_usa_el_emisor_del_ambiente_del_comprobante(api, arca, monkeypatch):
-    """El comprobante es un snapshot: su PDF usa el emisor del ambiente en
-    que se emitió (inv["environment"]), no el del ambiente activo — mismo
-    criterio que es_homo. Acá la factura es de homo y aparece un emisor de
-    prod que no debe filtrarse al PDF."""
+    """El comprobante es un snapshot: su PDF usa el emisor persistido en la
+    factura, no el activo del ambiente ni el de otro ambiente."""
     factura = _factura_autorizada(api)
     save_settings(
         api.conn,
@@ -154,6 +152,44 @@ def test_el_pdf_usa_el_emisor_del_ambiente_del_comprobante(api, arca, monkeypatc
 
     assert r.status_code == 200, r.text
     assert capturado["emisor"].ambiente == "homo"
+    assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
+
+
+def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkeypatch):
+    """Cambiar el emisor activo no altera el encabezado de facturas ya creadas."""
+    factura = _factura_autorizada(api)
+    emisor_original = repo.get_invoice(api.conn, factura["id"])["emisor_id"]
+
+    segundo = repo.create_emisor(
+        api.conn,
+        {
+            "razon_social": "OTRO EMISOR S.A.",
+            "domicilio": "Otra calle 1",
+            "iibb": "Exento",
+            "inicio_actividades": "01/01/2019",
+            "condicion_iva": "IVA Responsable Inscripto",
+            "ambiente": "homo",
+            "puntos_venta": "[5]",
+        },
+    )
+    from facturador.settings import set_active_emisor
+
+    set_active_emisor(api.conn, segundo["id"])
+    assert load_settings(api.conn, "homo").emisor.razon_social == "OTRO EMISOR S.A."
+
+    capturado = {}
+
+    def fake_render(inv, items, emisor, cuit_emisor, **kwargs):
+        capturado["emisor"] = emisor
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(
+        "facturador.api.invoices.render_invoice_pdf", fake_render
+    )
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+
+    assert r.status_code == 200, r.text
+    assert capturado["emisor"].id == emisor_original
     assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
 
 

@@ -9,6 +9,7 @@ from ..constants import InvoiceStatus
 from ._common import new_id, now
 
 INVOICE_FIELDS = (
+    "emisor_id",
     "client_id",
     "cbte_tipo",
     "punto_venta",

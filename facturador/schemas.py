@@ -147,6 +147,7 @@ class ItemOut(BaseModel):
 
 class InvoiceOut(BaseModel):
     id: str
+    emisor_id: str | None
     client_id: str | None
     arca_id: int | None
     cbte_tipo: int

@@ -122,6 +122,14 @@ def set_active_emisor(conn: sqlite3.Connection, emisor_id: str) -> None:
     repo.save_settings(conn, {active_emisor_key(emisor["ambiente"]): emisor_id})
 
 
+def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
+    """Emisor persistido en un comprobante (snapshot por id)."""
+    row = repo.get_emisor(conn, emisor_id)
+    if row is None:
+        raise ValueError(f"Emisor {emisor_id} no existe")
+    return _row_to_emisor(row)
+
+
 def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
     """Settings con el emisor activo del ambiente y la config global de backups."""
     row = _active_emisor_row(conn, env)

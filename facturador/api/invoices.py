@@ -11,7 +11,7 @@ from ..constants import InvoiceStatus
 from ..pdf import invoice_pdf_filename, render_invoice_pdf
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
-from ..settings import load_settings
+from ..settings import load_emisor
 from .deps import ServiceDep
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -69,13 +69,14 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
             f"El PDF existe solo para facturas autorizadas "
             f"(estado actual: {inv['status']})"
         )
+    if not inv["emisor_id"]:
+        raise ConflictError(
+            "La factura no tiene emisor asociado; no se puede generar el PDF."
+        )
     pdf = render_invoice_pdf(
         inv,
         repo.get_invoice_items(service.conn, invoice_id),
-        # El emisor es el del ambiente del comprobante, no el activo: igual
-        # que es_homo, un PDF de homologación no debe mostrar los datos del
-        # emisor de producción.
-        load_settings(service.conn, inv["environment"]).emisor,
+        load_emisor(service.conn, inv["emisor_id"]),
         service.wsfex.cuit,
         pais_ds=_param_ds(service.conn, "pais", inv["dst_cmp"]),
         cuit_pais_ds=_param_ds(

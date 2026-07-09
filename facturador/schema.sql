@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS clients (
 
 CREATE TABLE IF NOT EXISTS invoices (
     id                 TEXT PRIMARY KEY,
+    emisor_id          TEXT REFERENCES emisores(id),
     client_id          TEXT REFERENCES clients(id),
     arca_id            INTEGER UNIQUE,
     cbte_tipo          INTEGER NOT NULL DEFAULT 19,

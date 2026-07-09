@@ -316,7 +316,13 @@ class InvoiceService:
                 f" ({', '.join(str(p) for p in pvs)})"
             )
 
+        if settings.emisor.id is None:
+            raise ConflictError(
+                "No hay emisor activo para emitir; elegir uno en Configuración."
+            )
+
         data = {
+            "emisor_id": settings.emisor.id,
             "client_id": client["id"],
             "cbte_tipo": CBTE_TIPO_FACTURA_E,
             "punto_venta": pv,
