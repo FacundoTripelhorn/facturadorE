@@ -17,7 +17,6 @@ from .emisores import (
     EMISOR_UPDATE_FIELDS,
     create_emisor,
     get_emisor,
-    get_emisor_por_ambiente,
     list_emisores,
     update_emisor,
 )
@@ -52,7 +51,6 @@ __all__ = [
     "get_client",
     "get_emisor",
     "get_default_client",
-    "get_emisor_por_ambiente",
     "get_invoice",
     "get_invoice_items",
     "get_params",

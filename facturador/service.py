@@ -44,7 +44,7 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
-from .settings import Settings, load_settings, set_active_emisor
+from .settings import Settings, get_active_emisor_id, load_settings, set_active_emisor
 
 logger = logging.getLogger(__name__)
 
@@ -131,13 +131,7 @@ class InvoiceService:
                 "puntos_venta": json.dumps(list(payload.puntos_venta)),
             },
         )
-        raw = repo.get_settings(self.conn)
-        active_id = raw.get("active_emisor_id")
-        if active_id:
-            candidato = repo.get_emisor(self.conn, active_id)
-            if candidato is None or candidato["ambiente"] != payload.ambiente:
-                active_id = None
-        if not active_id and payload.ambiente == self.config.env:
+        if get_active_emisor_id(self.conn, payload.ambiente) is None:
             set_active_emisor(self.conn, row["id"])
         return row
 
@@ -308,11 +302,14 @@ class InvoiceService:
             )
 
         pvs = settings.emisor.puntos_venta
-        pv = (
-            payload.punto_venta
-            if payload.punto_venta is not None
-            else settings.emisor.punto_venta
-        )
+        if len(pvs) == 1:
+            pv = pvs[0]
+        elif payload.punto_venta is not None:
+            pv = payload.punto_venta
+        else:
+            raise DomainError(
+                "Indicar punto de venta: el emisor activo tiene más de uno habilitado"
+            )
         if pv not in pvs:
             raise DomainError(
                 f"Punto de venta {pv} no está habilitado para este emisor"

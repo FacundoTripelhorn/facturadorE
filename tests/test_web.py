@@ -394,8 +394,8 @@ def test_configuracion_con_solo_espacios_es_invalida(api, arca):
 
 
 def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
-    # Varios PV habilitados separados por coma: se emite con el primero.
-    r = _editar_emisor_activo(api, puntos_venta="7, 3")
+    # Con un solo PV habilitado no hace falta elegirlo en el form.
+    r = _editar_emisor_activo(api, puntos_venta="7")
     assert r.status_code == 303
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
@@ -442,9 +442,9 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
     assert r.status_code == 303
     assert "★" in api.get("/configuracion").text
 
-    invoice_id = _generar_borrador(api)
+    invoice_id = _generar_borrador(api, punto_venta="5")
     factura = api.get(f"/invoices/{invoice_id}").json()
-    assert factura["punto_venta"] == 5  # primer PV del emisor activo
+    assert factura["punto_venta"] == 5  # PV elegido al emitir
 
 
 def test_seleccion_punto_venta_al_emitir(api, arca):

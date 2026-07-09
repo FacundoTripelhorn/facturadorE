@@ -9,10 +9,9 @@ En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
 
 El emisor es una entidad (tabla ``emisores``): cada uno declara con qué
 ambiente interactúa y qué puntos de venta tiene habilitados, y un mismo
-ambiente puede tener varios. La app opera con el emisor activo del ambiente
-corriente (``active_emisor_id`` en settings); si no hay uno válido, usa el
-más antiguo del ambiente. La config de backups es global (tabla ``settings``,
-clave/valor): el backup cubre la DB entera, no un emisor.
+ambiente puede tener varios. La app opera con el emisor activo explícito
+del ambiente corriente (``active_emisor_id_<ambiente>`` en settings); sin
+selección no hay emisor operativo. La config de backups es global.
 """
 
 from __future__ import annotations
@@ -23,7 +22,9 @@ from dataclasses import dataclass
 
 from . import repo
 
-ACTIVE_EMISOR_KEY = "active_emisor_id"
+
+def active_emisor_key(ambiente: str) -> str:
+    return f"active_emisor_id_{ambiente}"
 CONDICION_IVA_DEFAULT = "IVA Responsable Inscripto"
 BACKUP_PREFIX_DEFAULT = "facturador"
 
@@ -47,7 +48,7 @@ class Emisor:
 
     @property
     def punto_venta(self) -> int:
-        """PV por defecto al emitir: el primero de la lista habilitada."""
+        """Primer PV habilitado; solo para el caso de un único PV."""
         return self.puntos_venta[0]
 
     @property
@@ -98,29 +99,32 @@ def _row_to_emisor(row: sqlite3.Row) -> Emisor:
     )
 
 
-def _resolve_emisor_row(conn: sqlite3.Connection, env: str) -> sqlite3.Row | None:
-    """Emisor activo del ambiente, o el más antiguo si no hay selección."""
-    raw = repo.get_settings(conn)
-    active_id = raw.get(ACTIVE_EMISOR_KEY)
-    if active_id:
-        candidato = repo.get_emisor(conn, active_id)
-        if candidato is not None and candidato["ambiente"] == env:
-            return candidato
-    return repo.get_emisor_por_ambiente(conn, env)
+def _active_emisor_row(conn: sqlite3.Connection, env: str) -> sqlite3.Row | None:
+    """Emisor activo explícito del ambiente, o ninguno."""
+    active_id = repo.get_settings(conn).get(active_emisor_key(env))
+    if not active_id:
+        return None
+    candidato = repo.get_emisor(conn, active_id)
+    if candidato is None or candidato["ambiente"] != env:
+        return None
+    return candidato
 
 
 def get_active_emisor_id(conn: sqlite3.Connection, env: str) -> str | None:
-    row = _resolve_emisor_row(conn, env)
+    row = _active_emisor_row(conn, env)
     return None if row is None else row["id"]
 
 
 def set_active_emisor(conn: sqlite3.Connection, emisor_id: str) -> None:
-    repo.save_settings(conn, {ACTIVE_EMISOR_KEY: emisor_id})
+    emisor = repo.get_emisor(conn, emisor_id)
+    if emisor is None:
+        raise ValueError(f"Emisor {emisor_id} no existe")
+    repo.save_settings(conn, {active_emisor_key(emisor["ambiente"]): emisor_id})
 
 
 def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
     """Settings con el emisor activo del ambiente y la config global de backups."""
-    row = _resolve_emisor_row(conn, env)
+    row = _active_emisor_row(conn, env)
     raw = repo.get_settings(conn)
     return Settings(
         emisor=Emisor(ambiente=env) if row is None else _row_to_emisor(row),
@@ -147,7 +151,7 @@ def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
             },
         )
     else:
-        row = repo.create_emisor(
+        repo.create_emisor(
             conn,
             {
                 "razon_social": emisor.razon_social,
@@ -159,7 +163,6 @@ def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
                 "puntos_venta": json.dumps(list(emisor.puntos_venta)),
             },
         )
-        set_active_emisor(conn, row["id"])
     repo.save_settings(
         conn,
         {

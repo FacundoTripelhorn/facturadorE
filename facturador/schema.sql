@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Emisores (la app es dueña de su configuración): la entidad es el emisor,
 -- y cada uno declara con qué ambiente interactúa y qué puntos de venta
 -- tiene habilitados (JSON). Un mismo ambiente puede tener varios emisores;
--- hoy la app opera con el más antiguo del ambiente activo.
+-- la app opera con el activo explícito (active_emisor_id_<ambiente>).
 CREATE TABLE IF NOT EXISTS emisores (
     id                 TEXT PRIMARY KEY,
     razon_social       TEXT NOT NULL DEFAULT '',
