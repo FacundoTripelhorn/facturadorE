@@ -14,13 +14,12 @@ from .clients import (
 )
 from .emisores import (
     EMISOR_FIELDS,
+    EMISOR_UPDATE_FIELDS,
     create_emisor,
-    delete_emisor,
     get_emisor,
     get_emisor_por_ambiente,
     list_emisores,
     update_emisor,
-    upsert_emisor,
 )
 from .invoices import (
     INVOICE_FIELDS,
@@ -44,12 +43,12 @@ __all__ = [
     "count_invoices_by_status",
     "create_emisor",
     "EMISOR_FIELDS",
+    "EMISOR_UPDATE_FIELDS",
     "INVOICE_FIELDS",
     "UPDATABLE_INVOICE_FIELDS",
     "create_client",
     "create_invoice",
     "delete_draft",
-    "delete_emisor",
     "get_client",
     "get_emisor",
     "get_default_client",
@@ -69,5 +68,4 @@ __all__ = [
     "update_client",
     "update_emisor",
     "update_invoice",
-    "upsert_emisor",
 ]

@@ -21,8 +21,8 @@ def _validar_fecha(value: str, campo: str) -> str:
     return value
 
 
-class EmisorIn(BaseModel):
-    """Alta/edición de un emisor: declara su ambiente y puntos de venta."""
+class EmisorCreateIn(BaseModel):
+    """Alta de un emisor: declara su ambiente (inmutable) y puntos de venta."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -49,26 +49,17 @@ class EmisorIn(BaseModel):
         return valores
 
 
-class BackupSettingsIn(BaseModel):
-    """Config global de backups (no depende del emisor)."""
-
-    backup_s3_bucket: str = ""
-    backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
-
-
-class SettingsIn(BaseModel):
-    """Compatibilidad con rutas/tests que guardan emisor + backups juntos."""
+class EmisorUpdateIn(BaseModel):
+    """Edición de un emisor existente; el ambiente no se puede cambiar."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    emisor_razon_social: str = Field(min_length=1, max_length=200)
-    emisor_domicilio: str = Field(min_length=1, max_length=200)
-    emisor_iibb: str = Field(min_length=1, max_length=50)
-    emisor_inicio_actividades: str = Field(min_length=1, max_length=20)
-    emisor_condicion_iva: str = CONDICION_IVA_DEFAULT
+    razon_social: str = Field(min_length=1, max_length=200)
+    domicilio: str = Field(min_length=1, max_length=200)
+    iibb: str = Field(min_length=1, max_length=50)
+    inicio_actividades: str = Field(min_length=1, max_length=20)
+    condicion_iva: str = CONDICION_IVA_DEFAULT
     puntos_venta: list[int] = Field(default=[1], min_length=1)
-    backup_s3_bucket: str = ""
-    backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
     @field_validator("puntos_venta")
     @classmethod
@@ -76,6 +67,13 @@ class SettingsIn(BaseModel):
         if any(pv < 1 for pv in valores):
             raise ValueError("los puntos de venta deben ser >= 1")
         return valores
+
+
+class BackupSettingsIn(BaseModel):
+    """Config global de backups (no depende del emisor)."""
+
+    backup_s3_bucket: str = ""
+    backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 
 class ClientIn(BaseModel):

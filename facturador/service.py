@@ -37,15 +37,14 @@ from .mappers import (
     row_to_wsfex_invoice,
     wsfex_invoice_to_raw,
 )
-from .schemas import BackupSettingsIn, ClientIn, EmisorIn, InvoiceCreate, SettingsIn
-from .settings import (
-    Emisor,
-    Settings,
-    get_active_emisor_id,
-    load_settings,
-    save_settings,
-    set_active_emisor,
+from .schemas import (
+    BackupSettingsIn,
+    ClientIn,
+    EmisorCreateIn,
+    EmisorUpdateIn,
+    InvoiceCreate,
 )
+from .settings import Settings, load_settings, set_active_emisor
 
 logger = logging.getLogger(__name__)
 
@@ -101,28 +100,6 @@ class InvoiceService:
     def get_settings(self) -> Settings:
         return load_settings(self.conn, self.config.env)
 
-    def update_settings(self, payload: SettingsIn) -> Settings:
-        # Compatibilidad: actualiza el emisor activo del ambiente corriente.
-        actual = self.get_settings()
-        save_settings(
-            self.conn,
-            Settings(
-                emisor=Emisor(
-                    id=actual.emisor.id,
-                    razon_social=payload.emisor_razon_social,
-                    domicilio=payload.emisor_domicilio,
-                    iibb=payload.emisor_iibb,
-                    inicio_actividades=payload.emisor_inicio_actividades,
-                    condicion_iva=payload.emisor_condicion_iva,
-                    ambiente=self.config.env,
-                    puntos_venta=tuple(payload.puntos_venta),
-                ),
-                backup_s3_bucket=payload.backup_s3_bucket,
-                backup_s3_prefix=payload.backup_s3_prefix,
-            ),
-        )
-        return self.get_settings()
-
     def update_backup_settings(self, payload: BackupSettingsIn) -> Settings:
         actual = self.get_settings()
         repo.save_settings(
@@ -141,7 +118,7 @@ class InvoiceService:
     def list_emisores(self) -> list[sqlite3.Row]:
         return repo.list_emisores(self.conn)
 
-    def create_emisor(self, payload: EmisorIn) -> sqlite3.Row:
+    def create_emisor(self, payload: EmisorCreateIn) -> sqlite3.Row:
         row = repo.create_emisor(
             self.conn,
             {
@@ -164,9 +141,8 @@ class InvoiceService:
             set_active_emisor(self.conn, row["id"])
         return row
 
-    def update_emisor(self, emisor_id: str, payload: EmisorIn) -> sqlite3.Row:
-        existente = repo.get_emisor(self.conn, emisor_id)
-        if existente is None:
+    def update_emisor(self, emisor_id: str, payload: EmisorUpdateIn) -> sqlite3.Row:
+        if repo.get_emisor(self.conn, emisor_id) is None:
             raise NotFoundError(f"Emisor {emisor_id} no existe")
         row = repo.update_emisor(
             self.conn,
@@ -177,32 +153,12 @@ class InvoiceService:
                 "iibb": payload.iibb,
                 "inicio_actividades": payload.inicio_actividades,
                 "condicion_iva": payload.condicion_iva,
-                "ambiente": existente["ambiente"],
                 "puntos_venta": json.dumps(list(payload.puntos_venta)),
             },
         )
         if row is None:
             raise NotFoundError(f"Emisor {emisor_id} no existe")
         return row
-
-    def delete_emisor(self, emisor_id: str) -> None:
-        existente = repo.get_emisor(self.conn, emisor_id)
-        if existente is None:
-            raise NotFoundError(f"Emisor {emisor_id} no existe")
-        if existente["ambiente"] == self.config.env:
-            activo = get_active_emisor_id(self.conn, self.config.env)
-            if activo == emisor_id:
-                otros = [
-                    e
-                    for e in repo.list_emisores(self.conn, self.config.env)
-                    if e["id"] != emisor_id
-                ]
-                if otros:
-                    set_active_emisor(self.conn, otros[0]["id"])
-                else:
-                    repo.save_settings(self.conn, {"active_emisor_id": ""})
-        if not repo.delete_emisor(self.conn, emisor_id):
-            raise NotFoundError(f"Emisor {emisor_id} no existe")
 
     def activate_emisor(self, emisor_id: str) -> None:
         existente = repo.get_emisor(self.conn, emisor_id)

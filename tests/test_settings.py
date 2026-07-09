@@ -50,10 +50,20 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
 
 def test_guardar_dos_veces_actualiza_el_mismo_emisor(conn):
     save_settings(conn, Settings(emisor=Emisor(razon_social="V1")))
-    save_settings(conn, Settings(emisor=Emisor(razon_social="V2")))
+    actual = load_settings(conn, "homo")
+    save_settings(
+        conn,
+        Settings(emisor=Emisor(id=actual.emisor.id, razon_social="V2")),
+    )
     assert load_settings(conn, "homo").emisor.razon_social == "V2"
     filas = conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0]
     assert filas == 1
+
+
+def test_guardar_sin_id_crea_un_emisor_nuevo(conn):
+    save_settings(conn, Settings(emisor=Emisor(razon_social="V1")))
+    save_settings(conn, Settings(emisor=Emisor(razon_social="V2")))
+    assert conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0] == 2
 
 
 def test_cada_emisor_declara_su_ambiente(conn):
@@ -90,7 +100,7 @@ def test_cada_emisor_declara_su_ambiente(conn):
 def test_un_ambiente_puede_tener_varios_emisores(conn):
     """Varios emisores en el mismo ambiente: sin selección explícita, el más
     antiguo; con active_emisor_id, el elegido."""
-    repo.upsert_emisor(
+    repo.create_emisor(
         conn,
         dict.fromkeys(repo.EMISOR_FIELDS, "")
         | {"razon_social": "PRIMERO", "ambiente": "homo", "puntos_venta": "[1]"},

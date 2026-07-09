@@ -34,9 +34,9 @@ from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
 from ..schemas import (
     BackupSettingsIn,
     ClientIn,
-    EmisorIn,
+    EmisorCreateIn,
+    EmisorUpdateIn,
     InvoiceCreate,
-    SettingsIn,
 )
 from ..service import NotFoundError, ServiceError, StaleRegistryError
 from ..settings import (
@@ -455,7 +455,6 @@ def configuracion(request: Request, service: ServiceDep, edit: str | None = None
         "guardado": "Emisor guardado.",
         "backup": "Configuración de backups guardada.",
         "activado": "Emisor activo actualizado.",
-        "eliminado": "Emisor eliminado.",
     }
     return _pagina_configuracion(
         request,
@@ -495,16 +494,25 @@ def guardar_emisor(
             status_code=422,
         )
     try:
-        existente = repo.get_emisor(service.conn, emisor_id) if emisor_id else None
-        payload = EmisorIn(
-            razon_social=razon_social,
-            domicilio=domicilio,
-            iibb=iibb,
-            inicio_actividades=inicio_actividades,
-            condicion_iva=condicion_iva,
-            ambiente=existente["ambiente"] if existente else ambiente,
-            puntos_venta=pvs,
-        )
+        if emisor_id:
+            update_payload = EmisorUpdateIn(
+                razon_social=razon_social,
+                domicilio=domicilio,
+                iibb=iibb,
+                inicio_actividades=inicio_actividades,
+                condicion_iva=condicion_iva,
+                puntos_venta=pvs,
+            )
+        else:
+            create_payload = EmisorCreateIn(
+                razon_social=razon_social,
+                domicilio=domicilio,
+                iibb=iibb,
+                inicio_actividades=inicio_actividades,
+                condicion_iva=condicion_iva,
+                ambiente=ambiente,
+                puntos_venta=pvs,
+            )
     except ValidationError as exc:
         detalles = "; ".join(e["msg"] for e in exc.errors())
         return _pagina_configuracion(
@@ -516,9 +524,9 @@ def guardar_emisor(
         )
     try:
         if emisor_id:
-            service.update_emisor(emisor_id, payload)
+            service.update_emisor(emisor_id, update_payload)
         else:
-            service.create_emisor(payload)
+            service.create_emisor(create_payload)
     except ServiceError as exc:
         return _pagina_configuracion(
             request,
@@ -537,15 +545,6 @@ def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
     except ServiceError:
         return RedirectResponse("/configuracion", status_code=303)
     return RedirectResponse("/configuracion?aviso=activado", status_code=303)
-
-
-@router.post("/ui/emisores/{emisor_id}/eliminar")
-def eliminar_emisor(request: Request, service: ServiceDep, emisor_id: str):
-    try:
-        service.delete_emisor(emisor_id)
-    except ServiceError:
-        return RedirectResponse("/configuracion", status_code=303)
-    return RedirectResponse("/configuracion?aviso=eliminado", status_code=303)
 
 
 @router.post("/ui/configuracion/backup", response_class=HTMLResponse)
@@ -567,47 +566,3 @@ def guardar_backup(
         )
     service.update_backup_settings(payload)
     return RedirectResponse("/configuracion?aviso=backup", status_code=303)
-
-
-@router.post("/ui/configuracion", response_class=HTMLResponse)
-def guardar_configuracion(
-    request: Request,
-    service: ServiceDep,
-    emisor_razon_social: str = Form(""),
-    emisor_domicilio: str = Form(""),
-    emisor_iibb: str = Form(""),
-    emisor_inicio_actividades: str = Form(""),
-    emisor_condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
-    puntos_venta: str = Form("1"),
-    backup_s3_bucket: str = Form(""),
-    backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
-):
-    """Compatibilidad con tests/rutas viejas: actualiza el emisor activo."""
-    try:
-        pvs = _parse_puntos_venta_form(puntos_venta)
-    except ValueError:
-        return _pagina_configuracion(
-            request,
-            service,
-            error="Datos inválidos: los puntos de venta deben ser números"
-            " separados por coma",
-            status_code=422,
-        )
-    try:
-        payload = SettingsIn(
-            emisor_razon_social=emisor_razon_social,
-            emisor_domicilio=emisor_domicilio,
-            emisor_iibb=emisor_iibb,
-            emisor_inicio_actividades=emisor_inicio_actividades,
-            emisor_condicion_iva=emisor_condicion_iva,
-            puntos_venta=pvs,
-            backup_s3_bucket=backup_s3_bucket,
-            backup_s3_prefix=backup_s3_prefix,
-        )
-    except ValidationError as exc:
-        detalles = "; ".join(e["msg"] for e in exc.errors())
-        return _pagina_configuracion(
-            request, service, error=f"Datos inválidos: {detalles}", status_code=422
-        )
-    service.update_settings(payload)
-    return RedirectResponse("/configuracion?aviso=guardado", status_code=303)
