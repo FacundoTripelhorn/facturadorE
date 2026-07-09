@@ -1,0 +1,18 @@
+---
+description: ARCA integration and security constraints — do not regress
+alwaysApply: true
+---
+
+# ARCA & security
+
+Full rules: [`AGENTS.md`](AGENTS.md) (Architectural and security rules), [`docs/design.md`](docs/design.md).
+Authorize idempotency/recovery flow: [`docs/agent/architecture-graphs.md`](docs/agent/architecture-graphs.md) (Invoice authorization sequence).
+
+## Non-negotiable
+
+- **Localhost only:** bind `127.0.0.1` on the host; Docker publishes `127.0.0.1:PORT` only. Do not change uvicorn to `0.0.0.0` outside the container, add tunnels, or reverse proxies.
+- **No secret logging:** redact TA token/sign, CMS payloads, and cert/key material in logs.
+- **Secrets stay local:** never commit certs/keys to the repo or CI; key files remain mode 400/600.
+- **Tests use the in-process fake:** `tests/arca_fake.py` — no real ARCA network calls in `pytest`.
+- **Preserve authorize idempotency/recovery:** persist `arca_id` and `raw_request` before the SOAP call; retries reuse the same Id; reconcile with `FEXGetCMP` on retry (`facturador/service.py`, design.md §2.3).
+- **ARCA numbering is authoritative:** reconcile with `FEXGetLast_CMP`; never rely on a local counter alone.
