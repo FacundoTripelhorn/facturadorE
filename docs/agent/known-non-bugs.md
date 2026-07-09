@@ -174,6 +174,31 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 
 ---
 
+## Multi-emisor: schema ready, selection UI pending (FAC-8)
+
+**Symptom:** The `emisores` table holds multiple rows for the same `ambiente`,
+but the app always invoices with the **oldest** emisor. `/configuracion` edits
+a single emisor and does not offer alta or switching. Saving settings appears to
+“ignore” extra rows.
+
+**Expected.** The data model and repo layer (`facturador/repo/emisores.py`,
+`facturador/settings.py`) were prepared for multi-emisor work; the **UI and
+runtime selection** for FAC-8 are not implemented yet. `upsert_emisor` updates
+the oldest row for that ambiente; `load_settings(conn, env)` resolves the same
+row. Invoicing uses `Emisor.punto_venta` (first entry in `puntos_venta`).
+
+**Do not:**
+
+- Delete “duplicate” emisor rows as a bugfix unless the task explicitly covers
+  data migration.
+- Move emisor fields back into the flat `settings` key/value table.
+- Assume `/configuracion` already implements alta de emisores — that is FAC-8.
+
+**Fix (when scoped):** implement FAC-8 (alta/lista/selección de emisor y PV).
+Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
+
+---
+
 ## Quick triage
 
 | Observation | Likely cause | Action |
@@ -184,3 +209,4 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 | `cms.cert.untrusted` | Self-signed test cert | WSASS cert or `arca_fake` tests |
 | Emisor not in `.env` | Config in SQLite | Use `/configuracion` or DB seed |
 | Looking for WSFEv1 code | Wrong service for Factura E | Use WSFEX (`FEX*` methods) |
+| Extra `emisores` rows ignored | FAC-8 UI not built yet | Expected; see § Multi-emisor |

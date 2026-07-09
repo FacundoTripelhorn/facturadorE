@@ -174,13 +174,41 @@ UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domai
 
 PDFs are written under `<FACTURADOR_HOME>/data/pdfs/` after authorization.
 
+### Emisor entity / multi-emisor (FAC-8 area)
+
+Use this section for work on **alta de emisores** (each emisor with its own
+ambiente and puntos de venta). Do not grep the whole tree — the split between
+`emisores` (per-entity) and `settings` (global backup key/value) is easy to miss.
+
+| What | Where |
+|------|-------|
+| `Emisor` dataclass, load/save orchestration | `facturador/settings.py` |
+| SQLite `emisores` table (CRUD, oldest-per-ambiente) | `facturador/repo/emisores.py` |
+| Global backup bucket/prefix (`settings` table) | `facturador/repo/settings.py` |
+| Schema (`emisores`, `settings`) | `facturador/schema.sql` |
+| Config UI (single emisor form today) | `facturador/web/routes.py`, `configuracion.html` |
+| Runtime emisor resolution | `facturador/service.py` (`load_settings(conn, env)`) |
+| Tests | `tests/test_settings.py` |
+
+**Current behavior (not a bug):**
+
+- The schema allows **several emisores per ambiente**; runtime picks the
+  **oldest** row for the active `ARCA_ENV` (`get_emisor_por_ambiente`).
+- `/configuracion` **upserts one emisor** per ambiente (no alta/lista UI yet).
+- Invoicing uses the **first** value in `puntos_venta` (`Emisor.punto_venta`).
+- S3 backup config is **global** (not per emisor).
+
+**FAC-8 scope (still open):** UI to register multiple emisores and choose which
+one operates; PV selection when more than one is enabled. See
+[`known-non-bugs.md`](known-non-bugs.md) § Multi-emisor schema vs selection UI.
+
 ### Config / Docker / launchers / secrets
 
 | What | Where |
 |------|-------|
 | Bootstrap env (`ARCA_ENV`, port) | `<FACTURADOR_HOME>/.env` — read by `facturador/config.py` |
 | Cert/key pair (manual, gitignored) | `<FACTURADOR_HOME>/secrets/<env>.{crt,key}` |
-| Domain config (emisor, PV, S3 backup) | SQLite `settings` + `emisores` — `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` |
+| Domain config (emisor, PV, S3 backup) | SQLite `settings` + `emisores` — see § Emisor entity above |
 | Constants & ARCA codes | `facturador/constants.py` |
 | Docker image & localhost bind | `Dockerfile`, `docker-compose.yml` |
 | Container entrypoint (secrets copy) | `docker/entrypoint.sh` |
