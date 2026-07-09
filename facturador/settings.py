@@ -9,9 +9,9 @@ En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
 
 El emisor es una entidad (tabla ``emisores``): cada uno declara con qué
 ambiente interactúa y qué puntos de venta tiene habilitados, y un mismo
-ambiente puede tener varios. Hoy la app opera con el emisor más antiguo del
-ambiente activo y emite con su primer PV; el alta/selección de emisores
-llega con su feature. La config de backups es global (tabla ``settings``,
+ambiente puede tener varios. La app opera con el emisor activo del ambiente
+corriente (``active_emisor_id`` en settings); si no hay uno válido, usa el
+más antiguo del ambiente. La config de backups es global (tabla ``settings``,
 clave/valor): el backup cubre la DB entera, no un emisor.
 """
 
@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from . import repo
 
+ACTIVE_EMISOR_KEY = "active_emisor_id"
 CONDICION_IVA_DEFAULT = "IVA Responsable Inscripto"
 BACKUP_PREFIX_DEFAULT = "facturador"
 
@@ -33,6 +34,7 @@ class Emisor:
     sus propios puntos de venta; los datos de texto van al PDF y no viajan a
     ARCA (design.md §0.1)."""
 
+    id: str | None = None
     razon_social: str = ""
     domicilio: str = ""
     iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
@@ -45,7 +47,7 @@ class Emisor:
 
     @property
     def punto_venta(self) -> int:
-        """PV con el que se emite: por ahora, siempre el primero."""
+        """PV por defecto al emitir: el primero de la lista habilitada."""
         return self.puntos_venta[0]
 
     @property
@@ -85,6 +87,7 @@ def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
 
 def _row_to_emisor(row: sqlite3.Row) -> Emisor:
     return Emisor(
+        id=row["id"],
         razon_social=row["razon_social"],
         domicilio=row["domicilio"],
         iibb=row["iibb"],
@@ -95,10 +98,29 @@ def _row_to_emisor(row: sqlite3.Row) -> Emisor:
     )
 
 
+def _resolve_emisor_row(conn: sqlite3.Connection, env: str) -> sqlite3.Row | None:
+    """Emisor activo del ambiente, o el más antiguo si no hay selección."""
+    raw = repo.get_settings(conn)
+    active_id = raw.get(ACTIVE_EMISOR_KEY)
+    if active_id:
+        candidato = repo.get_emisor(conn, active_id)
+        if candidato is not None and candidato["ambiente"] == env:
+            return candidato
+    return repo.get_emisor_por_ambiente(conn, env)
+
+
+def get_active_emisor_id(conn: sqlite3.Connection, env: str) -> str | None:
+    row = _resolve_emisor_row(conn, env)
+    return None if row is None else row["id"]
+
+
+def set_active_emisor(conn: sqlite3.Connection, emisor_id: str) -> None:
+    repo.save_settings(conn, {ACTIVE_EMISOR_KEY: emisor_id})
+
+
 def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
-    """Settings con el emisor que opera en ``env`` (el más antiguo, si hay
-    varios) y la config global de backups."""
-    row = repo.get_emisor_por_ambiente(conn, env)
+    """Settings con el emisor activo del ambiente y la config global de backups."""
+    row = _resolve_emisor_row(conn, env)
     raw = repo.get_settings(conn)
     return Settings(
         emisor=Emisor(ambiente=env) if row is None else _row_to_emisor(row),
@@ -108,21 +130,23 @@ def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
 
 
 def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
-    """Guarda el emisor como entidad (bajo el ambiente que él mismo declara)
-    y la config de backups como settings globales."""
+    """Guarda el emisor (por id si lo tiene, si no upsert del ambiente) y la
+    config de backups como settings globales."""
     emisor = settings.emisor
-    repo.upsert_emisor(
-        conn,
-        {
-            "razon_social": emisor.razon_social,
-            "domicilio": emisor.domicilio,
-            "iibb": emisor.iibb,
-            "inicio_actividades": emisor.inicio_actividades,
-            "condicion_iva": emisor.condicion_iva,
-            "ambiente": emisor.ambiente,
-            "puntos_venta": json.dumps(list(emisor.puntos_venta)),
-        },
-    )
+    data = {
+        "razon_social": emisor.razon_social,
+        "domicilio": emisor.domicilio,
+        "iibb": emisor.iibb,
+        "inicio_actividades": emisor.inicio_actividades,
+        "condicion_iva": emisor.condicion_iva,
+        "ambiente": emisor.ambiente,
+        "puntos_venta": json.dumps(list(emisor.puntos_venta)),
+    }
+    if emisor.id:
+        repo.update_emisor(conn, emisor.id, data)
+    else:
+        row = repo.upsert_emisor(conn, data)
+        set_active_emisor(conn, row["id"])
     repo.save_settings(
         conn,
         {

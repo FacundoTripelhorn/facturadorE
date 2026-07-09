@@ -351,15 +351,14 @@ def test_pagina_de_configuracion_carga_y_guarda(api, arca):
     _sin_settings(api)
     pagina = api.get("/configuracion")
     assert pagina.status_code == 200
-    assert "Completar los datos del emisor" in pagina.text
+    assert "Dar de alta al menos un emisor" in pagina.text
 
     r = api.post("/ui/configuracion", data=CONFIG_FORM, follow_redirects=False)
     assert r.status_code == 303
 
     guardada = api.get("/configuracion?aviso=guardado")
-    assert "Configuración guardada" in guardada.text
-    assert 'value="MI EMPRESA S.R.L."' in guardada.text
-    assert 'value="901-123456-7"' in guardada.text
+    assert "Emisor guardado" in guardada.text
+    assert "MI EMPRESA S.R.L." in guardada.text
 
     # Con el emisor completo, el form de emisión vuelve a estar disponible.
     _crear_cliente_por_form(api)
@@ -376,14 +375,14 @@ def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
 
 def test_configuracion_con_solo_espacios_es_invalida(api, arca):
     # El strip corre antes de validar: "   " no debe guardarse como vacío
-    # con un "Configuración guardada" que deja al emisor incompleto.
+    # con un "guardado" que deja al emisor incompleto.
     r = api.post(
         "/ui/configuracion", data={**CONFIG_FORM, "emisor_razon_social": "   "}
     )
     assert r.status_code == 422
     assert "Datos inválidos" in r.text
     # El emisor sembrado sigue intacto: el intento fallido no pisó nada.
-    assert 'value="MI EMPRESA S.R.L."' in api.get("/configuracion").text
+    assert "MI EMPRESA S.R.L." in api.get("/configuracion").text
 
 
 def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
@@ -410,3 +409,54 @@ def test_puntos_venta_no_numericos_rechazados(api, arca):
 
 def test_nav_incluye_configuracion(api):
     assert 'href="/configuracion"' in api.get("/").text
+
+
+EMISOR_FORM = {
+    "razon_social": "OTRO EMISOR S.A.",
+    "domicilio": "Av. Corrientes 1000",
+    "iibb": "Exento",
+    "inicio_actividades": "01/01/2019",
+    "condicion_iva": "IVA Responsable Inscripto",
+    "ambiente": "homo",
+    "puntos_venta": "5, 9",
+}
+
+
+def test_alta_de_segundo_emisor_y_activacion(api, arca):
+    _crear_cliente_por_form(api)
+    r = api.post("/ui/emisores", data=EMISOR_FORM, follow_redirects=False)
+    assert r.status_code == 303
+    pagina = api.get("/configuracion")
+    assert "OTRO EMISOR S.A." in pagina.text
+    assert "5, 9" in pagina.text
+
+    emisores = api.conn.execute(
+        "SELECT id, razon_social FROM emisores WHERE razon_social = ?",
+        ("OTRO EMISOR S.A.",),
+    ).fetchone()
+    nuevo_id = emisores["id"]
+
+    r = api.post(f"/ui/emisores/{nuevo_id}/activar", follow_redirects=False)
+    assert r.status_code == 303
+    assert "★" in api.get("/configuracion").text
+
+    invoice_id = _generar_borrador(api)
+    factura = api.get(f"/invoices/{invoice_id}").json()
+    assert factura["punto_venta"] == 5  # primer PV del emisor activo
+
+
+def test_seleccion_punto_venta_al_emitir(api, arca):
+    api.post(
+        "/ui/configuracion",
+        data={**CONFIG_FORM, "puntos_venta": "7, 3"},
+        follow_redirects=False,
+    )
+    _crear_cliente_por_form(api)
+    home = api.get("/")
+    assert 'name="punto_venta"' in home.text
+    assert 'value="7"' in home.text
+    assert 'value="3"' in home.text
+
+    invoice_id = _generar_borrador(api, punto_venta="3")
+    factura = api.get(f"/invoices/{invoice_id}").json()
+    assert factura["punto_venta"] == 3

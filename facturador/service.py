@@ -37,8 +37,15 @@ from .mappers import (
     row_to_wsfex_invoice,
     wsfex_invoice_to_raw,
 )
-from .schemas import ClientIn, InvoiceCreate, SettingsIn
-from .settings import Emisor, Settings, load_settings, save_settings
+from .schemas import BackupSettingsIn, ClientIn, EmisorIn, InvoiceCreate, SettingsIn
+from .settings import (
+    Emisor,
+    Settings,
+    get_active_emisor_id,
+    load_settings,
+    save_settings,
+    set_active_emisor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,23 +99,21 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_settings(self) -> Settings:
-        # El emisor es el que factura contra el ambiente activo.
         return load_settings(self.conn, self.config.env)
 
     def update_settings(self, payload: SettingsIn) -> Settings:
-        # SettingsIn ya llega stripeado (str_strip_whitespace): acá no se
-        # vuelve a limpiar, solo se mapea.
+        # Compatibilidad: actualiza el emisor activo del ambiente corriente.
+        actual = self.get_settings()
         save_settings(
             self.conn,
             Settings(
                 emisor=Emisor(
+                    id=actual.emisor.id,
                     razon_social=payload.emisor_razon_social,
                     domicilio=payload.emisor_domicilio,
                     iibb=payload.emisor_iibb,
                     inicio_actividades=payload.emisor_inicio_actividades,
                     condicion_iva=payload.emisor_condicion_iva,
-                    # La UI edita el emisor del ambiente activo; el alta de
-                    # emisores con ambiente propio llega con su feature.
                     ambiente=self.config.env,
                     puntos_venta=tuple(payload.puntos_venta),
                 ),
@@ -117,6 +122,99 @@ class InvoiceService:
             ),
         )
         return self.get_settings()
+
+    def update_backup_settings(self, payload: BackupSettingsIn) -> Settings:
+        actual = self.get_settings()
+        repo.save_settings(
+            self.conn,
+            {
+                "backup_s3_bucket": payload.backup_s3_bucket,
+                "backup_s3_prefix": payload.backup_s3_prefix,
+            },
+        )
+        return Settings(
+            emisor=actual.emisor,
+            backup_s3_bucket=payload.backup_s3_bucket,
+            backup_s3_prefix=payload.backup_s3_prefix,
+        )
+
+    def list_emisores(self) -> list[sqlite3.Row]:
+        return repo.list_emisores(self.conn)
+
+    def create_emisor(self, payload: EmisorIn) -> sqlite3.Row:
+        row = repo.create_emisor(
+            self.conn,
+            {
+                "razon_social": payload.razon_social,
+                "domicilio": payload.domicilio,
+                "iibb": payload.iibb,
+                "inicio_actividades": payload.inicio_actividades,
+                "condicion_iva": payload.condicion_iva,
+                "ambiente": payload.ambiente,
+                "puntos_venta": json.dumps(list(payload.puntos_venta)),
+            },
+        )
+        raw = repo.get_settings(self.conn)
+        active_id = raw.get("active_emisor_id")
+        if active_id:
+            candidato = repo.get_emisor(self.conn, active_id)
+            if candidato is None or candidato["ambiente"] != payload.ambiente:
+                active_id = None
+        if not active_id and payload.ambiente == self.config.env:
+            set_active_emisor(self.conn, row["id"])
+        return row
+
+    def update_emisor(self, emisor_id: str, payload: EmisorIn) -> sqlite3.Row:
+        existente = repo.get_emisor(self.conn, emisor_id)
+        if existente is None:
+            raise NotFoundError(f"Emisor {emisor_id} no existe")
+        row = repo.update_emisor(
+            self.conn,
+            emisor_id,
+            {
+                "razon_social": payload.razon_social,
+                "domicilio": payload.domicilio,
+                "iibb": payload.iibb,
+                "inicio_actividades": payload.inicio_actividades,
+                "condicion_iva": payload.condicion_iva,
+                "ambiente": existente["ambiente"],
+                "puntos_venta": json.dumps(list(payload.puntos_venta)),
+            },
+        )
+        if row is None:
+            raise NotFoundError(f"Emisor {emisor_id} no existe")
+        return row
+
+    def delete_emisor(self, emisor_id: str) -> None:
+        existente = repo.get_emisor(self.conn, emisor_id)
+        if existente is None:
+            raise NotFoundError(f"Emisor {emisor_id} no existe")
+        if existente["ambiente"] == self.config.env:
+            activo = get_active_emisor_id(self.conn, self.config.env)
+            if activo == emisor_id:
+                otros = [
+                    e
+                    for e in repo.list_emisores(self.conn, self.config.env)
+                    if e["id"] != emisor_id
+                ]
+                if otros:
+                    set_active_emisor(self.conn, otros[0]["id"])
+                else:
+                    repo.save_settings(self.conn, {"active_emisor_id": ""})
+        if not repo.delete_emisor(self.conn, emisor_id):
+            raise NotFoundError(f"Emisor {emisor_id} no existe")
+
+    def activate_emisor(self, emisor_id: str) -> None:
+        existente = repo.get_emisor(self.conn, emisor_id)
+        if existente is None:
+            raise NotFoundError(f"Emisor {emisor_id} no existe")
+        if existente["ambiente"] != self.config.env:
+            raise DomainError(
+                f"El emisor pertenece al ambiente {existente['ambiente']}; "
+                f"la app está en {self.config.env}. Cambiar ARCA_ENV en el .env "
+                "para operar con otro ambiente."
+            )
+        set_active_emisor(self.conn, emisor_id)
 
     # ------------------------------------------------------------------
     # Parámetros (cache con refresh lazy de 24 h — design.md §6.2)
@@ -253,10 +351,22 @@ class InvoiceService:
                 f"imp_total {payload.imp_total} != suma de items {total_items}"
             )
 
+        pvs = settings.emisor.puntos_venta
+        pv = (
+            payload.punto_venta
+            if payload.punto_venta is not None
+            else settings.emisor.punto_venta
+        )
+        if pv not in pvs:
+            raise DomainError(
+                f"Punto de venta {pv} no está habilitado para este emisor"
+                f" ({', '.join(str(p) for p in pvs)})"
+            )
+
         data = {
             "client_id": client["id"],
             "cbte_tipo": CBTE_TIPO_FACTURA_E,
-            "punto_venta": settings.emisor.punto_venta,
+            "punto_venta": pv,
             "fecha_cbte": fecha_cbte,
             "fecha_pago": fecha_pago,
             "tipo_expo": TIPO_EXPO_SERVICIOS,

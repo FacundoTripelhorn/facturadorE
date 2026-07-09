@@ -35,6 +35,16 @@
         <label for="fecha_pago">Fecha de pago</label>
         <input id="fecha_pago" name="fecha_pago" type="date" value="{{ hoy }}" required>
       </div>
+      {% if puntos_venta|length > 1 %}
+      <div>
+        <label for="punto_venta">Punto de venta</label>
+        <select id="punto_venta" name="punto_venta" required>
+          {% for pv in puntos_venta %}
+          <option value="{{ pv }}">{{ pv }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div>
         <label for="client_id">Cliente</label>
         <select id="client_id" name="client_id">
@@ -52,7 +62,8 @@
     <label for="obs">Observaciones (opcional)</label>
     <input id="obs" name="obs" value="">
     <p class="nota">
-      Emisión: hoy.
+      Emisión: hoy{% if emisor %}, emisor {{ emisor.razon_social }}{% endif %}.
+      {% if puntos_venta|length == 1 %}, PV {{ puntos_venta[0] }}{% endif %}.
       {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz }}</span>.
       {% else %}Cotización: se obtiene de ARCA al autorizar.{% endif %}
       Genera un borrador y pasa a la revisión: nada viaja a ARCA hasta confirmarlo.

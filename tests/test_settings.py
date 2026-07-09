@@ -40,7 +40,10 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
     )
     save_settings(conn, guardado)
     releido = load_settings(conn, "homo")
-    assert releido == guardado
+    assert releido.emisor.id is not None
+    assert dataclasses.replace(releido.emisor, id=None) == guardado.emisor
+    assert releido.backup_s3_bucket == guardado.backup_s3_bucket
+    assert releido.backup_s3_prefix == guardado.backup_s3_prefix
     assert releido.emisor.completo
     assert releido.emisor.punto_venta == 7  # se emite con el primero
 
@@ -85,8 +88,8 @@ def test_cada_emisor_declara_su_ambiente(conn):
 
 
 def test_un_ambiente_puede_tener_varios_emisores(conn):
-    """La relación real: varios emisores pueden operar en el mismo ambiente.
-    Hasta que llegue el alta con selección, la app usa el más antiguo."""
+    """Varios emisores en el mismo ambiente: sin selección explícita, el más
+    antiguo; con active_emisor_id, el elegido."""
     repo.upsert_emisor(
         conn,
         dict.fromkeys(repo.EMISOR_FIELDS, "")
@@ -100,6 +103,12 @@ def test_un_ambiente_puede_tener_varios_emisores(conn):
             " '2099-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00')"
         )
     assert load_settings(conn, "homo").emisor.razon_social == "PRIMERO"
+
+    from facturador.settings import set_active_emisor
+
+    set_active_emisor(conn, "z-nuevo")
+    assert load_settings(conn, "homo").emisor.razon_social == "SEGUNDO"
+    assert load_settings(conn, "homo").emisor.punto_venta == 4
 
 
 @pytest.mark.parametrize(

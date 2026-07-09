@@ -22,11 +22,29 @@ EMISOR_FIELDS = (
 )
 
 
+def get_emisor(conn: sqlite3.Connection, emisor_id: str) -> sqlite3.Row | None:
+    return conn.execute(
+        "SELECT * FROM emisores WHERE id = ?", (emisor_id,)
+    ).fetchone()
+
+
+def list_emisores(
+    conn: sqlite3.Connection, ambiente: str | None = None
+) -> list[sqlite3.Row]:
+    if ambiente is None:
+        return conn.execute(
+            "SELECT * FROM emisores ORDER BY ambiente, created_at, id"
+        ).fetchall()
+    return conn.execute(
+        "SELECT * FROM emisores WHERE ambiente = ? ORDER BY created_at, id",
+        (ambiente,),
+    ).fetchall()
+
+
 def get_emisor_por_ambiente(
     conn: sqlite3.Connection, ambiente: str
 ) -> sqlite3.Row | None:
-    """El emisor con el que se opera en un ambiente. Puede haber varios; hoy
-    la app usa el más antiguo (la selección de emisor llega con el alta)."""
+    """Fallback cuando no hay emisor activo: el más antiguo del ambiente."""
     return conn.execute(
         "SELECT * FROM emisores WHERE ambiente = ?"
         " ORDER BY created_at, id LIMIT 1",
@@ -34,23 +52,51 @@ def get_emisor_por_ambiente(
     ).fetchone()
 
 
-def upsert_emisor(conn: sqlite3.Connection, data: dict) -> None:
-    """Crea o actualiza el (hoy único) emisor del ambiente que ``data``
-    declara; el alta de varios emisores llega con su feature."""
-    existente = get_emisor_por_ambiente(conn, data["ambiente"])
+def create_emisor(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
+    emisor_id = new_id()
     ts = now()
     with conn:
-        if existente is None:
-            conn.execute(
-                f"INSERT INTO emisores (id, {', '.join(EMISOR_FIELDS)},"
-                " created_at, updated_at)"
-                f" VALUES (?{', ?' * len(EMISOR_FIELDS)}, ?, ?)",
-                (new_id(), *(data[f] for f in EMISOR_FIELDS), ts, ts),
-            )
-        else:
-            conn.execute(
-                f"UPDATE emisores SET"
-                f" {', '.join(f'{f} = ?' for f in EMISOR_FIELDS)},"
-                " updated_at = ? WHERE id = ?",
-                (*(data[f] for f in EMISOR_FIELDS), ts, existente["id"]),
-            )
+        conn.execute(
+            f"INSERT INTO emisores (id, {', '.join(EMISOR_FIELDS)},"
+            " created_at, updated_at)"
+            f" VALUES (?{', ?' * len(EMISOR_FIELDS)}, ?, ?)",
+            (emisor_id, *(data[f] for f in EMISOR_FIELDS), ts, ts),
+        )
+    row = get_emisor(conn, emisor_id)
+    if row is None:
+        raise RuntimeError(f"Emisor {emisor_id} no se pudo releer tras el INSERT")
+    return row
+
+
+def update_emisor(
+    conn: sqlite3.Connection, emisor_id: str, data: dict
+) -> sqlite3.Row | None:
+    if get_emisor(conn, emisor_id) is None:
+        return None
+    with conn:
+        conn.execute(
+            f"UPDATE emisores SET"
+            f" {', '.join(f'{f} = ?' for f in EMISOR_FIELDS)},"
+            " updated_at = ? WHERE id = ?",
+            (*(data[f] for f in EMISOR_FIELDS), now(), emisor_id),
+        )
+    return get_emisor(conn, emisor_id)
+
+
+def delete_emisor(conn: sqlite3.Connection, emisor_id: str) -> bool:
+    with conn:
+        cur = conn.execute("DELETE FROM emisores WHERE id = ?", (emisor_id,))
+    return cur.rowcount > 0
+
+
+def upsert_emisor(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
+    """Compatibilidad con save_settings: crea o actualiza el emisor más antiguo
+    del ambiente declarado en ``data``."""
+    existente = get_emisor_por_ambiente(conn, data["ambiente"])
+    if existente is None:
+        return create_emisor(conn, data)
+    update_emisor(conn, existente["id"], data)
+    row = get_emisor(conn, existente["id"])
+    if row is None:
+        raise RuntimeError(f"Emisor {existente['id']} no se pudo releer tras UPDATE")
+    return row
