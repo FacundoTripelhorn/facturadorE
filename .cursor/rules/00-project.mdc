@@ -1,0 +1,25 @@
+---
+description: facturador project context — delegate to shared agent docs
+alwaysApply: true
+---
+
+# facturador — project rules
+
+**Authoritative contract:** [`AGENTS.md`](AGENTS.md). These Cursor rules are pointers, not a second source of truth.
+
+Before broad repo search or exploratory greps, read:
+
+1. [`docs/agent/repo-map.md`](docs/agent/repo-map.md) — where code lives by task type
+2. [`docs/agent/verification-matrix.md`](docs/agent/verification-matrix.md) — which checks to run
+3. [`docs/agent/architecture-graphs.md`](docs/agent/architecture-graphs.md) — runtime shape, boundaries, flows
+4. [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md) — intentional limits agents misdiagnose as bugs
+
+## Quick reference
+
+- Python 3.12, FastAPI + HTMX, SQLite, WeasyPrint; single process, no workers.
+- Dev: `uv sync` then `uv run python -m facturador` (binds `127.0.0.1:8399`).
+- Verify: `uv run ruff check .` → `uv run mypy` → `uv run pytest`.
+- Runtime data lives under `FACTURADOR_HOME`, not in the repo.
+- Domain design: [`docs/design.md`](docs/design.md).
+
+End every task with **Summary / Changed files / Verification / Remaining risks** (see AGENTS.md).
