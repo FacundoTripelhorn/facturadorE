@@ -105,31 +105,92 @@ endpoints is an **environment limitation**, not a test failure — see
 
 ---
 
-## Reporting skipped verification
+## Reporting verification results
 
-Every agent task ends with a **Verification** section (`AGENTS.md`). When you
-skip a check, say so explicitly:
+Every agent task ends with a **Verification** section (`AGENTS.md`). Use the
+status labels below so reviewers can scan results quickly. Report **every**
+check that matters for the task — not only failures.
 
-1. **Which command** was not run (e.g. `uv run pytest`, `docker build`, manual
-   browser check).
-2. **Why** — common reasons:
-   - Docs-only change
-   - Narrow iteration still in progress (note that full suite is pending)
-   - Missing WeasyPrint system libraries (PDF tests)
-   - No `FACTURADOR_HOME` / no real ARCA cert for manual homologación
-   - Out of scope for the task (e.g. user asked for a doc fix only)
-3. **Residual risk** — what could still be broken (e.g. "schema change not
-   covered by narrow tests; full `pytest` not run yet").
+### Status labels
 
-Example:
+| Status | Meaning | When to use |
+|--------|---------|-------------|
+| **Passed** | Command ran; exit code 0 | `ruff`, `mypy`, `pytest`, `docker build`, manual check succeeded |
+| **Failed** | Command ran; errors found | Include the command and a one-line summary of the failure |
+| **Not run** | Deliberately omitted; no blocker | Docs-only change, out of scope, or full suite deferred with reason |
+| **Skipped** | Would run but could not | Missing WeasyPrint libs, no `FACTURADOR_HOME`, no homologación cert |
+| **Blocked** | External constraint prevents the check | Wrong repo access, CI secret unavailable, network policy |
 
-> **Verification:** `uv run ruff check .` and `uv run mypy` passed. Ran
-> `uv run pytest tests/test_web.py` only (HTMX template change). Full
-> `uv run pytest` not run — will run before merge. Manual browser check skipped
-> (no local `FACTURADOR_HOME`).
+For **Skipped** or **Blocked**, always add **why** and **residual risk** (what
+might still be broken). For **Not run**, say whether the full default trio is
+still pending before merge.
+
+### What to include
+
+1. **Which command** — exact invocation (e.g. `uv run pytest tests/test_web.py`,
+   `./scripts/agent/doctor.sh`, `docker build -t facturador:ci .`).
+2. **Status** — from the table above.
+3. **Outcome** — pass count, error snippet, or skip reason.
+4. **Residual risk** — only when Not run, Skipped, or Blocked (e.g. "schema
+   change not covered by narrow tests; full `pytest` pending").
 
 Do not claim "all tests pass" if you only ran a subset unless you name the
 subset and note that the full suite was not executed.
+
+### Examples
+
+**Full default trio (behavior change):**
+
+> **Verification**
+> - `uv run ruff check .` — Passed
+> - `uv run mypy` — Passed
+> - `uv run pytest` — Passed (136 tests)
+> - `docker build` — Not run (no Dockerfile changes)
+
+**Narrow iteration (HTMX template):**
+
+> **Verification**
+> - `uv run ruff check .` — Passed
+> - `uv run mypy` — Passed
+> - `uv run pytest tests/test_web.py` — Passed (12 tests)
+> - `uv run pytest` (full) — Not run; will run before merge
+> - Manual browser check — Skipped (no local `FACTURADOR_HOME`)
+
+**Docs-only:**
+
+> **Verification**
+> - `uv run ruff check .` — Not run (markdown only; no code or command samples changed)
+> - `uv run pytest` — Not run (docs-only per verification matrix)
+
+**ARCA contract script (operator, not pytest):**
+
+> **Verification**
+> - `uv run ruff check .` — Passed
+> - `uv run mypy` — Passed
+> - `uv run pytest` — Passed (136 tests)
+> - `uv run python scripts/check_wsfex.py` — Passed (local homologación cert)
+> - CI — N/A (contract scripts are local-only by design)
+
+**Environment limitation (not a product bug):**
+
+> **Verification**
+> - `uv run pytest` — Passed (136 tests; uses `FakeArca`, no network)
+> - Manual authorize in homologación — Blocked (self-signed cert rejected by WSAA;
+>   see [`known-non-bugs.md`](known-non-bugs.md))
+
+### PR description snippet
+
+When opening a PR, a short verification block helps reviewers:
+
+```markdown
+## Verification
+
+- [x] `uv run ruff check .`
+- [x] `uv run mypy`
+- [x] `uv run pytest` (136 passed)
+- [ ] `docker build` — not applicable
+- [ ] Manual homologación — skipped (no WSASS cert in agent environment)
+```
 
 ---
 
@@ -137,4 +198,5 @@ subset and note that the full suite was not executed.
 
 - [`AGENTS.md`](../../AGENTS.md) — standard commands, security rules, response format
 - [`repo-map.md`](repo-map.md) — where code lives by task type
+- [`known-non-bugs.md`](known-non-bugs.md) — environment limits often mistaken for bugs
 - [`docs/design.md`](../design.md) — domain rules and CI/homologación policy
