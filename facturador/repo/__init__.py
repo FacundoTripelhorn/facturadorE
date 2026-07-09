@@ -12,7 +12,16 @@ from .clients import (
     list_clients,
     update_client,
 )
-from .emisores import EMISOR_FIELDS, get_emisor_por_ambiente, upsert_emisor
+from .emisores import (
+    EMISOR_FIELDS,
+    create_emisor,
+    delete_emisor,
+    get_emisor,
+    get_emisor_por_ambiente,
+    list_emisores,
+    update_emisor,
+    upsert_emisor,
+)
 from .invoices import (
     INVOICE_FIELDS,
     UPDATABLE_INVOICE_FIELDS,
@@ -33,13 +42,16 @@ from .settings import get_settings, save_settings
 __all__ = [
     "CLIENT_FIELDS",
     "count_invoices_by_status",
+    "create_emisor",
     "EMISOR_FIELDS",
     "INVOICE_FIELDS",
     "UPDATABLE_INVOICE_FIELDS",
     "create_client",
     "create_invoice",
     "delete_draft",
+    "delete_emisor",
     "get_client",
+    "get_emisor",
     "get_default_client",
     "get_emisor_por_ambiente",
     "get_invoice",
@@ -47,6 +59,7 @@ __all__ = [
     "get_params",
     "get_settings",
     "list_clients",
+    "list_emisores",
     "list_invoices",
     "max_arca_id",
     "max_authorized_cbte_nro",
@@ -54,6 +67,7 @@ __all__ = [
     "save_settings",
     "try_transition_to_submitting",
     "update_client",
+    "update_emisor",
     "update_invoice",
     "upsert_emisor",
 ]

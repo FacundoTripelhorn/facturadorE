@@ -17,6 +17,7 @@ Nada viaja a ARCA sin pasar por la revisión; el detalle es el registro.
 from __future__ import annotations
 
 import datetime as dt
+import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -30,9 +31,19 @@ from .. import repo
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
-from ..schemas import ClientIn, InvoiceCreate, SettingsIn
+from ..schemas import (
+    BackupSettingsIn,
+    ClientIn,
+    EmisorIn,
+    InvoiceCreate,
+    SettingsIn,
+)
 from ..service import NotFoundError, ServiceError, StaleRegistryError
-from ..settings import BACKUP_PREFIX_DEFAULT, CONDICION_IVA_DEFAULT
+from ..settings import (
+    BACKUP_PREFIX_DEFAULT,
+    CONDICION_IVA_DEFAULT,
+    get_active_emisor_id,
+)
 
 router = APIRouter(include_in_schema=False)
 
@@ -57,6 +68,19 @@ templates.env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
 templates.env.filters["fecha"] = (
     lambda aaaammdd: f"{aaaammdd[6:]}/{aaaammdd[4:6]}/{aaaammdd[:4]}"
 )
+
+
+def _pvs_display(raw: str) -> str:
+    try:
+        valores = json.loads(raw)
+        if isinstance(valores, list):
+            return ", ".join(str(v) for v in valores)
+    except (ValueError, TypeError):
+        pass
+    return raw
+
+
+templates.env.filters["pvs_display"] = _pvs_display
 
 
 def _fecha_iso_a_arca(fecha: str | None) -> str | None:
@@ -96,7 +120,8 @@ AVISOS = {
 def _contexto_form(service, error: str | None = None, aviso: str | None = None):
     # Sin datos de emisor no hay form: la UI dirige a Configuración (los
     # datos van al PDF y create_invoice los exige).
-    emisor_ok = service.get_settings().emisor.completo
+    settings = service.get_settings()
+    emisor_ok = settings.emisor.completo
     clientes = repo.list_clients(service.conn)
     default = next((c for c in clientes if c["is_default"]), None)
     ctz = ctz_fecha = None
@@ -110,6 +135,8 @@ def _contexto_form(service, error: str | None = None, aviso: str | None = None):
     return {
         "env": service.config.env,
         "emisor_ok": emisor_ok,
+        "emisor": settings.emisor,
+        "puntos_venta": settings.emisor.puntos_venta,
         "clientes": clientes,
         "default": default,
         "ctz": ctz,
@@ -132,6 +159,7 @@ def generar_borrador(
     request: Request,
     service: ServiceDep,
     imp_total: str = Form(...),
+    punto_venta: str = Form(""),
     client_id: str = Form(""),
     descripcion: str = Form(""),
     fecha_pago: str = Form(""),
@@ -139,9 +167,21 @@ def generar_borrador(
 ):
     """Crea SOLO el borrador y redirige a su revisión. Nada viaja a ARCA
     hasta el Confirmar explícito de la página de revisión."""
+    pv: int | None = None
+    if punto_venta.strip():
+        try:
+            pv = int(punto_venta)
+        except ValueError:
+            return templates.TemplateResponse(
+                request,
+                "home.html",
+                _contexto_form(service, error="Punto de venta inválido"),
+                status_code=422,
+            )
     try:
         payload = InvoiceCreate(
             imp_total=Decimal(imp_total),
+            punto_venta=pv,
             client_id=client_id or None,
             descripcion=descripcion or None,
             fecha_pago=_fecha_iso_a_arca(fecha_pago),
@@ -385,16 +425,21 @@ def guardar_cliente(
 def _pagina_configuracion(
     request: Request,
     service,
+    editando=None,
     error: str | None = None,
     aviso: str | None = None,
     status_code: int = 200,
 ):
+    activo_id = get_active_emisor_id(service.conn, service.config.env)
     return templates.TemplateResponse(
         request,
         "configuracion.html",
         {
             "env": service.config.env,
             "s": service.get_settings(),
+            "emisores": service.list_emisores(),
+            "activo_id": activo_id,
+            "editando": editando,
             "error": error,
             "aviso": aviso,
         },
@@ -403,12 +448,125 @@ def _pagina_configuracion(
 
 
 @router.get("/configuracion", response_class=HTMLResponse)
-def configuracion(request: Request, service: ServiceDep, aviso: str = ""):
+def configuracion(request: Request, service: ServiceDep, edit: str | None = None,
+                  aviso: str = ""):
+    editando = repo.get_emisor(service.conn, edit) if edit else None
+    avisos = {
+        "guardado": "Emisor guardado.",
+        "backup": "Configuración de backups guardada.",
+        "activado": "Emisor activo actualizado.",
+        "eliminado": "Emisor eliminado.",
+    }
     return _pagina_configuracion(
         request,
         service,
-        aviso="Configuración guardada." if aviso == "guardado" else None,
+        editando=editando,
+        aviso=avisos.get(aviso),
     )
+
+
+def _parse_puntos_venta_form(puntos_venta: str) -> list[int]:
+    return [int(v) for v in puntos_venta.split(",") if v.strip()]
+
+
+@router.post("/ui/emisores", response_class=HTMLResponse)
+def guardar_emisor(
+    request: Request,
+    service: ServiceDep,
+    emisor_id: str = Form(""),
+    razon_social: str = Form(""),
+    domicilio: str = Form(""),
+    iibb: str = Form(""),
+    inicio_actividades: str = Form(""),
+    condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
+    ambiente: str = Form("homo"),
+    puntos_venta: str = Form("1"),
+):
+    existente = repo.get_emisor(service.conn, emisor_id) if emisor_id else None
+    try:
+        pvs = _parse_puntos_venta_form(puntos_venta)
+    except ValueError:
+        return _pagina_configuracion(
+            request,
+            service,
+            editando=existente,
+            error="Datos inválidos: los puntos de venta deben ser números"
+            " separados por coma",
+            status_code=422,
+        )
+    try:
+        existente = repo.get_emisor(service.conn, emisor_id) if emisor_id else None
+        payload = EmisorIn(
+            razon_social=razon_social,
+            domicilio=domicilio,
+            iibb=iibb,
+            inicio_actividades=inicio_actividades,
+            condicion_iva=condicion_iva,
+            ambiente=existente["ambiente"] if existente else ambiente,
+            puntos_venta=pvs,
+        )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return _pagina_configuracion(
+            request,
+            service,
+            editando=existente,
+            error=f"Datos inválidos: {detalles}",
+            status_code=422,
+        )
+    try:
+        if emisor_id:
+            service.update_emisor(emisor_id, payload)
+        else:
+            service.create_emisor(payload)
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            editando=existente,
+            error=str(exc),
+            status_code=422,
+        )
+    return RedirectResponse("/configuracion?aviso=guardado", status_code=303)
+
+
+@router.post("/ui/emisores/{emisor_id}/activar")
+def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
+    try:
+        service.activate_emisor(emisor_id)
+    except ServiceError:
+        return RedirectResponse("/configuracion", status_code=303)
+    return RedirectResponse("/configuracion?aviso=activado", status_code=303)
+
+
+@router.post("/ui/emisores/{emisor_id}/eliminar")
+def eliminar_emisor(request: Request, service: ServiceDep, emisor_id: str):
+    try:
+        service.delete_emisor(emisor_id)
+    except ServiceError:
+        return RedirectResponse("/configuracion", status_code=303)
+    return RedirectResponse("/configuracion?aviso=eliminado", status_code=303)
+
+
+@router.post("/ui/configuracion/backup", response_class=HTMLResponse)
+def guardar_backup(
+    request: Request,
+    service: ServiceDep,
+    backup_s3_bucket: str = Form(""),
+    backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
+):
+    try:
+        payload = BackupSettingsIn(
+            backup_s3_bucket=backup_s3_bucket,
+            backup_s3_prefix=backup_s3_prefix,
+        )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return _pagina_configuracion(
+            request, service, error=f"Datos inválidos: {detalles}", status_code=422
+        )
+    service.update_backup_settings(payload)
+    return RedirectResponse("/configuracion?aviso=backup", status_code=303)
 
 
 @router.post("/ui/configuracion", response_class=HTMLResponse)
@@ -424,10 +582,9 @@ def guardar_configuracion(
     backup_s3_bucket: str = Form(""),
     backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
 ):
+    """Compatibilidad con tests/rutas viejas: actualiza el emisor activo."""
     try:
-        # "1, 3" del input → [1, 3]; SettingsIn valida el >= 1 y rechaza
-        # la lista vacía.
-        pvs = [int(v) for v in puntos_venta.split(",") if v.strip()]
+        pvs = _parse_puntos_venta_form(puntos_venta)
     except ValueError:
         return _pagina_configuracion(
             request,

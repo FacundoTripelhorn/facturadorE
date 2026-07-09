@@ -4,66 +4,131 @@
 {% if aviso %}<div class="panel ok"><div>{{ aviso }}</div></div>{% endif %}
 {% if error %}<div class="panel error"><div>{{ error }}</div></div>{% endif %}
 
-{% if not s.emisor.completo %}
+{% if not s.emisor.completo and activo_id %}
 <div class="panel neutro">
-  <div>Completar los datos del emisor para poder emitir: van impresos en el
+  <div>Completar los datos del emisor activo para poder emitir: van impresos en el
   PDF del comprobante y no viajan a ARCA.</div>
+</div>
+{% elif not emisores %}
+<div class="panel neutro">
+  <div>Dar de alta al menos un emisor del ambiente {{ env }} para poder emitir.</div>
 </div>
 {% endif %}
 
-<form method="post" action="/ui/configuracion">
-
 <section class="card">
-  <h2>Emisor <span class="sub">del ambiente {{ env }}; se imprime en el PDF, no viaja a ARCA</span></h2>
+  <h2>{% if editando %}Editar emisor{% else %}Nuevo emisor{% endif %}
+    <span class="sub">se imprime en el PDF, no viaja a ARCA</span></h2>
   <div class="cuerpo">
+  <form method="post" action="/ui/emisores">
+    {% if editando %}<input type="hidden" name="emisor_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
       <div>
-        <label for="emisor_razon_social">Razón social</label>
-        <input id="emisor_razon_social" name="emisor_razon_social" required
-               value="{{ s.emisor.razon_social }}">
+        <label for="razon_social">Razón social</label>
+        <input id="razon_social" name="razon_social" required
+               value="{{ editando['razon_social'] if editando else '' }}">
       </div>
       <div>
-        <label for="emisor_domicilio">Domicilio comercial</label>
-        <input id="emisor_domicilio" name="emisor_domicilio" required
-               value="{{ s.emisor.domicilio }}">
+        <label for="domicilio">Domicilio comercial</label>
+        <input id="domicilio" name="domicilio" required
+               value="{{ editando['domicilio'] if editando else '' }}">
       </div>
     </div>
     <div class="fila">
       <div>
-        <label for="emisor_iibb">Ingresos Brutos</label>
-        <input id="emisor_iibb" name="emisor_iibb" required
+        <label for="iibb">Ingresos Brutos</label>
+        <input id="iibb" name="iibb" required
                placeholder="tal como se imprime, p.ej. Exento"
-               value="{{ s.emisor.iibb }}">
+               value="{{ editando['iibb'] if editando else '' }}">
       </div>
       <div>
-        <label for="emisor_inicio_actividades">Inicio de actividades</label>
-        <input id="emisor_inicio_actividades" name="emisor_inicio_actividades" required
+        <label for="inicio_actividades">Inicio de actividades</label>
+        <input id="inicio_actividades" name="inicio_actividades" required
                placeholder="DD/MM/AAAA"
-               value="{{ s.emisor.inicio_actividades }}">
+               value="{{ editando['inicio_actividades'] if editando else '' }}">
       </div>
       <div>
-        <label for="emisor_condicion_iva">Condición frente al IVA</label>
-        <input id="emisor_condicion_iva" name="emisor_condicion_iva"
-               value="{{ s.emisor.condicion_iva }}">
+        <label for="condicion_iva">Condición frente al IVA</label>
+        <input id="condicion_iva" name="condicion_iva"
+               value="{{ editando['condicion_iva'] if editando else s.emisor.condicion_iva }}">
       </div>
     </div>
     <div class="fila">
+      <div>
+        <label for="ambiente">Ambiente ARCA</label>
+        {% if editando %}
+        <input id="ambiente" value="{{ editando['ambiente'] }}" disabled>
+        <input type="hidden" name="ambiente" value="{{ editando['ambiente'] }}">
+        {% else %}
+        <select id="ambiente" name="ambiente" required>
+          <option value="homo" {% if env == 'homo' %}selected{% endif %}>homo — homologación</option>
+          <option value="prod" {% if env == 'prod' %}selected{% endif %}>prod — producción</option>
+        </select>
+        {% endif %}
+      </div>
       <div>
         <label for="puntos_venta">Puntos de venta</label>
         <input id="puntos_venta" name="puntos_venta" required
                placeholder="separados por coma, p.ej. 1, 3"
-               value="{{ s.emisor.puntos_venta | join(', ') }}">
+               value="{{ editando['puntos_venta'] | pvs_display if editando else '1' }}">
       </div>
     </div>
-    <p class="nota">Habilitados para este emisor; se emite con el primero.
-    En homologación el punto de venta es libre; en producción, el número del
-    punto de venta RECE exclusivo de exportación (ver la guía de producción).</p>
+    <p class="nota">Habilitados para este emisor. En homologación el punto de venta es libre;
+    en producción, el número del punto de venta RECE exclusivo de exportación.</p>
+    <button type="submit">{% if editando %}Guardar cambios{% else %}Dar de alta{% endif %}</button>
+    {% if editando %}<a href="/configuracion" class="nota" style="margin-left:1rem">Cancelar edición</a>{% endif %}
+  </form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Emisores registrados</h2>
+  <div class="cuerpo tabla-scroll">
+    {% if emisores %}
+    <table>
+      <thead>
+        <tr>
+          <th>Razón social</th>
+          <th>Ambiente</th>
+          <th>Puntos de venta</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in emisores %}
+        <tr>
+          <td>
+            {{ e["razon_social"] or "—" }}
+            {% if e["id"] == activo_id and e["ambiente"] == env %} ★{% endif %}
+          </td>
+          <td>{{ e["ambiente"] }}</td>
+          <td class="num">{{ e["puntos_venta"] | pvs_display }}</td>
+          <td>
+            {% if e["ambiente"] == env and e["id"] != activo_id %}
+            <form method="post" action="/ui/emisores/{{ e['id'] }}/activar" style="display:inline">
+              <button type="submit" class="secundario">Usar para emitir</button>
+            </form>
+            {% endif %}
+            <a href="/configuracion?edit={{ e['id'] }}">Editar</a>
+            <form method="post" action="/ui/emisores/{{ e['id'] }}/eliminar" style="display:inline"
+                  onsubmit="return confirm('¿Eliminar este emisor?')">
+              <button type="submit" class="secundario">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="nota">★ = emisor activo en el ambiente {{ env }} (con el que se emite).</p>
+    {% else %}
+    <p class="vacio">Todavía no hay emisores cargados.</p>
+    {% endif %}
   </div>
 </section>
 
 <section class="card">
   <h2>Backups <span class="sub">opcional: upload cifrado a S3</span></h2>
   <div class="cuerpo">
+  <form method="post" action="/ui/configuracion/backup">
     <div class="fila">
       <div>
         <label for="backup_s3_bucket">Bucket S3</label>
@@ -79,17 +144,16 @@
     </div>
     <p class="nota">El backup se cifra en la máquina con una passphrase que
     nunca se guarda; el bucket solo recibe el archivo ya cifrado.</p>
+    <button type="submit">Guardar backups</button>
+  </form>
   </div>
 </section>
-
-<button type="submit">Guardar</button>
-
-</form>
 
 <p class="nota">
   El ambiente ARCA ({{ env }}) y el puerto se definen en el <code>.env</code>
   del directorio de datos; los certificados van en <code>secrets/</code>.
-  El resto de la configuración vive acá.
+  Cada emisor declara con qué ambiente interactúa al darse de alta; para emitir
+  en otro ambiente, cambiar <code>ARCA_ENV</code> y reiniciar la app.
 </p>
 
 {% endblock %}

@@ -21,23 +21,51 @@ def _validar_fecha(value: str, campo: str) -> str:
     return value
 
 
-class SettingsIn(BaseModel):
-    """Configuración de dominio editable desde la UI (vive en la DB).
-    El bloque del emisor es el del emisor que factura contra el ambiente
-    activo (el ambiente lo declara el emisor, no este payload)."""
+class EmisorIn(BaseModel):
+    """Alta/edición de un emisor: declara su ambiente y puntos de venta."""
 
-    # Strip ANTES de validar: sin esto, un campo con solo espacios pasa el
-    # min_length, se guarda vacío y el emisor queda incompleto en silencio.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    razon_social: str = Field(min_length=1, max_length=200)
+    domicilio: str = Field(min_length=1, max_length=200)
+    iibb: str = Field(min_length=1, max_length=50)
+    inicio_actividades: str = Field(min_length=1, max_length=20)
+    condicion_iva: str = CONDICION_IVA_DEFAULT
+    ambiente: str = "homo"
+    puntos_venta: list[int] = Field(default=[1], min_length=1)
+
+    @field_validator("ambiente")
+    @classmethod
+    def _ambiente_valido(cls, valor: str) -> str:
+        if valor not in ("homo", "prod"):
+            raise ValueError("ambiente debe ser homo o prod")
+        return valor
+
+    @field_validator("puntos_venta")
+    @classmethod
+    def _puntos_venta_positivos(cls, valores: list[int]) -> list[int]:
+        if any(pv < 1 for pv in valores):
+            raise ValueError("los puntos de venta deben ser >= 1")
+        return valores
+
+
+class BackupSettingsIn(BaseModel):
+    """Config global de backups (no depende del emisor)."""
+
+    backup_s3_bucket: str = ""
+    backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
+
+
+class SettingsIn(BaseModel):
+    """Compatibilidad con rutas/tests que guardan emisor + backups juntos."""
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     emisor_razon_social: str = Field(min_length=1, max_length=200)
     emisor_domicilio: str = Field(min_length=1, max_length=200)
-    # Literal del comprobante, p.ej. "Exento" o el nro de inscripción.
     emisor_iibb: str = Field(min_length=1, max_length=50)
-    # DD/MM/AAAA, como lo imprime el comprobante.
     emisor_inicio_actividades: str = Field(min_length=1, max_length=20)
     emisor_condicion_iva: str = CONDICION_IVA_DEFAULT
-    # Puntos de venta habilitados del emisor; se emite con el primero.
     puntos_venta: list[int] = Field(default=[1], min_length=1)
     backup_s3_bucket: str = ""
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
@@ -85,6 +113,7 @@ class InvoiceCreate(BaseModel):
     Todo lo demás sale del cliente (default si no se indica client_id)."""
 
     imp_total: Decimal = Field(gt=0)
+    punto_venta: int | None = None   # default: primer PV del emisor activo
     client_id: str | None = None
     descripcion: str | None = None      # default: descripcion_default del cliente
     fecha_cbte: str | None = None       # default: hoy (día del cobro)
@@ -100,6 +129,13 @@ class InvoiceCreate(BaseModel):
         if value is None:
             return None
         return _validar_fecha(value, info.field_name)
+
+    @field_validator("punto_venta")
+    @classmethod
+    def _punto_venta_positivo(cls, valor: int | None) -> int | None:
+        if valor is not None and valor < 1:
+            raise ValueError("punto_venta debe ser >= 1")
+        return valor
 
 
 class ItemOut(BaseModel):
