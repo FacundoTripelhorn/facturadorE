@@ -1,7 +1,8 @@
 # Repository map (agents)
 
 Curated navigation for **facturador**. Read this before broad `grep`/glob searches.
-For commands, constraints, and verification, see [`AGENTS.md`](../../AGENTS.md).
+For commands and constraints, see [`AGENTS.md`](../../AGENTS.md). For which checks
+to run by task type, see [`verification-matrix.md`](verification-matrix.md).
 
 ## High-level layout
 
