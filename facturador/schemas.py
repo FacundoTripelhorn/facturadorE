@@ -111,7 +111,7 @@ class InvoiceCreate(BaseModel):
     Todo lo demás sale del cliente (default si no se indica client_id)."""
 
     imp_total: Decimal = Field(gt=0)
-    punto_venta: int | None = None   # default: primer PV del emisor activo
+    punto_venta: int | None = None   # obligatorio si el emisor tiene varios PV
     client_id: str | None = None
     descripcion: str | None = None      # default: descripcion_default del cliente
     fecha_cbte: str | None = None       # default: hoy (día del cobro)

@@ -7,7 +7,13 @@ import dataclasses
 import pytest
 
 from facturador import db, repo
-from facturador.settings import Emisor, Settings, load_settings, save_settings
+from facturador.settings import (
+    Emisor,
+    Settings,
+    load_settings,
+    save_settings,
+    set_active_emisor,
+)
 
 
 @pytest.fixture
@@ -39,6 +45,8 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
         backup_s3_prefix="facturas",
     )
     save_settings(conn, guardado)
+    emisor_id = repo.list_emisores(conn, "homo")[0]["id"]
+    set_active_emisor(conn, emisor_id)
     releido = load_settings(conn, "homo")
     assert releido.emisor.id is not None
     assert dataclasses.replace(releido.emisor, id=None) == guardado.emisor
@@ -50,10 +58,11 @@ def test_guardar_y_releer_ida_y_vuelta(conn):
 
 def test_guardar_dos_veces_actualiza_el_mismo_emisor(conn):
     save_settings(conn, Settings(emisor=Emisor(razon_social="V1")))
-    actual = load_settings(conn, "homo")
+    emisor_id = repo.list_emisores(conn, "homo")[0]["id"]
+    set_active_emisor(conn, emisor_id)
     save_settings(
         conn,
-        Settings(emisor=Emisor(id=actual.emisor.id, razon_social="V2")),
+        Settings(emisor=Emisor(id=emisor_id, razon_social="V2")),
     )
     assert load_settings(conn, "homo").emisor.razon_social == "V2"
     filas = conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0]
@@ -80,6 +89,7 @@ def test_cada_emisor_declara_su_ambiente(conn):
             backup_s3_bucket="bucket-comun",
         ),
     )
+    set_active_emisor(conn, repo.list_emisores(conn, "homo")[0]["id"])
     prod = load_settings(conn, "prod")
     assert prod.emisor == Emisor(ambiente="prod")   # prod sigue sin configurar
     assert prod.backup_s3_bucket == "bucket-comun"
@@ -92,15 +102,16 @@ def test_cada_emisor_declara_su_ambiente(conn):
             )
         ),
     )
+    set_active_emisor(conn, repo.list_emisores(conn, "prod")[0]["id"])
     assert load_settings(conn, "homo").emisor.razon_social == "PRUEBAS"
     assert load_settings(conn, "homo").emisor.punto_venta == 9
     assert load_settings(conn, "prod").emisor.punto_venta == 3
 
 
 def test_un_ambiente_puede_tener_varios_emisores(conn):
-    """Varios emisores en el mismo ambiente: sin selección explícita, el más
-    antiguo; con active_emisor_id, el elegido."""
-    repo.create_emisor(
+    """Varios emisores en el mismo ambiente: sin selección explícita, ninguno
+    opera; con active_emisor_id_<ambiente>, el elegido."""
+    primero = repo.create_emisor(
         conn,
         dict.fromkeys(repo.EMISOR_FIELDS, "")
         | {"razon_social": "PRIMERO", "ambiente": "homo", "puntos_venta": "[1]"},
@@ -112,10 +123,12 @@ def test_un_ambiente_puede_tener_varios_emisores(conn):
             " VALUES ('z-nuevo', 'SEGUNDO', 'homo', '[4]',"
             " '2099-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00')"
         )
-    assert load_settings(conn, "homo").emisor.razon_social == "PRIMERO"
+    assert not load_settings(conn, "homo").emisor.completo
 
     from facturador.settings import set_active_emisor
 
+    set_active_emisor(conn, primero["id"])
+    assert load_settings(conn, "homo").emisor.razon_social == "PRIMERO"
     set_active_emisor(conn, "z-nuevo")
     assert load_settings(conn, "homo").emisor.razon_social == "SEGUNDO"
     assert load_settings(conn, "homo").emisor.punto_venta == 4
@@ -126,6 +139,8 @@ def test_un_ambiente_puede_tener_varios_emisores(conn):
 )
 def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
     save_settings(conn, Settings())
+    emisor_id = repo.list_emisores(conn, "homo")[0]["id"]
+    set_active_emisor(conn, emisor_id)
     with conn:
         conn.execute("UPDATE emisores SET puntos_venta = ?", (corrupto,))
     assert load_settings(conn, "homo").emisor.puntos_venta == (1,)

@@ -50,17 +50,6 @@ def list_emisores(
     ).fetchall()
 
 
-def get_emisor_por_ambiente(
-    conn: sqlite3.Connection, ambiente: str
-) -> sqlite3.Row | None:
-    """Fallback cuando no hay emisor activo: el más antiguo del ambiente."""
-    return conn.execute(
-        "SELECT * FROM emisores WHERE ambiente = ?"
-        " ORDER BY created_at, id LIMIT 1",
-        (ambiente,),
-    ).fetchone()
-
-
 def create_emisor(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
     emisor_id = new_id()
     ts = now()
