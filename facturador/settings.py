@@ -130,22 +130,35 @@ def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
 
 
 def save_settings(conn: sqlite3.Connection, settings: Settings) -> None:
-    """Guarda el emisor (por id si lo tiene, si no upsert del ambiente) y la
+    """Guarda el emisor (solo por id explícito; sin id, crea uno nuevo) y la
     config de backups como settings globales."""
     emisor = settings.emisor
-    data = {
-        "razon_social": emisor.razon_social,
-        "domicilio": emisor.domicilio,
-        "iibb": emisor.iibb,
-        "inicio_actividades": emisor.inicio_actividades,
-        "condicion_iva": emisor.condicion_iva,
-        "ambiente": emisor.ambiente,
-        "puntos_venta": json.dumps(list(emisor.puntos_venta)),
-    }
     if emisor.id:
-        repo.update_emisor(conn, emisor.id, data)
+        repo.update_emisor(
+            conn,
+            emisor.id,
+            {
+                "razon_social": emisor.razon_social,
+                "domicilio": emisor.domicilio,
+                "iibb": emisor.iibb,
+                "inicio_actividades": emisor.inicio_actividades,
+                "condicion_iva": emisor.condicion_iva,
+                "puntos_venta": json.dumps(list(emisor.puntos_venta)),
+            },
+        )
     else:
-        row = repo.upsert_emisor(conn, data)
+        row = repo.create_emisor(
+            conn,
+            {
+                "razon_social": emisor.razon_social,
+                "domicilio": emisor.domicilio,
+                "iibb": emisor.iibb,
+                "inicio_actividades": emisor.inicio_actividades,
+                "condicion_iva": emisor.condicion_iva,
+                "ambiente": emisor.ambiente,
+                "puntos_venta": json.dumps(list(emisor.puntos_venta)),
+            },
+        )
         set_active_emisor(conn, row["id"])
     repo.save_settings(
         conn,

@@ -56,8 +56,8 @@
       <div>
         <label for="ambiente">Ambiente ARCA</label>
         {% if editando %}
-        <input id="ambiente" value="{{ editando['ambiente'] }}" disabled>
-        <input type="hidden" name="ambiente" value="{{ editando['ambiente'] }}">
+        <p class="nota" style="margin-top:0"><b>Ambiente ARCA:</b> {{ editando['ambiente'] }}
+        (se fija al dar de alta; no se puede cambiar)</p>
         {% else %}
         <select id="ambiente" name="ambiente" required>
           <option value="homo" {% if env == 'homo' %}selected{% endif %}>homo — homologación</option>
@@ -109,10 +109,6 @@
             </form>
             {% endif %}
             <a href="/configuracion?edit={{ e['id'] }}">Editar</a>
-            <form method="post" action="/ui/emisores/{{ e['id'] }}/eliminar" style="display:inline"
-                  onsubmit="return confirm('¿Eliminar este emisor?')">
-              <button type="submit" class="secundario">Eliminar</button>
-            </form>
           </td>
         </tr>
         {% endfor %}
@@ -152,8 +148,9 @@
 <p class="nota">
   El ambiente ARCA ({{ env }}) y el puerto se definen en el <code>.env</code>
   del directorio de datos; los certificados van en <code>secrets/</code>.
-  Cada emisor declara con qué ambiente interactúa al darse de alta; para emitir
-  en otro ambiente, cambiar <code>ARCA_ENV</code> y reiniciar la app.
+  Cada emisor conserva el ambiente con el que se dio de alta. Para facturar
+  en otro ambiente, cambiar <code>ARCA_ENV</code> en el <code>.env</code>
+  y reiniciar la app.
 </p>
 
 {% endblock %}

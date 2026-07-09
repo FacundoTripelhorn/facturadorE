@@ -2,7 +2,7 @@
 
 La entidad es el emisor: cada uno declara con qué ambiente interactúa y qué
 puntos de venta tiene habilitados (JSON). Un mismo ambiente puede tener
-varios emisores.
+varios emisores. El ambiente se fija al crear; no se actualiza después.
 """
 
 from __future__ import annotations
@@ -18,6 +18,15 @@ EMISOR_FIELDS = (
     "inicio_actividades",
     "condicion_iva",
     "ambiente",
+    "puntos_venta",
+)
+
+EMISOR_UPDATE_FIELDS = (
+    "razon_social",
+    "domicilio",
+    "iibb",
+    "inicio_actividades",
+    "condicion_iva",
     "puntos_venta",
 )
 
@@ -76,27 +85,8 @@ def update_emisor(
     with conn:
         conn.execute(
             f"UPDATE emisores SET"
-            f" {', '.join(f'{f} = ?' for f in EMISOR_FIELDS)},"
+            f" {', '.join(f'{f} = ?' for f in EMISOR_UPDATE_FIELDS)},"
             " updated_at = ? WHERE id = ?",
-            (*(data[f] for f in EMISOR_FIELDS), now(), emisor_id),
+            (*(data[f] for f in EMISOR_UPDATE_FIELDS), now(), emisor_id),
         )
     return get_emisor(conn, emisor_id)
-
-
-def delete_emisor(conn: sqlite3.Connection, emisor_id: str) -> bool:
-    with conn:
-        cur = conn.execute("DELETE FROM emisores WHERE id = ?", (emisor_id,))
-    return cur.rowcount > 0
-
-
-def upsert_emisor(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
-    """Compatibilidad con save_settings: crea o actualiza el emisor más antiguo
-    del ambiente declarado en ``data``."""
-    existente = get_emisor_por_ambiente(conn, data["ambiente"])
-    if existente is None:
-        return create_emisor(conn, data)
-    update_emisor(conn, existente["id"], data)
-    row = get_emisor(conn, existente["id"])
-    if row is None:
-        raise RuntimeError(f"Emisor {existente['id']} no se pudo releer tras UPDATE")
-    return row

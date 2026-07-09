@@ -312,16 +312,28 @@ def test_alta_de_cliente_invalida_no_pierde_la_pagina(api, arca):
 
 # --- configuración (settings de dominio: viven en la DB) ---
 
-CONFIG_FORM = {
-    "emisor_razon_social": "MI EMPRESA S.R.L.",
-    "emisor_domicilio": "Calle Falsa 123, CABA",
-    "emisor_iibb": "901-123456-7",
-    "emisor_inicio_actividades": "01/2020",
-    "emisor_condicion_iva": "IVA Responsable Inscripto",
+EMISOR_FORM = {
+    "razon_social": "MI EMPRESA S.R.L.",
+    "domicilio": "Calle Falsa 123, CABA",
+    "iibb": "901-123456-7",
+    "inicio_actividades": "01/2020",
+    "condicion_iva": "IVA Responsable Inscripto",
+    "ambiente": "homo",
     "puntos_venta": "1",
-    "backup_s3_bucket": "",
-    "backup_s3_prefix": "facturador",
 }
+
+
+def _guardar_emisor(api, **overrides):
+    return api.post(
+        "/ui/emisores", data={**EMISOR_FORM, **overrides}, follow_redirects=False
+    )
+
+
+def _editar_emisor_activo(api, **overrides):
+    emisor_id = api.conn.execute("SELECT id FROM emisores LIMIT 1").fetchone()["id"]
+    data = {k: v for k, v in EMISOR_FORM.items() if k != "ambiente"}
+    data["emisor_id"] = emisor_id
+    return api.post("/ui/emisores", data={**data, **overrides}, follow_redirects=False)
 
 
 def _sin_settings(api):
@@ -353,7 +365,7 @@ def test_pagina_de_configuracion_carga_y_guarda(api, arca):
     assert pagina.status_code == 200
     assert "Dar de alta al menos un emisor" in pagina.text
 
-    r = api.post("/ui/configuracion", data=CONFIG_FORM, follow_redirects=False)
+    r = _guardar_emisor(api)
     assert r.status_code == 303
 
     guardada = api.get("/configuracion?aviso=guardado")
@@ -366,9 +378,7 @@ def test_pagina_de_configuracion_carga_y_guarda(api, arca):
 
 
 def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
-    r = api.post(
-        "/ui/configuracion", data={**CONFIG_FORM, "emisor_razon_social": ""}
-    )
+    r = _guardar_emisor(api, razon_social="")
     assert r.status_code == 422
     assert "Datos inválidos" in r.text
 
@@ -376,9 +386,7 @@ def test_configuracion_invalida_no_pierde_la_pagina(api, arca):
 def test_configuracion_con_solo_espacios_es_invalida(api, arca):
     # El strip corre antes de validar: "   " no debe guardarse como vacío
     # con un "guardado" que deja al emisor incompleto.
-    r = api.post(
-        "/ui/configuracion", data={**CONFIG_FORM, "emisor_razon_social": "   "}
-    )
+    r = _guardar_emisor(api, razon_social="   ")
     assert r.status_code == 422
     assert "Datos inválidos" in r.text
     # El emisor sembrado sigue intacto: el intento fallido no pisó nada.
@@ -387,11 +395,7 @@ def test_configuracion_con_solo_espacios_es_invalida(api, arca):
 
 def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
     # Varios PV habilitados separados por coma: se emite con el primero.
-    r = api.post(
-        "/ui/configuracion",
-        data={**CONFIG_FORM, "puntos_venta": "7, 3"},
-        follow_redirects=False,
-    )
+    r = _editar_emisor_activo(api, puntos_venta="7, 3")
     assert r.status_code == 303
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
@@ -400,9 +404,7 @@ def test_punto_venta_configurado_se_usa_al_emitir(api, arca):
 
 
 def test_puntos_venta_no_numericos_rechazados(api, arca):
-    r = api.post(
-        "/ui/configuracion", data={**CONFIG_FORM, "puntos_venta": "1, dos"}
-    )
+    r = _editar_emisor_activo(api, puntos_venta="1, dos")
     assert r.status_code == 422
     assert "Datos inválidos" in r.text
 
@@ -411,7 +413,7 @@ def test_nav_incluye_configuracion(api):
     assert 'href="/configuracion"' in api.get("/").text
 
 
-EMISOR_FORM = {
+EMISOR_FORM_SEGUNDO = {
     "razon_social": "OTRO EMISOR S.A.",
     "domicilio": "Av. Corrientes 1000",
     "iibb": "Exento",
@@ -424,7 +426,7 @@ EMISOR_FORM = {
 
 def test_alta_de_segundo_emisor_y_activacion(api, arca):
     _crear_cliente_por_form(api)
-    r = api.post("/ui/emisores", data=EMISOR_FORM, follow_redirects=False)
+    r = api.post("/ui/emisores", data=EMISOR_FORM_SEGUNDO, follow_redirects=False)
     assert r.status_code == 303
     pagina = api.get("/configuracion")
     assert "OTRO EMISOR S.A." in pagina.text
@@ -446,11 +448,7 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
 
 
 def test_seleccion_punto_venta_al_emitir(api, arca):
-    api.post(
-        "/ui/configuracion",
-        data={**CONFIG_FORM, "puntos_venta": "7, 3"},
-        follow_redirects=False,
-    )
+    _editar_emisor_activo(api, puntos_venta="7, 3")
     _crear_cliente_por_form(api)
     home = api.get("/")
     assert 'name="punto_venta"' in home.text
