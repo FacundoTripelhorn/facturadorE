@@ -23,6 +23,10 @@ of exploring the repo blindly.
    - [`docs/setup-homologacion.md`](docs/setup-homologacion.md) — homologación (start here).
    - [`docs/setup-produccion.md`](docs/setup-produccion.md) — production.
 9. Other agent supplements: [`docs/agent/`](docs/agent/).
+10. For **larger tasks** (multi-file, ARCA, schema, or ambiguous scope), start
+    from [`docs/agent/task-brief-template.md`](docs/agent/task-brief-template.md)
+    — paste the scaffold into the Linear issue or prompt so goal, constraints,
+    and verification are explicit without duplicating this file.
 
 ## Project shape
 
