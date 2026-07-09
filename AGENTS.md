@@ -1,50 +1,121 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+Shared contract for coding agents (Cursor, Claude, Codex, and future tools)
+working on **facturador**. Read this file first; follow links for depth instead
+of exploring the repo blindly.
 
-`facturador` is a single-process Python 3.12 FastAPI app (JSON API + Jinja/HTMX
-frontend) that issues Argentine export invoices ("Factura E") against ARCA's
-WSAA/WSFEX SOAP web services. SQLite is the only datastore. There is one
-service; the dev entrypoint is `uv run python -m facturador` (binds
-`127.0.0.1:8399`, port override via `FACTURADOR_PORT`).
+## Mandatory first reads
 
-Tooling is `uv` (installed at `~/.local/bin`, on PATH via `.bashrc`). Dev deps
-live in the `dev` dependency-group; install/refresh them with `uv sync`.
-WeasyPrint's system libs (pango/cairo/gdk-pixbuf) are already present in the
-base image.
+1. This file (`AGENTS.md`) — project shape, commands, constraints, output format.
+2. [`README.md`](README.md) — user-facing overview, data layout, Docker vs local dev.
+3. [`docs/design.md`](docs/design.md) — architecture, domain rules, security decisions.
+4. Setup for the active environment:
+   - [`docs/setup-homologacion.md`](docs/setup-homologacion.md) — homologación (start here).
+   - [`docs/setup-produccion.md`](docs/setup-produccion.md) — production.
+5. Future agent supplements (when present): [`docs/agent/`](docs/agent/).
 
-> On Cursor Cloud, dependency refresh is automated by a Cloud-managed **update
-> script** (`uv sync`, bootstrapping `uv` if absent). That script is stored as
-> Cursor Cloud environment metadata, not committed to this repo, so you will not
-> find it in the diff — just run `uv sync` yourself when working locally.
+## Project shape
 
-Standard commands (see `pyproject.toml`):
-- Lint: `uv run ruff check .`
-- Types: `uv run mypy`
-- Tests: `uv run pytest` (uses an in-process ARCA fake, no network needed)
+- **Stack:** Python 3.12, single-process FastAPI (JSON API + Jinja/HTMX frontend),
+  SQLite datastore, WeasyPrint PDFs.
+- **Domain:** Argentine export invoices ("Factura E") via ARCA WSAA/WSFEX SOAP.
+- **Layout:** one service package under `facturador/`; tests in `tests/`; scripts in
+  `scripts/`; schema in `facturador/schema.sql`.
+- **Dev entrypoint:** `uv run python -m facturador` (binds `127.0.0.1:8399`; port
+  override via `FACTURADOR_PORT`).
+- **Tooling:** [uv](https://docs.astral.sh/uv/). Dev deps live in the `dev`
+  dependency-group.
 
-### Running the app locally (non-obvious)
+## Standard commands
 
-The app refuses to start unless a cert/key pair exists for the active
-`ARCA_ENV`. On startup `load_config()` requires `secrets/<env>.crt` and
-`secrets/<env>.key` (key mode must be 400/600) plus a `.env`. These are
-gitignored and NOT in the repo. For a local `homo` run without real ARCA
-credentials, generate a self-signed pair (subject must carry `CUIT <11 digits>`)
-and a `.env` with at least `ARCA_ENV=homo`, `FACTURADOR_HOME=/workspace`,
-`ARCA_CUIT=<11 digits>`. See `tests/conftest.py` for the exact self-signed cert
-recipe.
+Run from the repo root after `uv sync`:
 
-- Client management (create/list/edit clients) works fully offline. The
-  clients form validates country/currency codes against the `arca_params`
-  cache, which is normally synced from ARCA. With no real credentials, seed it
-  directly (see `facturador/repo/params.py::replace_params` and the
-  `seed_params` helper in `tests/conftest.py`) so the `/clientes` page and
-  `POST /clients` work.
-- Anything that reaches ARCA (home page cotización, creating an invoice draft,
-  `POST /invoices/{id}/authorize`, `GET /health/arca`) needs a **real
-  certificate registered in ARCA homologación (WSASS) and authorized for the
-  `wsfex` service**. ARCA's homologation endpoints ARE network-reachable from
-  the VM, but a self-signed cert is rejected (`cms.cert.untrusted`), so those
-  flows return 5xx until a real cert/key is supplied. `WsaaError` is not caught
-  by the home handler, so `GET /` returns 500 when a default client exists and
-  the cert is not ARCA-trusted — this is a credential limitation, not a bug.
+| Purpose | Command |
+|---|---|
+| Install / refresh deps | `uv sync` |
+| Lint | `uv run ruff check .` |
+| Types | `uv run mypy` |
+| Tests | `uv run pytest` |
+
+Tests use an in-process ARCA fake (`tests/arca_fake.py`); no network or real
+credentials required. CI runs the same three checks (see `.github/workflows/ci.yml`).
+
+## Local dev prerequisites
+
+Data lives under `FACTURADOR_HOME` (default `~/facturador`), outside the repo.
+On first start the app creates the home layout and a bootstrap `.env`; only the
+cert/key pair must be placed manually. See the setup docs and
+[`README.md`](README.md) § Configuración.
+
+- **Bootstrap `.env`:** read only from `<FACTURADOR_HOME>/.env`, never the CWD.
+  Auto-created with `ARCA_ENV=homo` if missing. Holds only `ARCA_ENV` and
+  optional `FACTURADOR_PORT`; CUIT is extracted from the certificate.
+- **App config:** emisor fields, punto de venta, and S3 backup settings live in
+  SQLite and are edited via `/configuracion` — they travel inside encrypted
+  backups, not in `.env`.
+- **Backups:** `facturador.backup` reads the S3 bucket/prefix from the `settings`
+  row in the snapshot being backed up. On a fresh machine with no DB yet,
+  `facturador.restore --latest` needs `--bucket`/`--prefix` on the CLI.
+- **Certificates:** `secrets/<env>.crt` and `secrets/<env>.key` (mode 400/600).
+  Private keys have **no passphrase** (product decision). All gitignored.
+
+For offline work without real ARCA credentials:
+
+- Point `FACTURADOR_HOME` at a test directory, place a self-signed pair there
+  (subject must include `CUIT <11 digits>`). Recipe: `tests/conftest.py`.
+- **Client management** (`/clientes`, `POST /clients`) works fully offline once
+  `arca_params` is seeded (`facturador/repo/params.py::replace_params`;
+  `seed_params` in `tests/conftest.py`).
+- **ARCA-backed flows** (home cotización, invoice draft, authorize, health check)
+  need a real certificate registered in ARCA homologación (WSASS) and authorized
+  for `wsfex`. A self-signed cert is rejected (`cms.cert.untrusted`).
+
+## Architectural and security rules
+
+Do not regress these without an explicit design change in `docs/design.md`:
+
+- **Localhost only.** The app must not be made externally reachable. Bind to
+  `127.0.0.1` on the host; Docker publishes only `127.0.0.1:PORT`. Do not change
+  uvicorn to `0.0.0.0` outside the container, add reverse proxies, tunnels, or
+  auth layers to expose the service on a network.
+- **Secrets stay local.** Cert/key pairs never belong in the repo, CI, or logs.
+  Key files must remain mode 400/600.
+- **SQLite is the local source of truth.** Domain config (emisor, punto de
+  venta, backup bucket) lives in the DB, not in env vars. No external DB, queues,
+  or sync services unless explicitly scoped.
+- **ARCA is authoritative for numbering.** Always reconcile with `FEXGetLast_CMP`;
+  never rely on a local counter alone.
+- **Single-process, no workers.** Volume is ~1 invoice/week; keep the stack simple.
+- **Redact sensitive values in logs** (TA token/sign, CMS payloads).
+
+## Known environment limitations (not product bugs)
+
+- Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints.
+  This is expected — fix credentials, not application error handling, unless the
+  task explicitly asks for better UX around that case.
+- `GET /` may return 500 when a default client exists and WSAA fails
+  (`WsaaError` is not swallowed on the home handler).
+- Contract tests against real homologación (`scripts/get_ta.py`,
+  `scripts/check_wsfex.py`) are intentionally local-only; CI does not upload certs.
+
+## Expected agent response format
+
+End every task with these four sections:
+
+1. **Summary** — what changed and why, in plain language.
+2. **Changed files** — list of paths touched (or "none" for read-only tasks).
+3. **Verification** — commands run and their results (lint, types, tests, manual
+   checks). Say explicitly if something was not run and why.
+4. **Remaining risks** — open questions, credential gaps, follow-ups, or edge
+   cases not covered.
+
+Keep responses proportional to task complexity; do not pad with unrelated detail.
+
+## Agent-specific supplements
+
+Tool-specific notes belong in `docs/agent/` when they exist. Until then:
+
+- **Cursor Cloud:** dependency refresh may be automated by the environment
+  (`uv sync` on boot). WeasyPrint system libs (pango/cairo/gdk-pixbuf) are
+  preinstalled in the base image. ARCA homologación endpoints are network-reachable
+  from the VM, but a self-signed cert is still rejected by WSAA.
