@@ -48,6 +48,7 @@ flowchart TB
     DC["docker-compose.yml"]
     DKR["Dockerfile"]
     EP["docker/entrypoint.sh"]
+    LAUNCH_PY["facturador/launcher/<br/>process supervisor (FAC-28)"]
     LAUNCH["scripts/launch.cmd<br/>scripts/launch.command"]
   end
 
@@ -207,18 +208,26 @@ one operates; PV selection when more than one is enabled. See
 | What | Where |
 |------|-------|
 | Bootstrap env (`ARCA_ENV`, port) | `<FACTURADOR_HOME>/.env` — read by `facturador/config.py` |
-| Cert/key pair (manual, gitignored) | `<FACTURADOR_HOME>/secrets/<env>.{crt,key}` |
+| Cert/key pair (manual, gitignored) | Profile `secrets/cert.{crt,key}` via `ProfilePaths` |
 | Domain config (emisor, PV, S3 backup) | SQLite `settings` + `emisores` — see § Emisor entity above |
 | Constants & ARCA codes | `facturador/constants.py` |
 | Docker image & localhost bind | `Dockerfile`, `docker-compose.yml` |
 | Container entrypoint (secrets copy) | `docker/entrypoint.sh` |
-| Double-click launchers | `scripts/launch.cmd`, `scripts/launch.command` |
+| Process supervisor (FAC-28) | `facturador/launcher/` — start/stop one profile-bound backend, readiness, browser |
+| Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Encrypted backup/restore CLI | `facturador/backup.py`, `facturador/restore.py` |
 | Homologación setup walkthrough | `docs/setup-homologacion.md` |
 | Production setup walkthrough | `docs/setup-produccion.md` |
 | Config tests | `tests/test_config.py`, `tests/test_settings.py` |
+| Launcher tests | `tests/test_launcher.py` |
 
 Never commit secrets. Key files must stay mode 400/600.
+
+**Launcher supervisor (FAC-28):** `python -m facturador.launcher --env homo|prod`
+resolves the hidden profile, starts `python -m facturador` with that single
+`ARCA_ENV`, waits for `GET /health`, opens the browser only when ready, and
+stops the child on Ctrl+C without orphaning it. No chooser UI yet (FAC-29);
+no duplicate-instance lock yet (FAC-30).
 
 ### Tests
 
