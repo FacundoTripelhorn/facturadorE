@@ -62,6 +62,11 @@ dos o si la key tiene permisos más laxos que `400`/`600`.
 
 ## 4. El `.env` de bootstrap
 
+> **Nota ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)):** el
+> selector `ARCA_ENV` y el home compartido quedaron superados por la decisión
+> de perfiles aislados por ambiente elegidos desde el launcher. Lo que sigue
+> es el comportamiento implementado hoy; la guía se reescribirá en FAC-34.
+
 La app lee su `.env` **solo de `FACTURADOR_HOME`** (default `~/facturador`),
 nunca del directorio de trabajo. En el primer arranque lo crea sola con
 `ARCA_ENV=homo`, así que para homologación no hay nada que editar. Su

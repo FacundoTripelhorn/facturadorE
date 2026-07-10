@@ -40,6 +40,15 @@ Qué incluye:
 
 ## Setup por ambiente
 
+> **Nota (ADR 0001):** la selección de ambiente vía `ARCA_ENV` en `.env` y el
+> home compartido descriptos abajo siguen siendo el comportamiento
+> implementado, pero fueron **superados por decisión de diseño**: la dirección
+> aprobada es un launcher que elige entre Homologación y Producción, cada uno
+> con un perfil interno aislado, y cambio de ambiente solo por reinicio del
+> backend (sin hot switching). Ver
+> [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md);
+> esta documentación se actualizará al implementarse (FAC-34).
+
 Cada ambiente tiene su guía paso a paso (trámites en ARCA, certificados,
 configuración local y verificación):
 

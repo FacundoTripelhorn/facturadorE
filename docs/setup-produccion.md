@@ -50,6 +50,12 @@ facturación y registración (REAR/RECE/RFI)"**.
 
 ## 4. Configuración local
 
+> **Nota ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)):** este paso
+> describe el modelo vigente (home compartido + `ARCA_ENV` en `.env`), que
+> quedó superado por la decisión de perfiles aislados por ambiente elegidos
+> desde el launcher. Seguí estos pasos hasta que la implementación llegue; la
+> guía se reescribirá en FAC-34.
+
 Copiar el par de producción junto al de homologación (pueden convivir en el
 mismo `secrets/`; la app solo usa el par del ambiente activo):
 

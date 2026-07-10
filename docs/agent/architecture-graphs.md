@@ -11,6 +11,13 @@ For file-level navigation, see [`repo-map.md`](repo-map.md). For commands and
 constraints, see [`AGENTS.md`](../../AGENTS.md). For verification scopes by task,
 see [`verification-matrix.md`](verification-matrix.md).
 
+> **Heads-up ([ADR 0001](../adr/0001-perfiles-de-ambiente-aislados.md)):** the
+> environment model shown here (shared `FACTURADOR_HOME`, `ARCA_ENV` in
+> `.env`) reflects the current implementation but is superseded by
+> launcher-selected isolated environment profiles — one immutable
+> environment/profile per backend process, restart-based switching, no hot
+> switching. Diagrams will be updated as the profile work lands (FAC-34).
+
 ---
 
 ## Runtime architecture
@@ -351,4 +358,6 @@ Never run two instances emitting in parallel.
 
 - [`repo-map.md`](repo-map.md) — where code lives by task type
 - [`docs/design.md`](../design.md) — authoritative architecture and domain rules
+- [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md)
+  — authoritative environment/profile contract (launcher-selected isolated profiles)
 - [`AGENTS.md`](../../AGENTS.md) — agent contract, commands, security rules
