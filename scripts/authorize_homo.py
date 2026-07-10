@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from facturador import db, repo
 from facturador.arca.wsfex import Invoice, InvoiceItem, WsfexClient
-from facturador.config import load_config, resolve_boot_environment
+from facturador.config import load_config, resolve_boot_profile
 from facturador.constants import CBTE_TIPO_FACTURA_E, MONEDA_DOL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -127,14 +127,14 @@ def guardar_registro(requests_dir: Path, registro: dict) -> Path:
 
 
 def main() -> None:
-    config = load_config(resolve_boot_environment())
+    config = load_config(resolve_boot_profile())
     if config.env != "homo":
         raise SystemExit(
             f"Este script es solo para homologación (ARCA_ENV={config.env})."
         )
     client = WsfexClient(config)
-    conn = db.connect(config.data_dir / "facturador.db")
-    requests_dir = config.data_dir / "authorize"
+    conn = db.connect(config.paths.db)
+    requests_dir = config.paths.data_dir / "authorize"
     requests_dir.mkdir(parents=True, exist_ok=True)
 
     pendiente = request_pendiente(requests_dir)
@@ -145,7 +145,7 @@ def main() -> None:
             "se reintenta con el MISMO Id y datos idénticos (reproceso ARCA)."
         )
     else:
-        entrada = cargar_input(config.data_dir / "invoice_input.json")
+        entrada = cargar_input(config.paths.data_dir / "invoice_input.json")
         hoy = dt.date.today().strftime("%Y%m%d")
 
         dst_cmp = lookup_param(conn, "pais", entrada["pais_descripcion"])

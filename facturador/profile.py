@@ -5,9 +5,9 @@ su propia raíz en el app-data del sistema operativo. ``EnvironmentProfile``
 fija el ambiente inmutable; ``ProfilePaths`` deriva todos los archivos de
 runtime del perfil desde una única raíz.
 
-Los consumidores actuales (``config.py``, WSAA, backup, etc.) siguen en el
-layout shared-home hasta FAC-25; este módulo es la fuente de verdad del
-contrato nuevo.
+Todo archivo de runtime del backend (DB, certificados, PDFs, TA cache,
+params cache, logs, staging de backups, onboarding) se resuelve por acá
+(FAC-25); ningún módulo construye paths por ambiente por su cuenta.
 """
 
 from __future__ import annotations
@@ -142,6 +142,19 @@ class ProfilePaths:
     @property
     def onboarding(self) -> Path:
         return self.data_dir / ONBOARDING_FILENAME
+
+    def ensure_layout(self) -> None:
+        """Crea la estructura mínima del perfil en el primer arranque.
+
+        pdfs/ y logs/ los crea quien escribe en ellos; acá va lo que el
+        usuario u otros procesos necesitan encontrar (secrets/ para colocar
+        el par cert/key, data/ y backups/ como raíces de estado).
+        """
+        self.secrets_dir.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32":
+            self.secrets_dir.chmod(0o700)
+        self.data_dir.mkdir(exist_ok=True)
+        self.backups_dir.mkdir(exist_ok=True)
 
     def __repr__(self) -> str:
         return "ProfilePaths(...)"

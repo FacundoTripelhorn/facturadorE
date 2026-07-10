@@ -85,10 +85,10 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
         moneda_ds=_param_ds(service.conn, "moneda", inv["moneda_id"]),
     )
     filename = invoice_pdf_filename(inv)
-    # Copia persistida en data/pdfs (layout §2.5); la respuesta no depende
-    # del archivo, se sirve siempre el render fresco.
-    service.config.pdf_dir.mkdir(parents=True, exist_ok=True)
-    (service.config.pdf_dir / filename).write_bytes(pdf)
+    # Copia persistida en el pdfs/ del perfil (FAC-25); la respuesta no
+    # depende del archivo, se sirve siempre el render fresco.
+    service.config.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+    (service.config.paths.pdf_dir / filename).write_bytes(pdf)
     return Response(
         content=pdf,
         media_type="application/pdf",

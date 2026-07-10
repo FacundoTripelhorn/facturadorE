@@ -15,8 +15,7 @@ import os
 import uvicorn
 
 from .api import create_app
-from .config import Config, load_config, resolve_boot_environment
-from .profile import EnvironmentProfile
+from .config import Config, load_config, resolve_boot_profile
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -26,12 +25,11 @@ def _setup_logging(config: Config) -> None:
 
     La redacción de credenciales (token/sign del TA, CMS firmado) es
     responsabilidad de cada módulo al loguear (checklist §2.1.1 punto 9);
-    acá solo se decide el destino.
+    acá solo se decide el destino: el logs/ del perfil (FAC-25).
     """
-    log_dir = config.data_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    config.paths.logs_dir.mkdir(parents=True, exist_ok=True)
     file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "facturador.log",
+        config.paths.log_file,
         maxBytes=1_000_000,
         backupCount=5,
         encoding="utf-8",
@@ -46,9 +44,8 @@ def _setup_logging(config: Config) -> None:
 def main() -> None:
     # ADR 0001 / FAC-24: el ambiente se resuelve UNA vez acá y viaja
     # inyectado; ningún otro módulo vuelve a leer ARCA_ENV.
-    environment = resolve_boot_environment()
-    profile = EnvironmentProfile.resolve(environment)
-    config = load_config(environment)
+    profile = resolve_boot_profile()
+    config = load_config(profile)
     _setup_logging(config)
     # El repr del perfil redacta la raíz física: identifica el ambiente sin
     # exponer paths internos ni secretos en el log de arranque.

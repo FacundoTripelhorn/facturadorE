@@ -12,13 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from facturador.arca.wsaa import SERVICE, WsaaClient
-from facturador.config import load_config, resolve_boot_environment
+from facturador.config import load_config, resolve_boot_profile
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 def main() -> None:
-    config = load_config(resolve_boot_environment())
+    config = load_config(resolve_boot_profile())
     client = WsaaClient(config)
 
     cached = client.cache.load(config.env)

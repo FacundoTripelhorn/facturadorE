@@ -1,9 +1,10 @@
 # Uso: docker compose up -d  (o doble click en scripts/launch.cmd / .command)
 #
-# FACTURADOR_HOME (host) apunta al directorio de datos del usuario con el
-# layout de design.md §2.5 (.env, secrets/, data/, backups/). Default:
-# ~/facturador. El publish del puerto queda SIEMPRE en 127.0.0.1 — la app
-# no es accesible desde la red aunque el proceso interno escuche en 0.0.0.0.
+# FACTURADOR_HOME (host) apunta al directorio de datos del usuario: el .env
+# de bootstrap en la raíz y un perfil por ambiente en profiles/<env>/
+# (secrets/, data/, backups/ — ADR 0001 / FAC-25). Default: ~/facturador.
+# El publish del puerto queda SIEMPRE en 127.0.0.1 — la app no es accesible
+# desde la red aunque el proceso interno escuche en 0.0.0.0.
 services:
   facturador:
     build: .

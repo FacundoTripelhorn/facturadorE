@@ -30,9 +30,13 @@ RUN chmod +x /entrypoint.sh
 # pueda moverlo (python-dotenv no pisa variables ya presentes): el publish
 # de compose y el HEALTHCHECK asumen 8399 adentro. El puerto del lado del
 # host sí es configurable, vía FACTURADOR_PORT en el shell del host.
+# XDG_DATA_HOME fija dónde resuelve la app las raíces de perfil (ADR 0001 /
+# FAC-25) para que el entrypoint y la app coincidan sin depender del $HOME
+# del usuario del contenedor.
 ENV FACTURADOR_HOME=/facturador \
     FACTURADOR_IN_DOCKER=1 \
     FACTURADOR_PORT=8399 \
+    XDG_DATA_HOME=/appdata \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8399
