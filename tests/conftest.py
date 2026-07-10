@@ -100,14 +100,14 @@ EMISOR_PRUEBA = {
 
 
 def seed_settings(conn) -> None:
-    """Settings de dominio con el emisor completo (sin él no se emite).
-    El emisor declara ambiente homo, el mismo de test_config."""
+    """Settings de dominio con el emisor completo y activo (sin él no se
+    emite). La selección activa es local al perfil (FAC-26)."""
     from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 
     save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA)))
     from facturador import repo
 
-    set_active_emisor(conn, repo.list_emisores(conn, "homo")[0]["id"])
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
 
 
 def seed_params(conn) -> None:

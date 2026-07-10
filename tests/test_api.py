@@ -397,3 +397,51 @@ def test_listado_paginado(api, arca):
     assert len(api.get("/invoices").json()) == 3
     assert len(api.get("/invoices?limit=2").json()) == 2
     assert len(api.get("/invoices?limit=2&offset=2").json()) == 1
+
+
+# --- vínculo factura ↔ perfil (ADR 0001 / FAC-26) ---
+
+
+def test_el_ambiente_de_la_factura_sale_del_perfil_no_del_request(api, arca):
+    """El environment es auditoría inmutable sellada por el perfil: no es
+    input del request, y mandarlo igual se ignora."""
+    _crear_cliente(api)
+    r = api.post(
+        "/invoices", json={"imp_total": "1500.00", "environment": "prod"}
+    )
+    assert r.status_code == 201, r.text
+    fila = repo.get_invoice(api.conn, r.json()["id"])
+    assert fila["environment"] == "homo"  # el del perfil del api fixture
+
+
+def _marcar_como_de_otro_perfil(api, invoice_id):
+    """Simula una DB ajena restaurada en el perfil equivocado."""
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET environment = 'prod' WHERE id = ?",
+            (invoice_id,),
+        )
+
+
+def test_acceso_a_factura_de_otro_perfil_rechazado(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    _marcar_como_de_otro_perfil(api, draft["id"])
+
+    r = api.get(f"/invoices/{draft['id']}")
+    assert r.status_code == 409
+    assert "otro" in r.json()["detail"]
+
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 409
+    assert "perfil" in r.json()["detail"]
+
+
+def test_pdf_de_factura_de_otro_perfil_rechazado(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 200, r.text
+    _marcar_como_de_otro_perfil(api, draft["id"])
+
+    assert api.get(f"/invoices/{draft['id']}/pdf").status_code == 409

@@ -9,9 +9,11 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- Emisores (la app es dueña de su configuración): la entidad es el emisor,
--- y cada uno declara con qué ambiente interactúa y qué puntos de venta
--- tiene habilitados (JSON). Un mismo ambiente puede tener varios emisores;
--- la app opera con el activo explícito (active_emisor_id_<ambiente>).
+-- LOCAL al perfil (ADR 0001 / FAC-26) — la DB entera pertenece a un solo
+-- ambiente. Un perfil puede tener varios emisores (una identidad fiscal);
+-- la app opera con el activo explícito (clave única active_emisor_id en
+-- settings). La columna ambiente es el sello del perfil al crear, no una
+-- elección del usuario.
 CREATE TABLE IF NOT EXISTS emisores (
     id                 TEXT PRIMARY KEY,
     razon_social       TEXT NOT NULL DEFAULT '',
@@ -84,6 +86,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     raw_request        TEXT,
     raw_response       TEXT,
     last_error         TEXT,
+    -- Auditoría inmutable (ADR 0001 / FAC-26): sello del perfil al crear,
+    -- validado contra el perfil corriente en cada acceso por id.
     environment        TEXT NOT NULL,
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL

@@ -7,11 +7,13 @@ En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
 ``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1) y
 ``FACTURADOR_PORT``.
 
-El emisor es una entidad (tabla ``emisores``): cada uno declara con qué
-ambiente interactúa y qué puntos de venta tiene habilitados, y un mismo
-ambiente puede tener varios. La app opera con el emisor activo explícito
-del ambiente corriente (``active_emisor_id_<ambiente>`` en settings); sin
-selección no hay emisor operativo. La config de backups es global.
+El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001 /
+FAC-26): la DB entera pertenece a un solo ambiente, así que acá no se
+selecciona ni filtra por ambiente. Un perfil puede tener varios emisores
+(una sola identidad fiscal: el CUIT del certificado del perfil) y la app
+opera con el activo explícito (``active_emisor_id`` en settings, una única
+clave); sin selección no hay emisor operativo. La config de backups es
+global al perfil.
 """
 
 from __future__ import annotations
@@ -22,18 +24,17 @@ from dataclasses import dataclass
 
 from . import repo
 
-
-def active_emisor_key(ambiente: str) -> str:
-    return f"active_emisor_id_{ambiente}"
+# Única clave de selección: sin sufijo de ambiente, el perfil YA es el
+# ambiente (FAC-26).
+ACTIVE_EMISOR_KEY = "active_emisor_id"
 CONDICION_IVA_DEFAULT = "IVA Responsable Inscripto"
 BACKUP_PREFIX_DEFAULT = "facturador"
 
 
 @dataclass(frozen=True)
 class Emisor:
-    """Un emisor factura contra UN ambiente (se elige al darlo de alta) con
-    sus propios puntos de venta; los datos de texto van al PDF y no viajan a
-    ARCA (design.md §0.1)."""
+    """Un emisor del perfil con sus propios puntos de venta; los datos de
+    texto van al PDF y no viajan a ARCA (design.md §0.1)."""
 
     id: str | None = None
     razon_social: str = ""
@@ -41,7 +42,9 @@ class Emisor:
     iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
     inicio_actividades: str = ""   # DD/MM/AAAA, como lo imprime el comprobante
     condicion_iva: str = CONDICION_IVA_DEFAULT
-    ambiente: str = "homo"         # con qué ambiente interactúa este emisor
+    # Sello del perfil al crear (FAC-26): dato de contexto, NO elegible por
+    # el usuario; el form/API lo pierde en FAC-27.
+    ambiente: str = "homo"
     # Habilitados para este emisor. En homo el PV es libre; en prod, el PV
     # RECE exclusivo.
     puntos_venta: tuple[int, ...] = (1,)
@@ -99,19 +102,16 @@ def _row_to_emisor(row: sqlite3.Row) -> Emisor:
     )
 
 
-def _active_emisor_row(conn: sqlite3.Connection, env: str) -> sqlite3.Row | None:
-    """Emisor activo explícito del ambiente, o ninguno."""
-    active_id = repo.get_settings(conn).get(active_emisor_key(env))
+def _active_emisor_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """Emisor activo explícito del perfil, o ninguno."""
+    active_id = repo.get_settings(conn).get(ACTIVE_EMISOR_KEY)
     if not active_id:
         return None
-    candidato = repo.get_emisor(conn, active_id)
-    if candidato is None or candidato["ambiente"] != env:
-        return None
-    return candidato
+    return repo.get_emisor(conn, active_id)
 
 
-def get_active_emisor_id(conn: sqlite3.Connection, env: str) -> str | None:
-    row = _active_emisor_row(conn, env)
+def get_active_emisor_id(conn: sqlite3.Connection) -> str | None:
+    row = _active_emisor_row(conn)
     return None if row is None else row["id"]
 
 
@@ -119,7 +119,7 @@ def set_active_emisor(conn: sqlite3.Connection, emisor_id: str) -> None:
     emisor = repo.get_emisor(conn, emisor_id)
     if emisor is None:
         raise ValueError(f"Emisor {emisor_id} no existe")
-    repo.save_settings(conn, {active_emisor_key(emisor["ambiente"]): emisor_id})
+    repo.save_settings(conn, {ACTIVE_EMISOR_KEY: emisor_id})
 
 
 def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
@@ -130,12 +130,16 @@ def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
     return _row_to_emisor(row)
 
 
-def load_settings(conn: sqlite3.Connection, env: str) -> Settings:
-    """Settings con el emisor activo del ambiente y la config global de backups."""
-    row = _active_emisor_row(conn, env)
+def load_settings(conn: sqlite3.Connection) -> Settings:
+    """Settings con el emisor activo del perfil y la config de backups.
+
+    Sin parámetro de ambiente (FAC-26): la DB es de un solo perfil y la
+    selección activa es una única clave.
+    """
+    row = _active_emisor_row(conn)
     raw = repo.get_settings(conn)
     return Settings(
-        emisor=Emisor(ambiente=env) if row is None else _row_to_emisor(row),
+        emisor=Emisor() if row is None else _row_to_emisor(row),
         backup_s3_bucket=raw.get("backup_s3_bucket", ""),
         backup_s3_prefix=raw.get("backup_s3_prefix") or BACKUP_PREFIX_DEFAULT,
     )

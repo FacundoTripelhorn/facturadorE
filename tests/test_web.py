@@ -447,6 +447,23 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
     assert factura["punto_venta"] == 5  # PV elegido al emitir
 
 
+def test_emisor_nuevo_nace_sellado_con_el_ambiente_del_perfil(api, arca):
+    """FAC-26: el ambiente dejó de ser elegible — aunque el form todavía
+    mande uno (el campo desaparece en FAC-27), el emisor se crea con el del
+    perfil corriente."""
+    r = api.post(
+        "/ui/emisores",
+        data={**EMISOR_FORM_SEGUNDO, "ambiente": "prod"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    fila = api.conn.execute(
+        "SELECT ambiente FROM emisores WHERE razon_social = ?",
+        ("OTRO EMISOR S.A.",),
+    ).fetchone()
+    assert fila["ambiente"] == "homo"  # el del perfil, no el del form
+
+
 def test_seleccion_punto_venta_al_emitir(api, arca):
     _editar_emisor_activo(api, puntos_venta="7, 3")
     _crear_cliente_por_form(api)

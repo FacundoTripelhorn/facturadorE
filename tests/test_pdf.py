@@ -131,13 +131,13 @@ def test_pdf_inexistente_es_404(api):
     assert api.get("/invoices/inexistente/pdf").status_code == 404
 
 
-def test_el_pdf_usa_el_emisor_del_ambiente_del_comprobante(api, arca, monkeypatch):
+def test_el_pdf_usa_el_emisor_persistido_en_el_comprobante(api, arca, monkeypatch):
     """El comprobante es un snapshot: su PDF usa el emisor persistido en la
-    factura, no el activo del ambiente ni el de otro ambiente."""
+    factura, no cualquier otro emisor del perfil dado de alta después."""
     factura = _factura_autorizada(api)
     save_settings(
         api.conn,
-        Settings(emisor=Emisor(razon_social="OTRA S.R.L.", ambiente="prod")),
+        Settings(emisor=Emisor(razon_social="OTRA S.R.L.")),
     )
     capturado = {}
 
@@ -175,7 +175,7 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
     from facturador.settings import set_active_emisor
 
     set_active_emisor(api.conn, segundo["id"])
-    assert load_settings(api.conn, "homo").emisor.razon_social == "OTRO EMISOR S.A."
+    assert load_settings(api.conn).emisor.razon_social == "OTRO EMISOR S.A."
 
     capturado = {}
 
@@ -199,7 +199,7 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
 def test_html_contiene_los_datos_del_comprobante(api, arca):
     # Los datos del emisor salen de la DB (sembrados por seed_settings en
     # el fixture), no del entorno.
-    emisor = load_settings(api.conn, "homo").emisor
+    emisor = load_settings(api.conn).emisor
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
@@ -250,7 +250,7 @@ def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
     items = repo.get_invoice_items(api.conn, factura["id"])
 
     html = render_invoice_html(
-        inv, items, load_settings(api.conn, "homo").emisor, int(TEST_CUIT)
+        inv, items, load_settings(api.conn).emisor, int(TEST_CUIT)
     )
 
     assert "<script>" not in html
