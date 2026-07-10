@@ -10,8 +10,10 @@ import datetime as dt
 import threading
 
 import pytest
+from pydantic import ValidationError
 
 from facturador import repo
+from facturador.schemas import EmisorCreateIn, EmisorUpdateIn
 from facturador.service import StaleRegistryError
 
 CLIENTE = {
@@ -35,6 +37,28 @@ def _crear_draft(api, **overrides):
     r = api.post("/invoices", json={"imp_total": "1500.00", **overrides})
     assert r.status_code == 201, r.text
     return r.json()
+
+
+# --- emisores ---
+
+EMISOR_API = {
+    "razon_social": "MI EMPRESA S.R.L.",
+    "domicilio": "Calle Falsa 123, CABA",
+    "iibb": "901-123456-7",
+    "inicio_actividades": "01/2020",
+    "condicion_iva": "IVA Responsable Inscripto",
+    "puntos_venta": [1],
+}
+
+
+def test_api_rechaza_ambiente_obsoleto_al_crear_emisor():
+    with pytest.raises(ValidationError, match="ambiente"):
+        EmisorCreateIn(**EMISOR_API, ambiente="prod")
+
+
+def test_api_rechaza_ambiente_obsoleto_al_editar_emisor():
+    with pytest.raises(ValidationError, match="ambiente"):
+        EmisorUpdateIn(**EMISOR_API, ambiente="prod")
 
 
 # --- clientes ---
