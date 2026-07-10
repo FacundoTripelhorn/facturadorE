@@ -44,7 +44,13 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
-from .settings import Settings, get_active_emisor_id, load_settings, set_active_emisor
+from .settings import (
+    Emisor,
+    Settings,
+    get_active_emisor_id,
+    load_settings,
+    set_active_emisor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +104,25 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_settings(self) -> Settings:
-        return load_settings(self.conn)
+        settings = load_settings(self.conn)
+        self._check_emisor_profile(settings.emisor)
+        return settings
+
+    def _check_emisor_profile(self, emisor: Emisor) -> None:
+        """Rechaza operar con un emisor activo de OTRO perfil (FAC-26).
+
+        Contraparte de _check_invoice_profile: por construcción no debería
+        pasar, pero si una DB ajena se restauró en el perfil equivocado,
+        active_emisor_id puede apuntar a un emisor sellado con otro ambiente
+        y ni settings ni emisión deben usarlo.
+        """
+        if emisor.id is not None and emisor.ambiente != self.config.env:
+            raise ConflictError(
+                f"El emisor activo {emisor.id} pertenece al ambiente "
+                f"{emisor.ambiente} y este backend corre el perfil "
+                f"{self.config.env}: la DB de este perfil contiene datos de "
+                "otro. Restaurar cada backup en el perfil de su ambiente."
+            )
 
     def update_backup_settings(self, payload: BackupSettingsIn) -> Settings:
         actual = self.get_settings()

@@ -464,6 +464,18 @@ def test_emisor_nuevo_nace_sellado_con_el_ambiente_del_perfil(api, arca):
     assert fila["ambiente"] == "homo"  # el del perfil, no el del form
 
 
+def test_emisor_activo_de_otro_perfil_bloquea_los_settings(api, arca):
+    """FAC-26: con el emisor activo sellado con OTRO ambiente (DB ajena
+    restaurada en el perfil equivocado), las páginas que cargan settings
+    quedan bloqueadas con el diagnóstico de restore, igual que las
+    facturas ajenas."""
+    with api.conn:
+        api.conn.execute("UPDATE emisores SET ambiente = 'prod'")
+    r = api.get("/configuracion")
+    assert r.status_code == 409
+    assert "perfil" in r.json()["detail"]
+
+
 def test_seleccion_punto_venta_al_emitir(api, arca):
     _editar_emisor_activo(api, puntos_venta="7, 3")
     _crear_cliente_por_form(api)
