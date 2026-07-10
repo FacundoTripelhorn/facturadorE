@@ -9,6 +9,17 @@ cambiara, el lugar de la verdad es la tabla, no este archivo.
 import enum
 
 
+class ArcaEnvironment(enum.StrEnum):
+    """Ambiente fiscal ARCA (ADR 0001).
+
+    StrEnum: el valor TEXT entra sin conversión en ``invoices.environment``
+    y en el JSON de la API. Un perfil aislado corresponde a exactamente uno.
+    """
+
+    HOMO = "homo"
+    PROD = "prod"
+
+
 class InvoiceStatus(enum.StrEnum):
     """Estados de la máquina de estados de facturas (design.md §2.2).
 
