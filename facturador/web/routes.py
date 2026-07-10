@@ -469,7 +469,7 @@ def _parse_puntos_venta_form(puntos_venta: str) -> list[int]:
 
 
 @router.post("/ui/emisores", response_class=HTMLResponse)
-def guardar_emisor(
+async def guardar_emisor(
     request: Request,
     service: ServiceDep,
     emisor_id: str = Form(""),
@@ -478,10 +478,18 @@ def guardar_emisor(
     iibb: str = Form(""),
     inicio_actividades: str = Form(""),
     condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
-    ambiente: str = Form("homo"),
     puntos_venta: str = Form("1"),
 ):
     existente = repo.get_emisor(service.conn, emisor_id) if emisor_id else None
+    form = await request.form()
+    if "ambiente" in form:
+        return _pagina_configuracion(
+            request,
+            service,
+            editando=existente,
+            error="Datos inválidos: el ambiente sale del perfil activo y no se envía",
+            status_code=422,
+        )
     try:
         pvs = _parse_puntos_venta_form(puntos_venta)
     except ValueError:
@@ -510,7 +518,6 @@ def guardar_emisor(
                 iibb=iibb,
                 inicio_actividades=inicio_actividades,
                 condicion_iva=condicion_iva,
-                ambiente=ambiente,
                 puntos_venta=pvs,
             )
     except ValidationError as exc:

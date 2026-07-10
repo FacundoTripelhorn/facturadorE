@@ -151,9 +151,8 @@ class InvoiceService:
                 "iibb": payload.iibb,
                 "inicio_actividades": payload.inicio_actividades,
                 "condicion_iva": payload.condicion_iva,
-                # El ambiente NO es elegible por el usuario (FAC-26): todo
-                # emisor nace sellado con el del perfil corriente; el campo
-                # del request se ignora y desaparece en FAC-27.
+                # El ambiente NO es elegible por el usuario: todo emisor nace
+                # sellado con el perfil corriente.
                 "ambiente": self.config.env,
                 "puntos_venta": json.dumps(list(payload.puntos_venta)),
             },

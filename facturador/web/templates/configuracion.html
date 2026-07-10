@@ -11,7 +11,7 @@
 </div>
 {% elif not emisores %}
 <div class="panel neutro">
-  <div>Dar de alta al menos un emisor del ambiente {{ env }} para poder emitir.</div>
+  <div>Dar de alta al menos un emisor del perfil {{ env }} para poder emitir.</div>
 </div>
 {% endif %}
 
@@ -54,16 +54,9 @@
     </div>
     <div class="fila">
       <div>
-        <label for="ambiente">Ambiente ARCA</label>
-        {% if editando %}
-        <p class="nota" style="margin-top:0"><b>Ambiente ARCA:</b> {{ editando['ambiente'] }}
-        (se fija al dar de alta; no se puede cambiar)</p>
-        {% else %}
-        <select id="ambiente" name="ambiente" required>
-          <option value="homo" {% if env == 'homo' %}selected{% endif %}>homo — homologación</option>
-          <option value="prod" {% if env == 'prod' %}selected{% endif %}>prod — producción</option>
-        </select>
-        {% endif %}
+        <label>Ambiente ARCA</label>
+        <p class="nota" style="margin-top:0"><b>Ambiente ARCA:</b> {{ env }}
+        (read-only; lo define el perfil activo)</p>
       </div>
       <div>
         <label for="puntos_venta">Puntos de venta</label>
@@ -98,12 +91,12 @@
         <tr>
           <td>
             {{ e["razon_social"] or "—" }}
-            {% if e["id"] == activo_id and e["ambiente"] == env %} ★{% endif %}
+            {% if e["id"] == activo_id %} ★{% endif %}
           </td>
           <td>{{ e["ambiente"] }}</td>
           <td class="num">{{ e["puntos_venta"] | pvs_display }}</td>
           <td>
-            {% if e["ambiente"] == env and e["id"] != activo_id %}
+            {% if e["id"] != activo_id %}
             <form method="post" action="/ui/emisores/{{ e['id'] }}/activar" style="display:inline">
               <button type="submit" class="secundario">Usar para emitir</button>
             </form>
@@ -114,7 +107,7 @@
         {% endfor %}
       </tbody>
     </table>
-    <p class="nota">★ = emisor activo en el ambiente {{ env }} (con el que se emite).</p>
+    <p class="nota">★ = emisor activo en el perfil {{ env }} (con el que se emite).</p>
     {% else %}
     <p class="vacio">Todavía no hay emisores cargados.</p>
     {% endif %}
@@ -146,11 +139,10 @@
 </section>
 
 <p class="nota">
-  El ambiente ARCA ({{ env }}) y el puerto se definen en el <code>.env</code>
-  del directorio de datos; los certificados van en <code>secrets/</code>.
-  Cada emisor conserva el ambiente con el que se dio de alta. Para facturar
-  en otro ambiente, cambiar <code>ARCA_ENV</code> en el <code>.env</code>
-  y reiniciar la app.
+  El ambiente ARCA ({{ env }}) es contexto de solo lectura del perfil activo;
+  el puerto se define en el <code>.env</code> del directorio de datos y los
+  certificados van en <code>secrets/</code>. Para facturar en otro ambiente,
+  arrancar la app con el perfil correspondiente.
 </p>
 
 {% endblock %}

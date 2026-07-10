@@ -318,7 +318,6 @@ EMISOR_FORM = {
     "iibb": "901-123456-7",
     "inicio_actividades": "01/2020",
     "condicion_iva": "IVA Responsable Inscripto",
-    "ambiente": "homo",
     "puntos_venta": "1",
 }
 
@@ -331,7 +330,7 @@ def _guardar_emisor(api, **overrides):
 
 def _editar_emisor_activo(api, **overrides):
     emisor_id = api.conn.execute("SELECT id FROM emisores LIMIT 1").fetchone()["id"]
-    data = {k: v for k, v in EMISOR_FORM.items() if k != "ambiente"}
+    data = dict(EMISOR_FORM)
     data["emisor_id"] = emisor_id
     return api.post("/ui/emisores", data={**data, **overrides}, follow_redirects=False)
 
@@ -419,7 +418,6 @@ EMISOR_FORM_SEGUNDO = {
     "iibb": "Exento",
     "inicio_actividades": "01/01/2019",
     "condicion_iva": "IVA Responsable Inscripto",
-    "ambiente": "homo",
     "puntos_venta": "5, 9",
 }
 
@@ -447,21 +445,27 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
     assert factura["punto_venta"] == 5  # PV elegido al emitir
 
 
-def test_emisor_nuevo_nace_sellado_con_el_ambiente_del_perfil(api, arca):
-    """FAC-26: el ambiente dejó de ser elegible — aunque el form todavía
-    mande uno (el campo desaparece en FAC-27), el emisor se crea con el del
-    perfil corriente."""
+def test_alta_de_emisor_rechaza_ambiente_obsoleto(api, arca):
     r = api.post(
         "/ui/emisores",
         data={**EMISOR_FORM_SEGUNDO, "ambiente": "prod"},
         follow_redirects=False,
     )
-    assert r.status_code == 303
-    fila = api.conn.execute(
-        "SELECT ambiente FROM emisores WHERE razon_social = ?",
-        ("OTRO EMISOR S.A.",),
-    ).fetchone()
-    assert fila["ambiente"] == "homo"  # el del perfil, no el del form
+    assert r.status_code == 422
+    assert "ambiente sale del perfil activo" in r.text
+    assert (
+        api.conn.execute(
+            "SELECT COUNT(*) FROM emisores WHERE razon_social = ?",
+            ("OTRO EMISOR S.A.",),
+        ).fetchone()[0]
+        == 0
+    )
+
+
+def test_edicion_de_emisor_rechaza_ambiente_obsoleto(api, arca):
+    r = _editar_emisor_activo(api, ambiente="prod")
+    assert r.status_code == 422
+    assert "ambiente sale del perfil activo" in r.text
 
 
 def test_emisor_activo_de_otro_perfil_bloquea_los_settings(api, arca):

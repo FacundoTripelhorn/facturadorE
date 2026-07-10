@@ -22,24 +22,16 @@ def _validar_fecha(value: str, campo: str) -> str:
 
 
 class EmisorCreateIn(BaseModel):
-    """Alta de un emisor: declara su ambiente (inmutable) y puntos de venta."""
+    """Alta de un emisor dentro del perfil activo."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     razon_social: str = Field(min_length=1, max_length=200)
     domicilio: str = Field(min_length=1, max_length=200)
     iibb: str = Field(min_length=1, max_length=50)
     inicio_actividades: str = Field(min_length=1, max_length=20)
     condicion_iva: str = CONDICION_IVA_DEFAULT
-    ambiente: str = "homo"
     puntos_venta: list[int] = Field(default=[1], min_length=1)
-
-    @field_validator("ambiente")
-    @classmethod
-    def _ambiente_valido(cls, valor: str) -> str:
-        if valor not in ("homo", "prod"):
-            raise ValueError("ambiente debe ser homo o prod")
-        return valor
 
     @field_validator("puntos_venta")
     @classmethod
@@ -50,9 +42,9 @@ class EmisorCreateIn(BaseModel):
 
 
 class EmisorUpdateIn(BaseModel):
-    """Edición de un emisor existente; el ambiente no se puede cambiar."""
+    """Edición de un emisor existente dentro del perfil activo."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     razon_social: str = Field(min_length=1, max_length=200)
     domicilio: str = Field(min_length=1, max_length=200)
