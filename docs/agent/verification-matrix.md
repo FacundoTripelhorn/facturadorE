@@ -52,7 +52,7 @@ finishing.
 | SQLite settings / emisor | `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` | `uv run pytest tests/test_settings.py` |
 | Backup / restore CLI | `facturador/backup.py`, `facturador/restore.py` | `uv run pytest tests/test_backup.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/db.py` | `uv run pytest` (full suite — many modules touch the DB) |
-| Docker / launchers | `Dockerfile`, `docker-compose.yml`, `docker/`, `scripts/launch.*` | `docker build -t facturador:ci .` plus targeted pytest if app wiring changed |
+| Docker / launchers | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py`; `docker build -t facturador:ci .` if image/entrypoint changed |
 | Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md` | None required; spot-check links and command snippets |
 
 **Lint/types scope:** `ruff` and `mypy` run on the whole tree; there is no

@@ -49,7 +49,22 @@ def parse_environment(raw: str) -> ArcaEnvironment:
 
 
 def resolve_app_data_root() -> Path:
-    """Raíz de app-data del SO donde viven los perfiles ocultos."""
+    """Raíz de app-data del SO donde viven los perfiles ocultos.
+
+    ``FACTURADOR_APP_DATA`` (si está definida) gana sobre el default del SO:
+    la usa el launcher (FAC-28) para aislar el perfil del backend hijo en
+    tests y arranques controlados, sin exponer la ruta en la UI.
+    """
+    override = os.environ.get("FACTURADOR_APP_DATA")
+    if override:
+        expanded = os.path.expanduser(override)
+        path = Path(expanded)
+        if not path.is_absolute():
+            raise ProfileError(
+                "FACTURADOR_APP_DATA debe ser una ruta absoluta; "
+                f"valor inválido: {override!r}"
+            )
+        return path
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
         if not base:
