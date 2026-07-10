@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .constants import ArcaEnvironment
 
@@ -62,7 +62,13 @@ def resolve_app_data_root() -> Path:
         return Path.home() / "Library" / "Application Support" / "FacturadorE"
     xdg = os.environ.get("XDG_DATA_HOME")
     if xdg:
-        return Path(xdg) / "facturadorE"
+        expanded = os.path.expanduser(xdg)
+        if not PurePosixPath(expanded).is_absolute():
+            raise ProfileError(
+                "XDG_DATA_HOME debe ser una ruta absoluta; "
+                f"valor inválido: {xdg!r}"
+            )
+        return Path(expanded) / "facturadorE"
     return Path.home() / ".local" / "share" / "facturadorE"
 
 
