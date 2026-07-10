@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .constants import ArcaEnvironment
@@ -63,6 +63,9 @@ def resolve_app_data_root() -> Path:
     xdg = os.environ.get("XDG_DATA_HOME")
     if xdg:
         expanded = os.path.expanduser(xdg)
+        # La spec XDG dice IGNORAR rutas relativas (caer al default); acá se
+        # falla fuerte a propósito, consistente con config.py: mejor negarse
+        # a arrancar que resolver perfiles en una raíz inesperada.
         if not PurePosixPath(expanded).is_absolute():
             raise ProfileError(
                 "XDG_DATA_HOME debe ser una ruta absoluta; "
@@ -89,7 +92,7 @@ class ProfilePaths:
     Sin sufijos ``<env>`` en nombres de archivo: el perfil ya es el ambiente.
     """
 
-    root: Path = field(repr=False)
+    root: Path
 
     @property
     def data_dir(self) -> Path:
@@ -183,10 +186,14 @@ def ensure_profile_roots_differ(
     second: EnvironmentProfile,
 ) -> None:
     """Garantiza que dos perfiles no compartan la misma raíz."""
-    if first.paths.root == second.paths.root:
+    # resolve(): dos raíces textualmente distintas pueden ser el mismo
+    # directorio real (symlinks/junctions, componentes ".."). El invariante
+    # es sobre el directorio físico, no sobre el texto del path.
+    if first.paths.root.resolve() == second.paths.root.resolve():
         raise ProfileError(
-            "Los perfiles de homologación y producción no pueden compartir "
-            f"la misma raíz: {first.paths.root}"
+            f"Los perfiles ({first.environment.value} y "
+            f"{second.environment.value}) no pueden compartir la misma "
+            f"raíz: {first.paths.root}"
         )
 
 

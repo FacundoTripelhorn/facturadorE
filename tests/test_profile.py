@@ -113,6 +113,12 @@ def test_profile_paths_no_expone_root_en_repr(tmp_path):
             r"C:\Users\me\AppData\Local\FacturadorE",
         ),
         (
+            "win32",
+            {"APPDATA": r"C:\Users\me\AppData\Roaming"},
+            None,
+            r"C:\Users\me\AppData\Roaming\FacturadorE",
+        ),
+        (
             "darwin",
             {},
             "/Users/me",
@@ -136,6 +142,11 @@ def test_resolve_app_data_root_por_plataforma(
     monkeypatch, platform, env, home, expected_suffix
 ):
     monkeypatch.setattr("facturador.profile.sys.platform", platform)
+    if platform == "win32":
+        # Solo deben regir las variables de la fila (p.ej. fallback a APPDATA
+        # exige LOCALAPPDATA ausente), aun corriendo en un host Windows real.
+        monkeypatch.delenv("LOCALAPPDATA", raising=False)
+        monkeypatch.delenv("APPDATA", raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     if home is not None:
