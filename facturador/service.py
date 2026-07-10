@@ -98,7 +98,7 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def get_settings(self) -> Settings:
-        return load_settings(self.conn, self.config.env)
+        return load_settings(self.conn)
 
     def update_backup_settings(self, payload: BackupSettingsIn) -> Settings:
         actual = self.get_settings()
@@ -127,11 +127,14 @@ class InvoiceService:
                 "iibb": payload.iibb,
                 "inicio_actividades": payload.inicio_actividades,
                 "condicion_iva": payload.condicion_iva,
-                "ambiente": payload.ambiente,
+                # El ambiente NO es elegible por el usuario (FAC-26): todo
+                # emisor nace sellado con el del perfil corriente; el campo
+                # del request se ignora y desaparece en FAC-27.
+                "ambiente": self.config.env,
                 "puntos_venta": json.dumps(list(payload.puntos_venta)),
             },
         )
-        if get_active_emisor_id(self.conn, payload.ambiente) is None:
+        if get_active_emisor_id(self.conn) is None:
             set_active_emisor(self.conn, row["id"])
         return row
 
@@ -155,15 +158,10 @@ class InvoiceService:
         return row
 
     def activate_emisor(self, emisor_id: str) -> None:
-        existente = repo.get_emisor(self.conn, emisor_id)
-        if existente is None:
+        # Sin chequeo de ambiente (FAC-26): la DB es del perfil, así que
+        # todo emisor que exista acá es del perfil por construcción.
+        if repo.get_emisor(self.conn, emisor_id) is None:
             raise NotFoundError(f"Emisor {emisor_id} no existe")
-        if existente["ambiente"] != self.config.env:
-            raise DomainError(
-                f"El emisor pertenece al ambiente {existente['ambiente']}; "
-                f"la app está en {self.config.env}. Cambiar ARCA_ENV en el .env "
-                "para operar con otro ambiente."
-            )
         set_active_emisor(self.conn, emisor_id)
 
     # ------------------------------------------------------------------
@@ -345,14 +343,33 @@ class InvoiceService:
             "idioma_cbte": client["idioma_default"],
             "imp_total": dec(payload.imp_total),
             "obs": payload.obs,
+            # Auditoría inmutable (ADR 0001 / FAC-26): el ambiente del
+            # comprobante sale SIEMPRE del perfil corriente, nunca del
+            # request, y después se valida en cada acceso por id.
             "environment": self.config.env,
         }
         return repo.create_invoice(self.conn, data, items)
+
+    def _check_invoice_profile(self, inv: sqlite3.Row) -> None:
+        """Rechaza el acceso a comprobantes de OTRO perfil (FAC-26).
+
+        Por construcción no debería pasar (la DB es del perfil); si pasa, es
+        una DB ajena restaurada en el perfil equivocado y ningún flujo debe
+        operar sobre ese registro.
+        """
+        if inv["environment"] != self.config.env:
+            raise ConflictError(
+                f"La factura {inv['id']} pertenece al ambiente "
+                f"{inv['environment']} y este backend corre el perfil "
+                f"{self.config.env}: la DB de este perfil contiene datos de "
+                "otro. Restaurar cada backup en el perfil de su ambiente."
+            )
 
     def get_invoice(self, invoice_id: str, reconcile: bool = True) -> sqlite3.Row:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:
             raise NotFoundError(f"Factura {invoice_id} no existe")
+        self._check_invoice_profile(inv)
         if reconcile and inv["status"] == InvoiceStatus.UNKNOWN and inv["raw_request"]:
             try:
                 resolved = self._try_reconcile(inv)
@@ -373,6 +390,7 @@ class InvoiceService:
             inv = repo.get_invoice(self.conn, invoice_id)
             if inv is None:
                 raise NotFoundError(f"Factura {invoice_id} no existe")
+            self._check_invoice_profile(inv)
             if inv["status"] == InvoiceStatus.AUTHORIZED:
                 return inv  # idempotente: mismo CAE, sin tocar ARCA
             if inv["status"] == InvoiceStatus.REJECTED:
@@ -473,6 +491,7 @@ class InvoiceService:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:
             raise NotFoundError(f"Factura {invoice_id} no existe")
+        self._check_invoice_profile(inv)
         if inv["status"] != InvoiceStatus.DRAFT or inv["raw_request"] is not None:
             raise ConflictError(
                 "Solo se pueden descartar borradores que nunca se enviaron a "

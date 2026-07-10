@@ -430,7 +430,7 @@ def _pagina_configuracion(
     aviso: str | None = None,
     status_code: int = 200,
 ):
-    activo_id = get_active_emisor_id(service.conn, service.config.env)
+    activo_id = get_active_emisor_id(service.conn)
     return templates.TemplateResponse(
         request,
         "configuracion.html",
