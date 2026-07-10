@@ -1,6 +1,6 @@
 """Perfiles de ambiente aislados (FAC-23)."""
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -147,7 +147,14 @@ def test_resolve_app_data_root_por_plataforma(
         monkeypatch.delenv("XDG_DATA_HOME", raising=False)
 
     root = resolve_app_data_root()
-    assert root == Path(expected_suffix)
+    if platform == "win32":
+        # Simulamos win32 en Linux CI: Path usa '/' al unir, PureWindowsPath
+        # normaliza la comparación.
+        assert PureWindowsPath(str(root).replace("/", "\\")) == PureWindowsPath(
+            expected_suffix
+        )
+    else:
+        assert root == Path(expected_suffix)
 
 
 def test_resolve_app_data_root_falla_sin_localappdata_en_windows(monkeypatch):
