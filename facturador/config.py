@@ -17,7 +17,8 @@ Resolución de configuración (única, sin fallbacks al directorio de trabajo):
    arranque.
 2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
    bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``FACTURADOR_PORT``.
-   Si no existe, la app lo crea con ``ARCA_ENV=homo``.
+   Si no existe, la app crea un esqueleto SIN ambiente activo: elegirlo es
+   un acto explícito del usuario/launcher, nunca un default (FAC-24).
 3. El resto de la configuración (datos del emisor, punto de venta, backups)
    vive en la DB y se edita desde la página Configuración (ver settings.py).
 
@@ -42,14 +43,17 @@ from .profile import ProfileError, parse_environment
 DEFAULT_HOME = "~/facturador"
 
 # Bootstrap creado en el primer arranque. Solo lo que no puede vivir en la
-# DB: el flag de ambiente y el puerto local.
+# DB: el flag de ambiente y el puerto local. El ambiente queda comentado a
+# propósito (FAC-24): un arranque sin elección explícita debe fallar, no
+# caer en homologación en silencio.
 BOOTSTRAP_ENV = """\
 # Bootstrap del facturador. El resto de la configuración (datos del emisor,
 # punto de venta, backups) se edita desde la app, en la página Configuración.
 
-# Ambiente ARCA: homo | prod. Deriva URLs de WSAA/WSFEX y qué par cert/key
-# se usa (secrets/<env>.crt + secrets/<env>.key). Único flag: no hay overrides.
-ARCA_ENV=homo
+# Ambiente ARCA: homo | prod. SIN default: descomentar y elegir uno (ADR
+# 0001). Deriva URLs de WSAA/WSFEX y qué par cert/key se usa
+# (secrets/<env>.crt + secrets/<env>.key). Único flag: no hay overrides.
+#ARCA_ENV=homo
 
 # Puerto local (siempre en 127.0.0.1).
 #FACTURADOR_PORT=8399
@@ -116,8 +120,8 @@ def resolve_boot_environment() -> ArcaEnvironment:
     Solo para entrypoints (``__main__``, scripts): resuelve el ambiente UNA
     vez, antes de construir nada. El resto de la app recibe el ambiente ya
     inyectado y nunca vuelve a mirar variables de entorno. Sin default
-    silencioso: un ``.env`` sin ``ARCA_ENV`` es un arranque inválido (el
-    bootstrap auto-creado siempre lo trae).
+    silencioso: el bootstrap auto-creado trae ``ARCA_ENV`` comentado, así
+    que un primer arranque sin elección explícita falla acá.
     """
     home = resolve_home()
     ensure_home(home)
@@ -129,7 +133,8 @@ def resolve_boot_environment() -> ArcaEnvironment:
     if not raw:
         raise ConfigError(
             f"ARCA_ENV no está definido (ni en el entorno ni en {home / '.env'}). "
-            "El backend arranca contra exactamente un ambiente explícito."
+            "El backend arranca contra exactamente un ambiente explícito: "
+            "definir ARCA_ENV=homo o ARCA_ENV=prod."
         )
     try:
         return parse_environment(raw)

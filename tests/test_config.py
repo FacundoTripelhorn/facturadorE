@@ -89,6 +89,19 @@ def test_env_ausente_rechazado_sin_default_silencioso(monkeypatch, tmp_path):
         resolve_boot_environment()
 
 
+def test_primer_arranque_sin_eleccion_explicita_falla(monkeypatch, tmp_path):
+    """Review de Codex en PR #34: en un home FRESCO el bootstrap auto-creado
+    no debe activar homo en silencio — el primer arranque falla hasta que
+    alguien elige ambiente, aunque estén los dos pares de certificados."""
+    home = tmp_path / "fresco"
+    _con_certs(home, env="homo")
+    _con_certs(home, env="prod")
+    monkeypatch.setenv("FACTURADOR_HOME", str(home))
+
+    with pytest.raises(ConfigError, match="ARCA_ENV no está definido"):
+        resolve_boot_environment()
+
+
 def test_arranque_rechazado_sin_certificados(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTURADOR_HOME", str(tmp_path))
     with pytest.raises(ConfigError, match="homo.crt"):
@@ -126,7 +139,12 @@ def test_primer_arranque_crea_la_estructura_y_el_env_bootstrap(
     assert (home / "secrets").is_dir()
     assert (home / "data").is_dir()
     assert (home / "backups").is_dir()
-    assert "ARCA_ENV=homo" in (home / ".env").read_text(encoding="utf-8")
+    # El esqueleto documenta el flag pero NO activa un ambiente (FAC-24).
+    bootstrap = (home / ".env").read_text(encoding="utf-8")
+    assert "#ARCA_ENV=homo" in bootstrap
+    assert not any(
+        linea.strip().startswith("ARCA_ENV") for linea in bootstrap.splitlines()
+    )
 
 
 def test_ensure_home_no_pisa_un_env_existente(tmp_path):
