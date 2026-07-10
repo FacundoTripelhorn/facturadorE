@@ -1,9 +1,13 @@
 """Configuración de arranque del facturador.
 
-Regla central (design.md §2.1.1 punto 1): TODO se deriva de un único flag
-``ARCA_ENV``. Las URLs de WSAA/WSFEX y los paths de certificado salen del
-mismo valor, por lo que es imposible por construcción usar el certificado de
-homologación contra producción o viceversa. No existen overrides por URL.
+Regla central (design.md §2.1.1 punto 1, reforzada por ADR 0001): TODO se
+deriva de un único ambiente ``ArcaEnvironment`` que se INYECTA una sola vez
+en el arranque (FAC-24). Las URLs de WSAA/WSFEX y los paths de certificado
+salen del mismo valor, por lo que es imposible por construcción usar el
+certificado de homologación contra producción o viceversa. No existen
+overrides por URL, y ningún módulo de la app lee ``ARCA_ENV`` por su cuenta:
+el único punto de lectura es ``resolve_boot_environment()`` en el arranque
+(hasta que el launcher de ADR 0001 pase a ser quien elige el ambiente).
 
 Resolución de configuración (única, sin fallbacks al directorio de trabajo):
 
@@ -32,9 +36,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .constants import WSAA_URLS, WSFEX_URLS
-
-VALID_ENVS = ("homo", "prod")
+from .constants import WSAA_URLS, WSFEX_URLS, ArcaEnvironment
+from .profile import ProfileError, parse_environment
 
 DEFAULT_HOME = "~/facturador"
 
@@ -59,8 +62,8 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Config:
-    env: str          # "homo" | "prod"
-    home: Path        # raíz de datos (secrets/, data/, backups/)
+    env: ArcaEnvironment  # inmutable: fijado al construir, nunca re-leído
+    home: Path            # raíz de datos (secrets/, data/, backups/)
 
     @property
     def wsaa_url(self) -> str:
@@ -107,21 +110,42 @@ def ensure_home(home: Path) -> None:
         env_file.write_text(BOOTSTRAP_ENV, encoding="utf-8")
 
 
-def load_config() -> Config:
-    """Resuelve el home, carga <home>/.env (nunca el del CWD) y valida."""
+def resolve_boot_environment() -> ArcaEnvironment:
+    """Único punto de lectura de ``ARCA_ENV`` (proceso o <home>/.env).
+
+    Solo para entrypoints (``__main__``, scripts): resuelve el ambiente UNA
+    vez, antes de construir nada. El resto de la app recibe el ambiente ya
+    inyectado y nunca vuelve a mirar variables de entorno. Sin default
+    silencioso: un ``.env`` sin ``ARCA_ENV`` es un arranque inválido (el
+    bootstrap auto-creado siempre lo trae).
+    """
     home = resolve_home()
     ensure_home(home)
-    # No pisa variables ya presentes en el entorno (p.ej. FACTURADOR_PORT
-    # fijado por el Dockerfile).
+    # No pisa variables ya presentes en el entorno (p.ej. ARCA_ENV fijado
+    # por el launcher, o FACTURADOR_PORT fijado por el Dockerfile).
     load_dotenv(home / ".env")
 
-    env = os.environ.get("ARCA_ENV", "homo").strip().lower()
-    if env not in VALID_ENVS:
+    raw = os.environ.get("ARCA_ENV")
+    if not raw:
         raise ConfigError(
-            f"ARCA_ENV inválido: {env!r} (valores permitidos: {', '.join(VALID_ENVS)})"
+            f"ARCA_ENV no está definido (ni en el entorno ni en {home / '.env'}). "
+            "El backend arranca contra exactamente un ambiente explícito."
         )
+    try:
+        return parse_environment(raw)
+    except ProfileError as exc:
+        raise ConfigError(f"ARCA_ENV inválido: {exc}") from exc
 
-    config = Config(env=env, home=home)
+
+def load_config(environment: ArcaEnvironment) -> Config:
+    """Config del home compartido para un ambiente YA elegido y validado.
+
+    El ambiente es un parámetro obligatorio (FAC-24): no hay camino que
+    construya una Config sin decidirlo explícitamente.
+    """
+    home = resolve_home()
+    ensure_home(home)
+    config = Config(env=environment, home=home)
     validate_config(config)
     return config
 

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .. import db, web
 from ..arca.wsfex import WsfexClient
 from ..config import Config, load_config
+from ..profile import EnvironmentProfile, ProfileError
 from ..service import (
     ArcaUnavailableError,
     ConflictError,
@@ -31,15 +32,30 @@ _ERROR_STATUS = {
 
 
 def create_app(
+    profile: EnvironmentProfile,
     config: Config | None = None,
     conn: sqlite3.Connection | None = None,
     wsfex: WsfexClient | None = None,
 ) -> FastAPI:
-    config = config or load_config()
+    """Construye la app contra UN perfil de ambiente explícito e inmutable.
+
+    ADR 0001 / FAC-24: el ambiente se decide antes de crear FastAPI, SQLite
+    y los clientes ARCA, y no existe forma de cambiarlo después (perfil y
+    Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
+    y paths derivan todos del ambiente del perfil vía Config.
+    """
+    if config is None:
+        config = load_config(profile.environment)
+    elif config.env != profile.environment:
+        raise ProfileError(
+            f"Config ({config.env}) y perfil ({profile.environment}) no "
+            "coinciden: el backend corre contra exactamente un ambiente."
+        )
     conn = conn or db.connect(config.data_dir / "facturador.db")
     wsfex = wsfex or WsfexClient(config)
 
     app = FastAPI(title="facturador", version="0.1.0")
+    app.state.profile = profile
     app.state.service = InvoiceService(config, conn, wsfex)
 
     def _handler_for(status: int):

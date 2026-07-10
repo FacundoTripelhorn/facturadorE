@@ -15,6 +15,8 @@ from facturador import db
 from facturador.api import create_app
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
+from facturador.constants import ArcaEnvironment
+from facturador.profile import EnvironmentProfile
 from tests.arca_fake import FakeArca, FakeWsaa
 
 TEST_CUIT = "20111111112"
@@ -60,7 +62,13 @@ def test_config(tmp_path, test_cert_and_key) -> Config:
     (secrets / "homo.crt").write_bytes(cert_pem)
     (secrets / "homo.key").write_bytes(key_pem)
     (tmp_path / "data").mkdir()
-    return Config(env="homo", home=tmp_path)
+    return Config(env=ArcaEnvironment.HOMO, home=tmp_path)
+
+
+@pytest.fixture
+def test_profile(tmp_path) -> EnvironmentProfile:
+    """Perfil homo aislado en tmp (FAC-24: create_app exige uno explícito)."""
+    return EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "profile")
 
 
 @pytest.fixture
@@ -69,7 +77,7 @@ def arca() -> FakeArca:
 
 
 @pytest.fixture
-def api(test_config, arca, tmp_path):
+def api(test_config, test_profile, arca, tmp_path):
     conn = db.connect(tmp_path / "data" / "test.db")
     seed_params(conn)
     seed_settings(conn)
@@ -78,7 +86,7 @@ def api(test_config, arca, tmp_path):
         wsaa=FakeWsaa(),
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
-    app = create_app(config=test_config, conn=conn, wsfex=wsfex)
+    app = create_app(test_profile, config=test_config, conn=conn, wsfex=wsfex)
     client = TestClient(app)
     client.conn = conn  # para asserts directos sobre la DB
     return client

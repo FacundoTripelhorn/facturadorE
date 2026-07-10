@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from facturador import db, repo
 from facturador.arca.wsfex import Invoice, InvoiceItem, WsfexClient
-from facturador.config import load_config
+from facturador.config import load_config, resolve_boot_environment
 from facturador.constants import CBTE_TIPO_FACTURA_E, MONEDA_DOL
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -127,7 +127,7 @@ def guardar_registro(requests_dir: Path, registro: dict) -> Path:
 
 
 def main() -> None:
-    config = load_config()
+    config = load_config(resolve_boot_environment())
     if config.env != "homo":
         raise SystemExit(
             f"Este script es solo para homologación (ARCA_ENV={config.env})."

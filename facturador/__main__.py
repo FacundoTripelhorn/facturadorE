@@ -15,7 +15,8 @@ import os
 import uvicorn
 
 from .api import create_app
-from .config import Config, load_config
+from .config import Config, load_config, resolve_boot_environment
+from .profile import EnvironmentProfile
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -43,11 +44,20 @@ def _setup_logging(config: Config) -> None:
 
 
 def main() -> None:
-    config = load_config()
+    # ADR 0001 / FAC-24: el ambiente se resuelve UNA vez acá y viaja
+    # inyectado; ningún otro módulo vuelve a leer ARCA_ENV.
+    environment = resolve_boot_environment()
+    profile = EnvironmentProfile.resolve(environment)
+    config = load_config(environment)
     _setup_logging(config)
+    # El repr del perfil redacta la raíz física: identifica el ambiente sin
+    # exponer paths internos ni secretos en el log de arranque.
+    logging.getLogger(__name__).info(
+        "Arranque en %s (%r)", profile.display_name, profile
+    )
     port = int(os.environ.get("FACTURADOR_PORT", "8399"))
     host = "0.0.0.0" if os.environ.get("FACTURADOR_IN_DOCKER") else "127.0.0.1"
-    uvicorn.run(create_app(config), host=host, port=port)
+    uvicorn.run(create_app(profile, config=config), host=host, port=port)
 
 
 if __name__ == "__main__":

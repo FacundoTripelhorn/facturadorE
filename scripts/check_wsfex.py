@@ -11,14 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from facturador import db, repo
 from facturador.arca.wsfex import PARAM_METHODS, WsfexClient
-from facturador.config import load_config
+from facturador.config import load_config, resolve_boot_environment
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def main() -> None:
-    config = load_config()
+    config = load_config(resolve_boot_environment())
     client = WsfexClient(config)
     conn = db.connect(config.data_dir / "facturador.db")
 
