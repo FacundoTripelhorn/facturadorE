@@ -166,6 +166,14 @@ def test_resolve_app_data_root_falla_sin_localappdata_en_windows(monkeypatch):
         resolve_app_data_root()
 
 
+def test_xdg_data_home_relativo_rechazado(monkeypatch):
+    monkeypatch.setattr("facturador.profile.sys.platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", ".local/share")
+
+    with pytest.raises(ProfileError, match="XDG_DATA_HOME"):
+        resolve_app_data_root()
+
+
 def test_resolve_profile_root_deriva_desde_app_data(tmp_path):
     app_data = tmp_path / "app"
     assert resolve_profile_root(ArcaEnvironment.PROD, app_data_root=app_data) == (
