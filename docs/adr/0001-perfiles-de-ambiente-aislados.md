@@ -90,24 +90,20 @@ flowchart TB
     CHOICE -->|"Producción"| SUP
   end
 
-  SUP -->|"arranca UN backend con<br/>UN perfil inmutable"| APP
+  SUP -->|"arranca UN backend con el perfil<br/>del ambiente elegido, inmutable"| APP
 
   subgraph backend["Proceso backend (uvicorn) — ambiente fijo de por vida"]
     APP["FastAPI + InvoiceService<br/>badge de ambiente visible"]
   end
 
-  subgraph profiles["Perfiles internos ocultos (app-data del SO)"]
-    subgraph ph["Perfil homologación — 1 CUIT"]
-      PH["SQLite · certs · PDFs<br/>TA cache · params cache<br/>logs · onboarding · backups"]
-    end
-    subgraph pp["Perfil producción — 1 CUIT"]
-      PP["SQLite · certs · PDFs<br/>TA cache · params cache<br/>logs · onboarding · backups"]
-    end
+  subgraph profiles["Perfiles internos ocultos (app-data del SO) — 1 CUIT cada uno"]
+    SEL["Perfil del ambiente ELEGIDO<br/>(homologación o producción)<br/>SQLite · certs · PDFs<br/>TA cache · params cache<br/>logs · onboarding · backups"]
+    OTHER["Perfil del OTRO ambiente<br/>(mismo contenido, intacto)"]
   end
 
-  APP -->|"lee/escribe SOLO su perfil"| PH
-  APP -.-x|"nunca"| PP
-  APP -->|"HTTPS saliente<br/>(URLs derivadas del ambiente)"| ARCA["ARCA WSAA + WSFEX<br/>homo o prod, según perfil"]
+  APP -->|"lee/escribe SOLO su perfil"| SEL
+  APP -.-x|"nunca"| OTHER
+  APP -->|"HTTPS saliente<br/>(URLs derivadas del ambiente elegido)"| ARCA["ARCA WSAA + WSFEX<br/>homo o prod, según perfil"]
 ```
 
 Cambio de ambiente (siempre por reinicio):
