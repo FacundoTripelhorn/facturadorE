@@ -181,10 +181,15 @@ class InvoiceService:
         return row
 
     def activate_emisor(self, emisor_id: str) -> None:
-        # Sin chequeo de ambiente (FAC-26): la DB es del perfil, así que
-        # todo emisor que exista acá es del perfil por construcción.
-        if repo.get_emisor(self.conn, emisor_id) is None:
+        row = repo.get_emisor(self.conn, emisor_id)
+        if row is None:
             raise NotFoundError(f"Emisor {emisor_id} no existe")
+        if row["ambiente"] != self.config.env:
+            raise ConflictError(
+                f"El emisor {emisor_id} pertenece al ambiente "
+                f"{row['ambiente']} y este backend corre el perfil "
+                f"{self.config.env}: no se puede activar para emitir."
+            )
         set_active_emisor(self.conn, emisor_id)
 
     # ------------------------------------------------------------------

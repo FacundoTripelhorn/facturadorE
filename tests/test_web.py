@@ -468,6 +468,35 @@ def test_edicion_de_emisor_rechaza_ambiente_obsoleto(api, arca):
     assert "ambiente sale del perfil activo" in r.text
 
 
+def test_no_se_puede_activar_emisor_inactivo_de_otro_perfil(api, arca):
+    """FAC-27: un emisor legacy de otro ambiente puede seguir listado, pero
+    no debe poder activarse ni mostrar el botón en la UI."""
+    api.post("/ui/emisores", data=EMISOR_FORM_SEGUNDO, follow_redirects=False)
+    otro = api.conn.execute(
+        "SELECT id FROM emisores WHERE razon_social = ?",
+        ("OTRO EMISOR S.A.",),
+    ).fetchone()
+    with api.conn:
+        api.conn.execute(
+            "UPDATE emisores SET ambiente = 'prod' WHERE id = ?",
+            (otro["id"],),
+        )
+
+    pagina = api.get("/configuracion")
+    assert pagina.status_code == 200
+    assert f"/ui/emisores/{otro['id']}/activar" not in pagina.text
+
+    activo_antes = api.conn.execute(
+        "SELECT value FROM settings WHERE key = 'active_emisor_id'"
+    ).fetchone()[0]
+    r = api.post(f"/ui/emisores/{otro['id']}/activar", follow_redirects=False)
+    assert r.status_code == 303
+    activo_despues = api.conn.execute(
+        "SELECT value FROM settings WHERE key = 'active_emisor_id'"
+    ).fetchone()[0]
+    assert activo_despues == activo_antes
+
+
 def test_emisor_activo_de_otro_perfil_bloquea_los_settings(api, arca):
     """FAC-26: con el emisor activo sellado con OTRO ambiente (DB ajena
     restaurada en el perfil equivocado), las páginas que cargan settings

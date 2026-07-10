@@ -91,12 +91,12 @@
         <tr>
           <td>
             {{ e["razon_social"] or "—" }}
-            {% if e["id"] == activo_id %} ★{% endif %}
+            {% if e["id"] == activo_id and e["ambiente"] == env %} ★{% endif %}
           </td>
           <td>{{ e["ambiente"] }}</td>
           <td class="num">{{ e["puntos_venta"] | pvs_display }}</td>
           <td>
-            {% if e["id"] != activo_id %}
+            {% if e["ambiente"] == env and e["id"] != activo_id %}
             <form method="post" action="/ui/emisores/{{ e['id'] }}/activar" style="display:inline">
               <button type="submit" class="secundario">Usar para emitir</button>
             </form>
