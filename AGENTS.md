@@ -66,6 +66,10 @@ cert/key pair must be placed manually. See the setup docs and
 - **Bootstrap `.env`:** read only from `<FACTURADOR_HOME>/.env`, never the CWD.
   Auto-created with `ARCA_ENV=homo` if missing. Holds only `ARCA_ENV` and
   optional `FACTURADOR_PORT`; CUIT is extracted from the certificate.
+  Note: `ARCA_ENV`-based selection is superseded by
+  [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md)
+  (launcher-selected isolated profiles, restart-based switching); this stays
+  the implemented behavior until that project lands.
 - **App config:** emisor fields, punto de venta, and S3 backup settings live in
   SQLite and are edited via `/configuracion` — they travel inside encrypted
   backups, not in `.env`.

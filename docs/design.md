@@ -263,6 +263,17 @@ Jinja2 + HTMX servido por la misma app FastAPI: formulario de factura con select
 
 ### 2.5 Infraestructura y despliegue
 
+> **Actualización 2026-07-10 —
+> [ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md):** el modelo de
+> selección de ambiente descripto en esta sección (un home compartido con
+> `ARCA_ENV` en `.env` y ambos certificados en el mismo `secrets/`) queda
+> **superado**. La dirección aprobada es un launcher con dos perfiles
+> internos aislados (uno por ambiente, un CUIT por perfil), backend inmutable
+> por proceso y cambio de ambiente solo por reinicio; **el hot switching está
+> explícitamente rechazado**. El ADR es la fuente autoritativa; lo que sigue
+> describe la implementación vigente hasta que el proyecto *Seamless
+> Environment Profiles* (FAC-23 … FAC-34) la reemplace.
+
 **Decisión: la app corre en la máquina local del usuario, accesible solo por `localhost`. No hay servidor público.**
 
 Fundamento: el uso es 1 emisión/semana, un solo usuario, desde su propia computadora. Publicar la app en internet agregaría todo lo que NO queremos: gestión de TLS, capa de autenticación, superficie de ataque sobre un servicio que custodia la clave fiscal, y costo/operación de un VPS (un servicio externo más). Con `localhost` la única conexión de red es **saliente** hacia ARCA — la app no escucha para nadie más. Esto elimina de raíz clases enteras de riesgo.
@@ -356,9 +367,10 @@ Componentes:
    - El TA del WSAA (12 h de vida) probablemente se pida fresco en cada emisión — el cache sigue siendo necesario para reintentos dentro de la misma sesión, pero no hace falta nada sofisticado.
    - El refresh del cache de parámetros puede ser lazy (al momento de emitir, si `fetched_at` > 24 h) en lugar de un job programado.
 3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al autorizar (razón social, domicilio, id impositivo, país, CUIT país): el comprobante autorizado es inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default.
+4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` y el ambiente por emisor; implementación en FAC-23 … FAC-34.
 
 **Siguen abiertas:**
 
-4. ¿Nota de Crédito/Débito E desde el día 1? Con una factura semanal al mismo cliente, la NC E aparece recién el día que haya que anular/corregir una. Sugerencia: dejarla fuera del spike pero modelar `cbte_tipo` y comprobante asociado desde el inicio para que agregarla sea trivial.
+5. ¿Nota de Crédito/Débito E desde el día 1? Con una factura semanal al mismo cliente, la NC E aparece recién el día que haya que anular/corregir una. Sugerencia: dejarla fuera del spike pero modelar `cbte_tipo` y comprobante asociado desde el inicio para que agregarla sea trivial.
 
 **Cerrada:** stack Python de punta a punta (§2.1), cliente WSFEX propio, `pyafipws` solo como referencia con checklist de paridad de seguridad (§2.1.1) como definition of done del `ArcaClient`.
