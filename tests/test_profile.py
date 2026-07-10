@@ -45,6 +45,18 @@ def test_todos_los_paths_se_derivan_de_una_raiz(tmp_path):
     assert paths.onboarding == root / "data" / "onboarding.json"
 
 
+def test_ensure_layout_crea_la_estructura_minima(tmp_path):
+    paths = ProfilePaths(root=tmp_path / "perfil")
+    paths.ensure_layout()
+
+    assert paths.secrets_dir.is_dir()
+    assert paths.data_dir.is_dir()
+    assert paths.backups_dir.is_dir()
+    # pdfs/ y logs/ los crea quien escribe en ellos.
+    assert not paths.pdf_dir.exists()
+    assert not paths.logs_dir.exists()
+
+
 def test_for_testing_construye_perfil_aislado(tmp_path):
     root = tmp_path / "custom-homo"
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, root)

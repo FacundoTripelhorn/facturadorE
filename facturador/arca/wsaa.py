@@ -266,7 +266,9 @@ class WsaaClient:
         self.config = config
         # TLS verify queda en el default de httpx (activo) — checklist punto 5.
         self.http = http or httpx.Client(timeout=30.0)
-        self.cache = TicketCache(config.data_dir / f"ta-{SERVICE}-{config.env}.json")
+        # Sin sufijo de ambiente en el nombre: el perfil YA es el ambiente
+        # (FAC-25); load() igual valida service/environment del TA.
+        self.cache = TicketCache(config.paths.wsaa_ta_cache)
 
     def get_ticket(self) -> Ticket:
         """TA cacheado si sigue vigente; si no, pide uno nuevo y lo persiste."""
@@ -283,8 +285,8 @@ class WsaaClient:
         tra = build_tra()
         cms = sign_tra_cms(
             tra,
-            self.config.cert_path.read_bytes(),
-            self.config.key_path.read_bytes(),
+            self.config.paths.cert.read_bytes(),
+            self.config.paths.key.read_bytes(),
         )
         request_body = build_login_request(cms)
         response = self.http.post(

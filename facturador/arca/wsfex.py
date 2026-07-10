@@ -291,7 +291,7 @@ class WsfexClient:
         if self._cuit is None:
             # Nunca hardcodeado ni configurable: el certificado ya lo trae
             # en el subject (serialNumber=CUIT NNNNNNNNNNN).
-            self._cuit = cuit_from_certificate(self.config.cert_path.read_bytes())
+            self._cuit = cuit_from_certificate(self.config.paths.cert.read_bytes())
         return self._cuit
 
     # --- infraestructura SOAP ---

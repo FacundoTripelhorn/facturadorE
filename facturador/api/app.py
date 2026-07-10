@@ -42,16 +42,21 @@ def create_app(
     ADR 0001 / FAC-24: el ambiente se decide antes de crear FastAPI, SQLite
     y los clientes ARCA, y no existe forma de cambiarlo después (perfil y
     Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
-    y paths derivan todos del ambiente del perfil vía Config.
+    y paths derivan todos del perfil vía Config/ProfilePaths (FAC-25).
     """
     if config is None:
-        config = load_config(profile.environment)
+        config = load_config(profile)
     elif config.env != profile.environment:
         raise ProfileError(
             f"Config ({config.env}) y perfil ({profile.environment}) no "
             "coinciden: el backend corre contra exactamente un ambiente."
         )
-    conn = conn or db.connect(config.data_dir / "facturador.db")
+    elif config.paths.root != profile.paths.root:
+        raise ProfileError(
+            "Config y perfil no coinciden: los paths de la Config no salen "
+            "de la raíz del perfil inyectado."
+        )
+    conn = conn or db.connect(config.paths.db)
     wsfex = wsfex or WsfexClient(config)
 
     app = FastAPI(title="facturador", version="0.1.0")

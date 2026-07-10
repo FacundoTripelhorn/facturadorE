@@ -115,8 +115,8 @@ def test_pdf_de_factura_autorizada(api, arca, test_config):
     assert r.content.startswith(b"%PDF-")
     filename = "factura-E-00001-00000001-homo.pdf"
     assert filename in r.headers["content-disposition"]
-    # Copia persistida en data/pdfs (layout §2.5), idéntica a la respuesta.
-    assert (test_config.pdf_dir / filename).read_bytes() == r.content
+    # Copia persistida en el pdfs/ del perfil (FAC-25), idéntica a la respuesta.
+    assert (test_config.paths.pdf_dir / filename).read_bytes() == r.content
 
 
 def test_pdf_de_draft_es_conflicto(api, arca):

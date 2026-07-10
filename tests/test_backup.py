@@ -1,6 +1,7 @@
 """Backup/restore (design.md §2.5): snapshot consistente, contenido del
-tarball y extracción segura. El cifrado age y el upload S3 quedan afuera
-(son subprocesos de CLIs externas); acá se cubre todo lo que arma la app.
+tarball y extracción segura, ahora sobre la raíz de UN perfil (FAC-25).
+El cifrado age y el upload S3 quedan afuera (son subprocesos de CLIs
+externas); acá se cubre todo lo que arma la app.
 """
 
 import io
@@ -13,31 +14,30 @@ from facturador.backup import (
     BackupError,
     backup_s3_settings,
     build_tar,
-    resolve_home,
+    resolve_profile_paths,
     snapshot_db,
 )
+from facturador.profile import ProfilePaths
 from facturador.restore import extract
 
 
 @pytest.fixture
-def home(tmp_path):
-    """FACTURADOR_HOME con el layout de design.md §2.5 y contenido marcado."""
-    (tmp_path / ".env").write_text("ARCA_ENV=homo\n", encoding="utf-8")
-    secrets = tmp_path / "secrets"
-    secrets.mkdir()
-    (secrets / "homo.key").write_text("KEY-PRIVADA", encoding="utf-8")
-    (secrets / "homo.crt").write_text("CERT", encoding="utf-8")
-    data = tmp_path / "data"
-    (data / "pdfs").mkdir(parents=True)
-    (data / "pdfs" / "factura-E-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
-    (data / "logs").mkdir()
-    (data / "logs" / "facturador.log").write_text("ruido", encoding="utf-8")
-    conn = sqlite3.connect(data / "facturador.db")
+def perfil(tmp_path) -> ProfilePaths:
+    """Raíz de perfil con el layout de ProfilePaths y contenido marcado."""
+    paths = ProfilePaths(root=tmp_path / "perfil")
+    paths.ensure_layout()
+    paths.key.write_text("KEY-PRIVADA", encoding="utf-8")
+    paths.cert.write_text("CERT", encoding="utf-8")
+    paths.pdf_dir.mkdir()
+    (paths.pdf_dir / "factura-E-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
+    paths.logs_dir.mkdir()
+    paths.log_file.write_text("ruido", encoding="utf-8")
+    conn = sqlite3.connect(paths.db)
     conn.execute("CREATE TABLE invoices (id TEXT)")
     conn.execute("INSERT INTO invoices VALUES ('inv-1')")
     conn.commit()
     conn.close()
-    return tmp_path
+    return paths
 
 
 def _members(tar_bytes):
@@ -46,8 +46,8 @@ def _members(tar_bytes):
                 for m in tar.getmembers()}
 
 
-def test_snapshot_es_una_db_consistente(home):
-    snapshot = snapshot_db(home / "data" / "facturador.db")
+def test_snapshot_es_una_db_consistente(perfil):
+    snapshot = snapshot_db(perfil.db)
 
     conn = sqlite3.connect(":memory:")
     conn.deserialize(snapshot)
@@ -55,21 +55,21 @@ def test_snapshot_es_una_db_consistente(home):
     conn.close()
 
 
-def test_tar_lleva_estado_completo_sin_db_viva_ni_logs(home):
-    snapshot = snapshot_db(home / "data" / "facturador.db")
+def test_tar_lleva_estado_del_perfil_sin_db_viva_ni_logs(perfil):
+    snapshot = snapshot_db(perfil.db)
     # La DB viva cambia DESPUÉS del snapshot: el tar debe llevar el snapshot.
-    conn = sqlite3.connect(home / "data" / "facturador.db")
+    conn = sqlite3.connect(perfil.db)
     conn.execute("INSERT INTO invoices VALUES ('inv-post-snapshot')")
     conn.commit()
     conn.close()
 
-    members = _members(build_tar(home, snapshot))
+    members = _members(build_tar(perfil, snapshot))
 
     archivos = {k for k, v in members.items() if v is not None}
+    # Sin .env: el bootstrap no es estado del perfil (FAC-25).
     assert archivos == {
-        ".env",
-        "secrets/homo.key",
-        "secrets/homo.crt",
+        "secrets/cert.key",
+        "secrets/cert.crt",
         "data/facturador.db",
         "data/pdfs/factura-E-00001-00000001-homo.pdf",
     }
@@ -77,77 +77,87 @@ def test_tar_lleva_estado_completo_sin_db_viva_ni_logs(home):
     assert not any(n.startswith("data/logs") for n in members)
 
 
-def test_tar_sin_db_respalda_el_resto(home):
-    (home / "data" / "facturador.db").unlink()
-    members = _members(build_tar(home, None))
+def test_tar_sin_db_respalda_el_resto(perfil):
+    perfil.db.unlink()
+    members = _members(build_tar(perfil, None))
     assert "data/facturador.db" not in members
-    assert "secrets/homo.key" in members
+    assert "secrets/cert.key" in members
 
 
-def test_extract_reconstruye_el_layout(home, tmp_path_factory):
-    tar_bytes = build_tar(home, snapshot_db(home / "data" / "facturador.db"))
-    destino = tmp_path_factory.mktemp("secundaria")
+def test_extract_reconstruye_el_layout_del_perfil(perfil, tmp_path_factory):
+    tar_bytes = build_tar(perfil, snapshot_db(perfil.db))
+    destino = ProfilePaths(root=tmp_path_factory.mktemp("secundaria"))
 
-    extraidos = extract(tar_bytes, destino)
+    extraidos = extract(tar_bytes, destino.root)
 
-    assert (destino / ".env").read_text(encoding="utf-8") == "ARCA_ENV=homo\n"
-    assert (destino / "secrets" / "homo.key").read_text(
-        encoding="utf-8"
-    ) == "KEY-PRIVADA"
-    conn = sqlite3.connect(destino / "data" / "facturador.db")
+    assert destino.key.read_text(encoding="utf-8") == "KEY-PRIVADA"
+    conn = sqlite3.connect(destino.db)
     assert conn.execute("SELECT id FROM invoices").fetchone() == ("inv-1",)
     conn.close()
-    assert "secrets/homo.key" in extraidos
+    assert "secrets/cert.key" in extraidos
 
 
 def test_extract_rechaza_paths_hostiles(tmp_path):
     """El filtro "data" de tarfile corta path traversal en backups adulterados."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        info = tarfile.TarInfo("../fuera-del-home.txt")
+        info = tarfile.TarInfo("../fuera-del-perfil.txt")
         payload = b"escape"
         info.size = len(payload)
         tar.addfile(info, io.BytesIO(payload))
 
-    destino = tmp_path / "home"
+    destino = tmp_path / "perfil"
     destino.mkdir()
     with pytest.raises(tarfile.OutsideDestinationError):
         extract(buf.getvalue(), destino)
-    assert not (tmp_path / "fuera-del-home.txt").exists()
+    assert not (tmp_path / "fuera-del-perfil.txt").exists()
 
 
-def test_resolve_home_exige_directorio_existente(tmp_path):
-    with pytest.raises(BackupError):
-        resolve_home(str(tmp_path / "no-existe"))
+# --- resolución explícita del perfil (--env / --root, nunca implícita) ---
 
 
-def test_resolve_home_misma_resolucion_que_la_app(tmp_path, monkeypatch):
-    """Un solo home: --home, FACTURADOR_HOME o el default ~/facturador.
-    Nunca el directorio de trabajo (review PR #8: backup/restore sobre un
-    directorio implícito equivocado son destructivos)."""
-    monkeypatch.chdir(tmp_path)  # el CWD no participa de la resolución
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.delenv("FACTURADOR_HOME", raising=False)
-
-    (tmp_path / "facturador").mkdir()
-    assert resolve_home() == tmp_path / "facturador"
-
-    (tmp_path / "otro").mkdir()
-    monkeypatch.setenv("FACTURADOR_HOME", str(tmp_path / "otro"))
-    assert resolve_home() == tmp_path / "otro"
+def test_resolver_perfil_exige_exactamente_una_eleccion(tmp_path):
+    with pytest.raises(BackupError, match="exactamente uno"):
+        resolve_profile_paths(None, None)
+    with pytest.raises(BackupError, match="exactamente uno"):
+        resolve_profile_paths("homo", str(tmp_path))
 
 
-def test_resolve_home_create_para_la_maquina_secundaria(tmp_path):
-    """El restore puede correr en una máquina sin home todavía."""
-    destino = tmp_path / "nuevo-home"
-    assert resolve_home(str(destino), create=True) == destino
-    assert destino.is_dir()
+def test_resolver_perfil_por_root_exige_directorio_existente(tmp_path):
+    with pytest.raises(BackupError, match="no existe"):
+        resolve_profile_paths(None, str(tmp_path / "no-existe"))
 
 
-def test_bucket_y_prefijo_salen_de_la_db(home):
+def test_resolver_perfil_por_env_usa_el_app_data(tmp_path, monkeypatch):
+    """--env resuelve la MISMA raíz de perfil que la app (app-data del SO);
+    el CWD no participa de la resolución."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "facturador.profile.resolve_app_data_root",
+        lambda: tmp_path / "appdata",
+    )
+    (tmp_path / "appdata" / "homo").mkdir(parents=True)
+
+    assert resolve_profile_paths("homo", None).root == tmp_path / "appdata" / "homo"
+
+
+def test_resolver_perfil_rechaza_ambiente_invalido(tmp_path):
+    with pytest.raises(BackupError, match="Ambiente inválido"):
+        resolve_profile_paths("staging", None)
+
+
+def test_resolver_perfil_create_para_la_maquina_secundaria(tmp_path):
+    """El restore puede correr en una máquina sin el perfil todavía."""
+    destino = tmp_path / "perfil-nuevo"
+    paths = resolve_profile_paths(None, str(destino), create=True)
+    assert paths.root == destino
+    assert paths.secrets_dir.is_dir()
+
+
+def test_bucket_y_prefijo_salen_de_la_db(perfil):
     """La config de backups vive en la app (tabla settings), no en el
     entorno: se lee del mismo snapshot que se respalda."""
-    conn = sqlite3.connect(home / "data" / "facturador.db")
+    conn = sqlite3.connect(perfil.db)
     conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
     conn.executemany(
         "INSERT INTO settings VALUES (?, ?)",
@@ -156,20 +166,20 @@ def test_bucket_y_prefijo_salen_de_la_db(home):
     conn.commit()
     conn.close()
 
-    snapshot = snapshot_db(home / "data" / "facturador.db")
+    snapshot = snapshot_db(perfil.db)
     assert backup_s3_settings(snapshot) == ("bucket-de-prueba", "pfx")
 
 
-def test_db_vieja_sin_tabla_settings_deja_el_backup_solo_local(home):
-    snapshot = snapshot_db(home / "data" / "facturador.db")
+def test_db_vieja_sin_tabla_settings_deja_el_backup_solo_local(perfil):
+    snapshot = snapshot_db(perfil.db)
     assert backup_s3_settings(snapshot) == ("", "facturador")
     assert backup_s3_settings(None) == ("", "facturador")
 
 
-def test_backup_rechaza_un_home_sin_secrets(tmp_path, capsys):
-    """Review PR #8: correr desde un directorio que no es FACTURADOR_HOME
-    debe fallar fuerte, no producir un backup vacío en silencio."""
+def test_backup_rechaza_una_raiz_sin_secrets(tmp_path, capsys):
+    """Review PR #8: correr contra un directorio que no es la raíz de un
+    perfil debe fallar fuerte, no producir un backup vacío en silencio."""
     from facturador.backup import main
 
-    assert main(["--home", str(tmp_path)]) == 1
-    assert "no parece un FACTURADOR_HOME" in capsys.readouterr().err
+    assert main(["--root", str(tmp_path)]) == 1
+    assert "no parece la raíz de un perfil" in capsys.readouterr().err

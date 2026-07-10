@@ -11,16 +11,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from facturador import db, repo
 from facturador.arca.wsfex import PARAM_METHODS, WsfexClient
-from facturador.config import load_config, resolve_boot_environment
+from facturador.config import load_config, resolve_boot_profile
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def main() -> None:
-    config = load_config(resolve_boot_environment())
+    config = load_config(resolve_boot_profile())
     client = WsfexClient(config)
-    conn = db.connect(config.data_dir / "facturador.db")
+    conn = db.connect(config.paths.db)
 
     print(f"Ambiente: {config.env}  |  URL: {config.wsfex_url}")
 
@@ -36,7 +36,7 @@ def main() -> None:
         muestra = ", ".join(f"{r.code}={r.description}" for r in registros[:3])
         print(f"{kind:<10} {n:>3} registros  [{muestra}{', ...' if n > 3 else ''}]")
 
-    print("\nCache arca_params actualizado en", config.data_dir / "facturador.db")
+    print("\nCache arca_params actualizado en", config.paths.db)
 
 
 if __name__ == "__main__":

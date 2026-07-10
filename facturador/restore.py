@@ -2,21 +2,22 @@
 
 Inverso de facturador.backup: descarga (opcional) el último ``.tar.gz.age``
 del bucket, lo descifra con ``age -d`` (passphrase interactiva) y extrae
-``.env`` + ``secrets/`` + ``data/`` en FACTURADOR_HOME. La numeración se
-resincroniza sola contra ARCA (FEXGetLast_CMP) y el chequeo de DB
-desactualizada bloquea la emisión si el restore quedó viejo.
+``secrets/`` + ``data/`` en la raíz del perfil del ambiente elegido
+(FAC-25). La numeración se resincroniza sola contra ARCA (FEXGetLast_CMP)
+y el chequeo de DB desactualizada bloquea la emisión si el restore quedó
+viejo.
 
 Se niega a pisar una DB existente sin ``--force``: restaurar arriba de la
 máquina primaria por error destruiría el registro bueno.
 
-El home se resuelve igual que en la app (--home, FACTURADOR_HOME o
-~/facturador; nunca el CWD). Con ``--latest`` el bucket se pasa por
-``--bucket``: en una máquina recién estrenada todavía no hay DB de la cual
-leer la config de backups (que vive en la app).
+El perfil se elige EXPLÍCITO, igual que en backup (--env homo|prod o
+--root; nunca el CWD ni un default silencioso). Con ``--latest`` el bucket
+se pasa por ``--bucket``: en una máquina recién estrenada todavía no hay DB
+de la cual leer la config de backups (que vive en la app).
 
 Uso:
-  uv run python -m facturador.restore <backup.tar.gz.age>
-  uv run python -m facturador.restore --latest --bucket mi-bucket
+  uv run python -m facturador.restore --env homo <backup.tar.gz.age>
+  uv run python -m facturador.restore --env prod --latest --bucket mi-bucket
 """
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ import sys
 import tarfile
 from pathlib import Path
 
-from .backup import DB_NAME, BackupError, resolve_home
+from .backup import BackupError, resolve_profile_paths
+from .profile import ProfilePaths
 from .settings import BACKUP_PREFIX_DEFAULT
 
 
@@ -69,15 +71,15 @@ def decrypt_age(archive: Path) -> bytes:
     ).stdout
 
 
-def extract(tar_bytes: bytes, home: Path) -> list[str]:
-    """Extrae el tarball en home con el filtro "data" de tarfile (bloquea
-    paths absolutos, ``..`` y symlinks fuera del árbol)."""
+def extract(tar_bytes: bytes, root: Path) -> list[str]:
+    """Extrae el tarball en la raíz del perfil con el filtro "data" de
+    tarfile (bloquea paths absolutos, ``..`` y symlinks fuera del árbol)."""
     extraidos: list[str] = []
     with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
         for member in tar.getmembers():
             extraidos.append(member.name)
-        tar.extractall(home, filter="data")
-    _endurecer_secrets(home / "secrets")
+        tar.extractall(root, filter="data")
+    _endurecer_secrets(ProfilePaths(root=root).secrets_dir)
     return extraidos
 
 
@@ -105,7 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         "--prefix", default=BACKUP_PREFIX_DEFAULT, help="prefijo en el bucket"
     )
     parser.add_argument(
-        "--home", help="directorio de datos (default: FACTURADOR_HOME o ~/facturador)"
+        "--env", help="ambiente del perfil destino (homo | prod)"
+    )
+    parser.add_argument(
+        "--root", help="raíz explícita del perfil destino (alternativa a --env)"
     )
     parser.add_argument(
         "--force", action="store_true", help="pisar una DB local existente"
@@ -113,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        home = resolve_home(args.home, create=True)
+        paths = resolve_profile_paths(args.env, args.root, create=True)
 
         if args.latest == bool(args.archive):
             raise BackupError("Indicar un archivo O --latest (exactamente uno).")
@@ -123,22 +128,21 @@ def main(argv: list[str] | None = None) -> int:
                     "--latest necesita --bucket: en una máquina nueva no hay "
                     "DB todavía de la cual leer la config de backups."
                 )
-            archive = download_latest(args.bucket, args.prefix, home / "backups")
+            archive = download_latest(args.bucket, args.prefix, paths.backups_dir)
             print(f"Descargado: {archive}")
         else:
             archive = Path(args.archive)
             if not archive.is_file():
                 raise BackupError(f"No existe: {archive}")
 
-        db_path = home / "data" / DB_NAME
-        if db_path.is_file() and not args.force:
+        if paths.db.is_file() and not args.force:
             raise BackupError(
-                f"Ya hay una DB en {db_path}. Si esta máquina NO es la "
+                f"Ya hay una DB en {paths.db}. Si esta máquina NO es la "
                 "primaria y el backup es más nuevo, repetir con --force."
             )
 
-        extraidos = extract(decrypt_age(archive), home)
-        print(f"Restaurados {len(extraidos)} archivos en {home}:")
+        extraidos = extract(decrypt_age(archive), paths.root)
+        print(f"Restaurados {len(extraidos)} archivos en {paths.root}:")
         for name in extraidos:
             print(f"  {name}")
         return 0

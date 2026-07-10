@@ -55,20 +55,19 @@ def test_cert_and_key() -> tuple[bytes, bytes]:
 
 
 @pytest.fixture
-def test_config(tmp_path, test_cert_and_key) -> Config:
-    cert_pem, key_pem = test_cert_and_key
-    secrets = tmp_path / "secrets"
-    secrets.mkdir()
-    (secrets / "homo.crt").write_bytes(cert_pem)
-    (secrets / "homo.key").write_bytes(key_pem)
-    (tmp_path / "data").mkdir()
-    return Config(env=ArcaEnvironment.HOMO, home=tmp_path)
-
-
-@pytest.fixture
 def test_profile(tmp_path) -> EnvironmentProfile:
     """Perfil homo aislado en tmp (FAC-24: create_app exige uno explícito)."""
     return EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "profile")
+
+
+@pytest.fixture
+def test_config(test_profile, test_cert_and_key) -> Config:
+    """Config con TODOS los paths saliendo del perfil de test (FAC-25)."""
+    cert_pem, key_pem = test_cert_and_key
+    test_profile.paths.ensure_layout()
+    test_profile.paths.cert.write_bytes(cert_pem)
+    test_profile.paths.key.write_bytes(key_pem)
+    return Config(env=ArcaEnvironment.HOMO, paths=test_profile.paths)
 
 
 @pytest.fixture
@@ -77,8 +76,8 @@ def arca() -> FakeArca:
 
 
 @pytest.fixture
-def api(test_config, test_profile, arca, tmp_path):
-    conn = db.connect(tmp_path / "data" / "test.db")
+def api(test_config, test_profile, arca):
+    conn = db.connect(test_profile.paths.db)
     seed_params(conn)
     seed_settings(conn)
     wsfex = WsfexClient(

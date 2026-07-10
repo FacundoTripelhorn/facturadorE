@@ -2,8 +2,8 @@
 
 Regla central (design.md §2.1.1 punto 1, reforzada por ADR 0001): TODO se
 deriva de un único ambiente ``ArcaEnvironment`` que se INYECTA una sola vez
-en el arranque (FAC-24). Las URLs de WSAA/WSFEX y los paths de certificado
-salen del mismo valor, por lo que es imposible por construcción usar el
+en el arranque (FAC-24). Las URLs de WSAA/WSFEX y los paths de runtime salen
+del mismo perfil, por lo que es imposible por construcción usar el
 certificado de homologación contra producción o viceversa. No existen
 overrides por URL, y ningún módulo de la app lee ``ARCA_ENV`` por su cuenta:
 el único punto de lectura es ``resolve_boot_environment()`` en el arranque
@@ -12,19 +12,22 @@ el único punto de lectura es ``resolve_boot_environment()`` en el arranque
 Resolución de configuración (única, sin fallbacks al directorio de trabajo):
 
 1. ``FACTURADOR_HOME`` (default ``~/facturador``; en Docker, ``/facturador``
-   fijado por ENV en el Dockerfile) es LA raíz de datos. La app crea el home
-   y su estructura (``secrets/``, ``data/``, ``backups/``) en el primer
-   arranque.
+   fijado por ENV en el Dockerfile) contiene SOLO el ``.env`` de bootstrap.
+   Los archivos de runtime ya no viven ahí: cada ambiente tiene su perfil
+   aislado bajo el app-data del SO (ADR 0001 / FAC-25) y ``ProfilePaths``
+   es la única fuente de esos paths (DB, certs, PDFs, TA cache, logs,
+   backups, onboarding).
 2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
    bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``FACTURADOR_PORT``.
    Si no existe, la app crea un esqueleto SIN ambiente activo: elegirlo es
    un acto explícito del usuario/launcher, nunca un default (FAC-24).
 3. El resto de la configuración (datos del emisor, punto de venta, backups)
-   vive en la DB y se edita desde la página Configuración (ver settings.py).
+   vive en la DB del perfil y se edita desde la página Configuración
+   (ver settings.py).
 
-Los certificados siguen siendo archivos en ``<home>/secrets/<env>.{crt,key}``
-colocados a mano; los chequeos de arranque (permisos 400/600, par cert/env
-consistente) se mantienen intactos.
+Los certificados son archivos en ``<perfil>/secrets/cert.{crt,key}``
+colocados a mano (sin sufijo de ambiente: el perfil YA es el ambiente); los
+chequeos de arranque (permisos 400/600, par presente) se mantienen intactos.
 """
 
 from __future__ import annotations
@@ -38,7 +41,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .constants import WSAA_URLS, WSFEX_URLS, ArcaEnvironment
-from .profile import ProfileError, parse_environment
+from .profile import (
+    EnvironmentProfile,
+    ProfileError,
+    ProfilePaths,
+    parse_environment,
+)
 
 DEFAULT_HOME = "~/facturador"
 
@@ -51,8 +59,8 @@ BOOTSTRAP_ENV = """\
 # punto de venta, backups) se edita desde la app, en la página Configuración.
 
 # Ambiente ARCA: homo | prod. SIN default: descomentar y elegir uno (ADR
-# 0001). Deriva URLs de WSAA/WSFEX y qué par cert/key se usa
-# (secrets/<env>.crt + secrets/<env>.key). Único flag: no hay overrides.
+# 0001). Deriva URLs de WSAA/WSFEX y qué perfil aislado (con su par
+# cert/key en secrets/cert.{crt,key}) se usa. Único flag: no hay overrides.
 #ARCA_ENV=homo
 
 # Puerto local (siempre en 127.0.0.1).
@@ -66,8 +74,8 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Config:
-    env: ArcaEnvironment  # inmutable: fijado al construir, nunca re-leído
-    home: Path            # raíz de datos (secrets/, data/, backups/)
+    env: ArcaEnvironment   # inmutable: fijado al construir, nunca re-leído
+    paths: ProfilePaths    # ÚNICA fuente de paths de runtime (FAC-25)
 
     @property
     def wsaa_url(self) -> str:
@@ -77,38 +85,20 @@ class Config:
     def wsfex_url(self) -> str:
         return WSFEX_URLS[self.env]
 
-    @property
-    def cert_path(self) -> Path:
-        return self.home / "secrets" / f"{self.env}.crt"
-
-    @property
-    def key_path(self) -> Path:
-        return self.home / "secrets" / f"{self.env}.key"
-
-    @property
-    def data_dir(self) -> Path:
-        return self.home / "data"
-
-    @property
-    def pdf_dir(self) -> Path:
-        return self.data_dir / "pdfs"
-
 
 def resolve_home() -> Path:
-    """Único punto de resolución del home: FACTURADOR_HOME o ~/facturador.
-    Sin fallback al directorio de trabajo, acá ni en backup/restore."""
+    """Único punto de resolución del home del bootstrap: FACTURADOR_HOME o
+    ~/facturador. Sin fallback al directorio de trabajo."""
     return Path(os.environ.get("FACTURADOR_HOME") or DEFAULT_HOME).expanduser()
 
 
 def ensure_home(home: Path) -> None:
-    """Crea el home y su estructura en el primer arranque, incluido el .env
-    de bootstrap si no existe."""
-    secrets = home / "secrets"
-    secrets.mkdir(parents=True, exist_ok=True)
-    if sys.platform != "win32":
-        secrets.chmod(0o700)
-    (home / "data").mkdir(exist_ok=True)
-    (home / "backups").mkdir(exist_ok=True)
+    """Crea el home y el .env de bootstrap si no existen.
+
+    El home ya no aloja archivos de runtime (FAC-25): secrets/, data/ y
+    backups/ viven en el perfil de cada ambiente (``ProfilePaths``).
+    """
+    home.mkdir(parents=True, exist_ok=True)
     env_file = home / ".env"
     if not env_file.exists():
         env_file.write_text(BOOTSTRAP_ENV, encoding="utf-8")
@@ -142,30 +132,34 @@ def resolve_boot_environment() -> ArcaEnvironment:
         raise ConfigError(f"ARCA_ENV inválido: {exc}") from exc
 
 
-def load_config(environment: ArcaEnvironment) -> Config:
-    """Config del home compartido para un ambiente YA elegido y validado.
+def resolve_boot_profile() -> EnvironmentProfile:
+    """Perfil del ambiente elegido en el bootstrap (entrypoints y scripts)."""
+    return EnvironmentProfile.resolve(resolve_boot_environment())
 
-    El ambiente es un parámetro obligatorio (FAC-24): no hay camino que
-    construya una Config sin decidirlo explícitamente.
+
+def load_config(profile: EnvironmentProfile) -> Config:
+    """Config de un perfil YA elegido y validado.
+
+    El perfil es un parámetro obligatorio (FAC-24/FAC-25): no hay camino que
+    construya una Config sin decidir el ambiente, y los paths salen siempre
+    del perfil — nunca de un layout compartido ni del CWD.
     """
-    home = resolve_home()
-    ensure_home(home)
-    config = Config(env=environment, home=home)
+    profile.paths.ensure_layout()
+    config = Config(env=profile.environment, paths=profile.paths)
     validate_config(config)
     return config
 
 
 def validate_config(config: Config) -> None:
     """La app se niega a arrancar con secretos ausentes o permisos laxos."""
-    for path in (config.cert_path, config.key_path):
+    for path in (config.paths.cert, config.paths.key):
         if not path.is_file():
             raise ConfigError(
-                f"Falta {path.name} para ARCA_ENV={config.env}: {path}. "
-                "Colocar el par cert/key en <home>/secrets/ con los nombres "
-                "<env>.crt / <env>.key."
+                f"Falta {path.name} para el perfil de {config.env}: {path}. "
+                "Colocar el par cert/key en el secrets/ del perfil con los "
+                "nombres cert.crt / cert.key."
             )
-    _check_key_permissions(config.key_path)
-    config.data_dir.mkdir(parents=True, exist_ok=True)
+    _check_key_permissions(config.paths.key)
 
 
 def _check_key_permissions(key_path: Path) -> None:

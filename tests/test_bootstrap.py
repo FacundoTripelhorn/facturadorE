@@ -26,8 +26,8 @@ def _app_para(environment: ArcaEnvironment, tmp_path):
     profile = EnvironmentProfile.for_testing(
         environment, tmp_path / "profiles" / environment.value
     )
-    config = Config(env=environment, home=tmp_path)
-    conn = db.connect(tmp_path / f"{environment.value}.db")
+    config = Config(env=environment, paths=profile.paths)
+    conn = db.connect(profile.paths.db)
     wsfex = WsfexClient(
         config,
         wsaa=FakeWsaa(),
@@ -59,15 +59,28 @@ def test_urls_de_arca_derivan_solo_del_perfil(environment, tmp_path):
 
 def test_config_y_perfil_de_ambientes_distintos_rechazados(tmp_path):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.PROD, tmp_path / "p")
-    config = Config(env=ArcaEnvironment.HOMO, home=tmp_path)
+    otro = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
+    config = Config(env=ArcaEnvironment.HOMO, paths=otro.paths)
+
+    with pytest.raises(ProfileError, match="no coinciden"):
+        create_app(profile, config=config)
+
+
+def test_config_con_paths_de_otro_perfil_rechazada(tmp_path):
+    """FAC-25: mismo ambiente no alcanza — los paths de la Config tienen que
+    salir de la raíz del perfil inyectado, no de cualquier otra."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
+    otro = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h2")
+    config = Config(env=ArcaEnvironment.HOMO, paths=otro.paths)
 
     with pytest.raises(ProfileError, match="no coinciden"):
         create_app(profile, config=config)
 
 
 def test_crear_app_sin_perfil_explicito_falla(tmp_path):
+    perfil = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
     with pytest.raises(TypeError):
-        create_app(config=Config(env=ArcaEnvironment.HOMO, home=tmp_path))
+        create_app(config=Config(env=ArcaEnvironment.HOMO, paths=perfil.paths))
 
 
 def test_el_ambiente_es_inmutable_despues_de_crear_la_app(tmp_path):
