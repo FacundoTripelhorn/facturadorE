@@ -286,7 +286,8 @@ def test_smoke_launcher_arranca_backend_abre_browser_y_apaga(
         supervisor.stop()
 
     assert not supervisor.is_running
-    assert not lock_path.exists()
+    # Lock liberado (flock); el archivo puede quedar como leftover inofensivo.
+    assert lock_path.is_file()
     if pid is not None:
         # El proceso no debe quedar huérfano tras stop().
         time.sleep(0.2)
@@ -336,7 +337,30 @@ def test_profile_lock_acquire_release_y_metadata(tmp_path):
 
     lock.release()
     assert not lock.is_held
-    assert not path.exists()
+    # El archivo queda: flock es la autoridad; unlink post-unlock es racy.
+    assert path.is_file()
+    assert read_lock_holder(path) == holder
+
+
+def test_profile_lock_release_no_borra_archivo_para_evitar_race(tmp_path):
+    """Tras release el path sigue existiendo; un segundo acquire toma el flock."""
+    from facturador.launcher import ProfileLock, read_lock_holder
+
+    path = tmp_path / "data" / "launcher.lock"
+    first = ProfileLock(path)
+    first.acquire(port=8601, environment="homo")
+    first.release()
+
+    assert path.is_file()
+    leftover = read_lock_holder(path)
+    assert leftover is not None
+    assert leftover.port == 8601
+
+    second = ProfileLock(path)
+    holder = second.acquire(port=8602, environment="homo")
+    assert holder.port == 8602
+    assert holder.pid == os.getpid()
+    second.release()
 
 
 def test_profile_lock_segundo_proceso_no_puede_adquirir(tmp_path):
@@ -394,7 +418,12 @@ def test_profile_lock_stale_file_sin_flock_se_recupera(tmp_path):
     assert holder.port == 8420
     assert holder.pid == os.getpid()
     lock.release()
-    assert not path.exists()
+    assert path.is_file()
+    # Tras soltar, otro acquire debe poder tomar el mismo path.
+    lock2 = ProfileLock(path)
+    holder2 = lock2.acquire(port=8421, environment="homo")
+    assert holder2.port == 8421
+    lock2.release()
 
 
 def test_profile_locks_de_distintos_ambientes_son_independientes(tmp_path):
@@ -533,4 +562,5 @@ def test_supervisor_recupera_lock_stale_y_arranca(
         assert supervisor.is_ready
     finally:
         supervisor.stop()
-    assert not stale.exists()
+    # Leftover file OK; lo importante es que el flock quedó libre y arrancamos.
+    assert stale.is_file()

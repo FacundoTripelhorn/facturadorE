@@ -229,7 +229,8 @@ starts `python -m facturador` with that single `ARCA_ENV`, waits for `GET /healt
 opens the browser only when ready, and stops the child on Ctrl+C without orphaning
 it. A second launch against the same profile reuses a healthy session (reopens the
 browser) or fails with a clear message; stale lock files without a live flock do
-not block startup. No chooser UI yet (FAC-29).
+not block startup (the lock file is kept on disk — flock is the authority). No
+chooser UI yet (FAC-29).
 
 ### Tests
 
