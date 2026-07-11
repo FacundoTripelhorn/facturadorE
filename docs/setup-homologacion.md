@@ -100,25 +100,31 @@ venta, backups) **vive en la app**: se completa en la página **Configuración**
 una vez levantada (paso 6). El emisor no elige ambiente: queda sellado al
 perfil activo.
 
-Para scripts/diagnóstico sin chooser:
-`ARCA_ENV=homo uv run python …` (un ambiente explícito por proceso).
+Para scripts/diagnóstico sin chooser (launcher nativo):
+`ARCA_ENV=homo uv run python …`. Si los certificados están en el layout
+Docker (`~/facturador/profiles/…`), sumá
+`FACTURADOR_APP_DATA=~/facturador/profiles` para apuntar al mismo perfil.
 
-## 5. Verificar la conectividad, paso a paso
+## 5. Verificar la conectividad, pasos a paso
 
 Todos los comandos se corren desde la raíz del repo, con Homologación
-seleccionada (`ARCA_ENV=homo` o el launcher ya configurado):
+seleccionada. El launcher nativo resuelve el perfil en el app-data del SO;
+si seguiste el camino Docker, hay que apuntar `FACTURADOR_APP_DATA` a
+`~/facturador/profiles` (sin eso los scripts buscan otro `secrets/` y fallan
+aunque el contenedor esté bien configurado):
 
 ```bash
 uv sync
 
-# 5.1 — WSAA: obtiene el Ticket de Acceso y lo cachea
+# Launcher nativo
 ARCA_ENV=homo uv run python scripts/get_ta.py
-
-# 5.2 — WSFEX: FEXDummy + descarga de tablas de parámetros al cache local
 ARCA_ENV=homo uv run python scripts/check_wsfex.py
+ARCA_ENV=homo uv run python scripts/authorize_homo.py
 
-# 5.3 — Flujo completo de emisión: cotización, numeración, FEXAuthorize,
-#        verificación post-emisión con FEXGetCMP
+# Docker (mismo layout que profiles/homo/)
+export FACTURADOR_APP_DATA=~/facturador/profiles
+ARCA_ENV=homo uv run python scripts/get_ta.py
+ARCA_ENV=homo uv run python scripts/check_wsfex.py
 ARCA_ENV=homo uv run python scripts/authorize_homo.py
 ```
 
