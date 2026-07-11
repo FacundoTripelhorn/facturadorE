@@ -223,11 +223,13 @@ one operates; PV selection when more than one is enabled. See
 
 Never commit secrets. Key files must stay mode 400/600.
 
-**Launcher supervisor (FAC-28):** `python -m facturador.launcher --env homo|prod`
-resolves the hidden profile, starts `python -m facturador` with that single
-`ARCA_ENV`, waits for `GET /health`, opens the browser only when ready, and
-stops the child on Ctrl+C without orphaning it. No chooser UI yet (FAC-29);
-no duplicate-instance lock yet (FAC-30).
+**Launcher supervisor (FAC-28 / FAC-30):** `python -m facturador.launcher --env homo|prod`
+resolves the hidden profile, takes a per-profile lock (`ProfilePaths.launcher_lock`),
+starts `python -m facturador` with that single `ARCA_ENV`, waits for `GET /health`,
+opens the browser only when ready, and stops the child on Ctrl+C without orphaning
+it. A second launch against the same profile reuses a healthy session (reopens the
+browser) or fails with a clear message; stale lock files without a live flock do
+not block startup. No chooser UI yet (FAC-29).
 
 ### Tests
 
