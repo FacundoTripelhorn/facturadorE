@@ -363,6 +363,43 @@ def test_read_lock_holder_acepta_json_legacy_sin_sentinel(tmp_path):
     assert holder.environment == "prod"
 
 
+def test_read_lock_holder_no_lee_byte_sentinel_bloqueado(tmp_path, monkeypatch):
+    """Simula mandatory lock en byte 0: el reader debe seek(1) antes de read."""
+    from facturador.launcher import read_lock_holder
+
+    path = tmp_path / "data" / "launcher.lock"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(
+        b'\0{"v":1,"pid":7,"port":8410,"environment":"homo"}\n'
+    )
+
+    original_open = Path.open
+
+    def guarded_open(self: Path, mode: str = "r", *args: object, **kwargs: object):
+        fh = original_open(self, mode, *args, **kwargs)
+        if self.resolve() != path.resolve():
+            return fh
+        if "b" not in mode:
+            fh.close()
+            raise AssertionError("read_lock_holder debe abrir en binario")
+        inner_read = fh.read
+
+        def read_guard(size: int = -1) -> bytes:
+            if fh.tell() == 0:
+                raise OSError("byte 0 locked (simulated Windows mandatory lock)")
+            return inner_read(size)
+
+        fh.read = read_guard  # type: ignore[method-assign]
+        return fh
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    holder = read_lock_holder(path)
+    assert holder is not None
+    assert holder.pid == 7
+    assert holder.port == 8410
+    assert holder.environment == "homo"
+
+
 def test_profile_lock_release_no_borra_archivo_para_evitar_race(tmp_path):
     """Tras release el path sigue existiendo; un segundo acquire toma el flock."""
     from facturador.launcher import ProfileLock, read_lock_holder

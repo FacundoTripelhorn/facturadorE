@@ -12,8 +12,8 @@ Comportamiento:
   inode que luego desaparece, y un tercero crea un archivo nuevo en el mismo
   path (dos dueños aparentes del perfil).
 - Layout del archivo: byte 0 = sentinel ``\\0`` (rango de ``msvcrt.locking``
-  en Windows, fuera del JSON); metadata JSON desde el offset 1. Así un
-  contendedor puede leer puerto/ambiente aunque el lock esté tomado.
+  en Windows, fuera del JSON); metadata JSON desde el offset 1. Los
+  contendientes leen desde el offset 1 para no tocar el byte bloqueado.
 - Si el lock está tomado, el segundo launcher lee puerto/ambiente y puede
   reutilizar la sesión sana (abrir el browser) o fallar con mensaje claro.
 """
@@ -146,19 +146,25 @@ class ProfileLock:
 
 
 def read_lock_holder(path: Path) -> LockHolder | None:
-    """Lee el metadata del lock sin tomarlo. ``None`` si falta o es inválido."""
+    """Lee el metadata del lock sin tomarlo. ``None`` si falta o es inválido.
+
+    En Windows el byte 0 puede estar bajo ``msvcrt.locking`` (mandatory): un
+    ``read`` que lo incluya falla para el contendiente. Por eso se lee primero
+    desde ``_METADATA_OFFSET``; el fallback al archivo completo solo cubre
+    leftovers legacy sin sentinel (y solo si el byte 0 es legible).
+    """
     try:
-        raw = path.read_text(encoding="utf-8")
+        with path.open("rb") as fh:
+            fh.seek(_METADATA_OFFSET)
+            meta = _decode_lock_bytes(fh.read())
+            holder = _parse_holder_json(meta)
+            if holder is not None:
+                return holder
+            # Legacy: JSON desde byte 0, sin sentinel.
+            fh.seek(0)
+            return _parse_holder_json(_decode_lock_bytes(fh.read()))
     except OSError:
         return None
-    text = _metadata_text(raw)
-    if not text:
-        return None
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return _holder_from_payload(payload)
 
 
 def is_process_alive(pid: int) -> bool:
@@ -177,13 +183,23 @@ def is_process_alive(pid: int) -> bool:
     return True
 
 
-def _metadata_text(raw: str) -> str:
-    """Extrae el JSON: salta el sentinel ``\\0`` si está; acepta legacy sin él."""
-    if not raw:
-        return ""
-    if raw.startswith(_LOCK_SENTINEL):
-        raw = raw[_METADATA_OFFSET:]
-    return raw.strip()
+def _decode_lock_bytes(raw: bytes) -> str:
+    return raw.decode("utf-8", errors="replace").strip()
+
+
+def _parse_holder_json(text: str) -> LockHolder | None:
+    if not text:
+        return None
+    # Leftovers con sentinel leídos desde offset 0 (fallback legacy).
+    if text.startswith(_LOCK_SENTINEL):
+        text = text[_METADATA_OFFSET:].strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return _holder_from_payload(payload)
 
 
 def _held_message(holder: LockHolder) -> str:
