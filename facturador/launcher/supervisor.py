@@ -8,6 +8,7 @@ chooser (FAC-29) ni locks anti-duplicado (FAC-30): acá solo supervisión.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -22,13 +23,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..constants import ArcaEnvironment
+from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile
 from .command import BackendLaunchPlan, plan_backend_launch
 
 DEFAULT_READINESS_TIMEOUT_S = 60.0
 DEFAULT_STOP_TIMEOUT_S = 10.0
 _POLL_INTERVAL_S = 0.2
+
+_log = logging.getLogger(__name__)
 
 
 class LauncherError(RuntimeError):
@@ -40,7 +43,7 @@ class ProcessSupervisor:
     """Supervisa el ciclo de vida de un backend de un solo ambiente."""
 
     environment: ArcaEnvironment
-    port: int = 8399
+    port: int = DEFAULT_PORT
     app_data_root: Path | None = None
     home: Path | None = None
     readiness_timeout: float = DEFAULT_READINESS_TIMEOUT_S
@@ -116,11 +119,22 @@ class ProcessSupervisor:
             payload = self._wait_until_ready(plan)
             self._assert_ready_environment(payload, plan.environment)
             self._ready = True
-        except LauncherError:
+        except (LauncherError, KeyboardInterrupt):
+            # El hijo vive en su propia session/process group: Ctrl+C solo
+            # llega al launcher. Hay que apagarlo acá o queda huérfano.
             self._stop_process(timeout=DEFAULT_STOP_TIMEOUT_S)
             raise
         if self.open_browser:
-            self.browser_opener(f"{plan.base_url}/")
+            try:
+                self.browser_opener(f"{plan.base_url}/")
+            except Exception:
+                # El backend ya está listo: un fallo al abrir el browser no
+                # debe tumbar el launcher ni dejar el proceso sin supervisión.
+                _log.warning(
+                    "No se pudo abrir el navegador; la app ya está en %s/",
+                    plan.base_url,
+                    exc_info=True,
+                )
         return plan
 
     def stop(self, *, timeout: float = DEFAULT_STOP_TIMEOUT_S) -> None:

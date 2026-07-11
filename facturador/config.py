@@ -40,7 +40,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .constants import WSAA_URLS, WSFEX_URLS, ArcaEnvironment
+from .constants import DEFAULT_PORT, WSAA_URLS, WSFEX_URLS, ArcaEnvironment
 from .profile import (
     EnvironmentProfile,
     ProfileError,
@@ -54,17 +54,17 @@ DEFAULT_HOME = "~/facturador"
 # DB: el flag de ambiente y el puerto local. El ambiente queda comentado a
 # propósito (FAC-24): un arranque sin elección explícita debe fallar, no
 # caer en homologación en silencio.
-BOOTSTRAP_ENV = """\
+BOOTSTRAP_ENV = f"""\
 # Bootstrap del facturador. El resto de la configuración (datos del emisor,
 # punto de venta, backups) se edita desde la app, en la página Configuración.
 
 # Ambiente ARCA: homo | prod. SIN default: descomentar y elegir uno (ADR
 # 0001). Deriva URLs de WSAA/WSFEX y qué perfil aislado (con su par
-# cert/key en secrets/cert.{crt,key}) se usa. Único flag: no hay overrides.
+# cert/key en secrets/cert.{{crt,key}}) se usa. Único flag: no hay overrides.
 #ARCA_ENV=homo
 
 # Puerto local (siempre en 127.0.0.1).
-#FACTURADOR_PORT=8399
+#FACTURADOR_PORT={DEFAULT_PORT}
 """
 
 
