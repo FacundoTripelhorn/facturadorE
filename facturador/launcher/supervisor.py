@@ -154,14 +154,15 @@ class ProcessSupervisor:
                 self._plan = reused_plan
                 return LaunchResult(plan=reused_plan, reused=True)
 
-        self._process = self._spawn(plan)
         try:
+            self._process = self._spawn(plan)
             payload = self._wait_until_ready(plan)
             self._assert_ready_environment(payload, plan.environment)
             self._ready = True
         except (LauncherError, KeyboardInterrupt):
             # El hijo vive en su propia session/process group: Ctrl+C solo
             # llega al launcher. Hay que apagarlo acá o queda huérfano.
+            # También cubre fallo de ``_spawn`` (lock ya tomado, sin hijo).
             self._stop_process(timeout=DEFAULT_STOP_TIMEOUT_S)
             self._release_lock()
             raise
@@ -187,7 +188,8 @@ class ProcessSupervisor:
         """Toma el lock del perfil, o devuelve el holder si hay sesión reutilizable.
 
         Raises:
-            LauncherError: lock tomado y sesión no reutilizable.
+            LauncherError: lock tomado y sesión no reutilizable, o backend
+            huérfano sano (launcher muerto) — no se arranca un segundo proceso.
         """
         lock = ProfileLock(plan.profile.paths.launcher_lock)
         try:
@@ -201,6 +203,21 @@ class ProcessSupervisor:
                 f"{exc} "
                 "Si no ves la ventana, cerrá la otra instancia e intentá de nuevo."
             ) from exc
+
+        # Flock libre: posible backend huérfano tras muerte del launcher.
+        # Opción B (FAC-30): no spawnear otro; fallar con mensaje claro.
+        displaced = lock.displaced_holder
+        if displaced is not None and self._holder_session_healthy(
+            displaced, plan.environment
+        ):
+            lock.restore_displaced_holder()
+            lock.release()
+            raise LauncherError(
+                f"FacturadorE ({plan.profile.display_name}) ya está sirviendo "
+                f"en {displaced.base_url}/ sin un launcher activo. "
+                "Cerrá esa instancia e intentá de nuevo."
+            )
+
         self._lock = lock
         return None
 

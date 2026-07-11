@@ -663,3 +663,99 @@ def test_supervisor_recupera_lock_stale_y_arranca(
         supervisor.stop()
     # Leftover file OK; lo importante es que el flock quedó libre y arrancamos.
     assert stale.is_file()
+
+
+def test_spawn_falla_libera_lock_para_reintentar(tmp_path):
+    """Si ``_spawn`` falla tras tomar el lock, el lock se suelta (retry OK)."""
+    app_data = tmp_path / "appdata"
+    profile = resolve_launch_profile(ArcaEnvironment.HOMO, app_data_root=app_data)
+    profile.paths.ensure_layout()
+    lock_path = profile.paths.launcher_lock
+
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=_free_port(),
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=2.0,
+        open_browser=False,
+        # Comando imposible: _spawn → OSError → LauncherError.
+        command_override=["/nonexistent/facturador-backend-bin"],
+    )
+    with pytest.raises(LauncherError, match="No se pudo iniciar"):
+        supervisor.start()
+    assert not supervisor.is_running
+    assert supervisor._lock is None
+
+    # Otro acquire en el mismo proceso debe poder tomar el flock.
+    from facturador.launcher import ProfileLock
+
+    lock = ProfileLock(lock_path)
+    lock.acquire(port=8999, environment="homo")
+    lock.release()
+
+
+def test_backend_huerfano_sano_falla_claro_sin_segundo_proceso(
+    tmp_path, monkeypatch
+):
+    """Flock libre + /health OK (launcher muerto): no spawnea; mensaje claro."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    app_data = tmp_path / "appdata"
+    profile = resolve_launch_profile(ArcaEnvironment.HOMO, app_data_root=app_data)
+    profile.paths.ensure_layout()
+    orphan_port = _free_port()
+
+    class _HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            body = b'{"status":"ok","environment":"homo"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", orphan_port), _HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    from facturador.launcher import ProfileLock, read_lock_holder
+
+    # Simular leftover tras muerte del launcher: metadata sin flock.
+    seed = ProfileLock(profile.paths.launcher_lock)
+    seed.acquire(port=orphan_port, environment="homo")
+    seed.release()
+    assert read_lock_holder(profile.paths.launcher_lock) is not None
+
+    spawned: list[object] = []
+
+    def _no_spawn(self: ProcessSupervisor, plan: object) -> object:
+        spawned.append(plan)
+        raise AssertionError("no debería spawnear con huérfano sano")
+
+    monkeypatch.setattr(ProcessSupervisor, "_spawn", _no_spawn)
+
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=_free_port(),
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=5.0,
+        open_browser=False,
+    )
+    try:
+        with pytest.raises(LauncherError, match="sin un launcher activo"):
+            supervisor.start()
+        assert spawned == []
+        assert not supervisor.is_running
+        # Metadata del huérfano restaurado para el próximo intento.
+        leftover = read_lock_holder(profile.paths.launcher_lock)
+        assert leftover is not None
+        assert leftover.port == orphan_port
+    finally:
+        server.shutdown()
+        server.server_close()

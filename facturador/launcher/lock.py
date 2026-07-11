@@ -16,6 +16,9 @@ Comportamiento:
   contendientes leen desde el offset 1 para no tocar el byte bloqueado.
 - Si el lock está tomado, el segundo launcher lee puerto/ambiente y puede
   reutilizar la sesión sana (abrir el browser) o fallar con mensaje claro.
+- Backend huérfano (launcher muerto, flock libre, ``/health`` OK): no se
+  arranca un segundo proceso; se restaura el metadata y se falla con mensaje
+  claro (FAC-30 opción B).
 """
 
 from __future__ import annotations
@@ -70,6 +73,9 @@ class ProfileLock:
     path: Path
     _fh: TextIO | None = None
     _holder: LockHolder | None = None
+    # Metadata que había en el archivo antes de sobrescribir al adquirir
+    # (p.ej. launcher muerto con backend huérfano aún sirviendo).
+    _displaced_holder: LockHolder | None = None
 
     @property
     def is_held(self) -> bool:
@@ -79,11 +85,18 @@ class ProfileLock:
     def holder(self) -> LockHolder | None:
         return self._holder
 
+    @property
+    def displaced_holder(self) -> LockHolder | None:
+        """Holder previo al acquire exitoso, si el archivo tenía metadata."""
+        return self._displaced_holder
+
     def acquire(self, *, port: int, environment: str) -> LockHolder:
         """Toma el lock o lanza ``ProfileLockHeld`` si otro proceso lo tiene.
 
         Locks stale (proceso muerto): el flock ya no está tomado; se adquiere
         y se reescribe el metadata. No bloquea el arranque de forma permanente.
+        El caller debe inspeccionar ``displaced_holder`` si un backend huérfano
+        pudiera seguir vivo (FAC-30).
         """
         if self.is_held:
             assert self._holder is not None
@@ -107,6 +120,8 @@ class ProfileLock:
                     _held_message(holder),
                     holder=holder,
                 )
+            # Leer metadata previo antes de pisarlo (backend huérfano).
+            displaced = read_lock_holder(self.path)
             holder = LockHolder(
                 pid=os.getpid(),
                 port=port,
@@ -115,11 +130,19 @@ class ProfileLock:
             _write_holder(fh, holder)
             self._fh = fh
             self._holder = holder
+            self._displaced_holder = displaced
             return holder
         except Exception:
             if self._fh is not fh:
                 fh.close()
             raise
+
+    def restore_displaced_holder(self) -> None:
+        """Reescribe el holder desplazado mientras el flock sigue tomado."""
+        if self._fh is None or self._displaced_holder is None:
+            return
+        _write_holder(self._fh, self._displaced_holder)
+        self._holder = self._displaced_holder
 
     def release(self) -> None:
         """Suelta el flock; deja el archivo en disco (el flock es la autoridad).
@@ -131,6 +154,7 @@ class ProfileLock:
         fh = self._fh
         self._fh = None
         self._holder = None
+        self._displaced_holder = None
         if fh is None:
             return
         try:
