@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>facturador</title>
+<title>facturador — {{ env_label }}</title>
 <script src="/static/htmx.min.js"></script>
 <style>
   :root {
@@ -54,10 +54,19 @@
   header a:hover { color: #fff; }
   header a[aria-current="page"] { color: #fff; border-bottom-color: #8fb0ff; }
   .badge-env {
-    background: rgba(255, 205, 90, .15); color: #ffd76e;
-    border: 1px solid rgba(255, 205, 90, .45); border-radius: 999px;
+    border-radius: 999px;
     padding: .18rem .75rem; font-size: .75rem; font-weight: 650;
-    letter-spacing: .02em;
+    letter-spacing: .02em; white-space: nowrap;
+  }
+  /* Homologación: aviso visible (sin valor fiscal). */
+  .badge-env.homo {
+    background: rgba(255, 205, 90, .15); color: #ffd76e;
+    border: 1px solid rgba(255, 205, 90, .45);
+  }
+  /* Producción: distinta pero calmada — no grita, sí identifica. */
+  .badge-env.prod {
+    background: rgba(255, 255, 255, .12); color: #d7e4ff;
+    border: 1px solid rgba(215, 228, 255, .4);
   }
 
   main { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
@@ -223,7 +232,9 @@
     <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
-    {% if env != "prod" %}<span class="badge-env">{{ env }} — sin valor fiscal</span>{% endif %}
+    <span class="badge-env {{ env }}" data-env="{{ env }}">
+      {% if env == "prod" %}{{ env_label }}{% else %}{{ env_label }} — sin valor fiscal{% endif %}
+    </span>
   </div>
 </header>
 <main>

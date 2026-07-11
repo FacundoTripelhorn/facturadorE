@@ -6,6 +6,19 @@ read-only (qué se envió, estado, CAE, PDF). Nada viaja a ARCA sin pasar
 por la revisión; descartar un borrador no tiene efecto impositivo.
 """
 
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from facturador import db
+from facturador.api import create_app
+from facturador.arca.wsfex import WsfexClient
+from facturador.config import Config
+from facturador.constants import ArcaEnvironment
+from facturador.profile import EnvironmentProfile
+from tests.arca_fake import FakeWsaa
+from tests.conftest import seed_params, seed_settings
+
 CLIENTE_FORM = {
     "razon_social": "CLIENTE URUGUAY S.A.",
     "domicilio": "Av. Siempreviva 123, Montevideo",
@@ -520,3 +533,79 @@ def test_seleccion_punto_venta_al_emitir(api, arca):
     invoice_id = _generar_borrador(api, punto_venta="3")
     factura = api.get(f"/invoices/{invoice_id}").json()
     assert factura["punto_venta"] == 3
+
+
+# --- identidad de ambiente persistente (FAC-31 / ADR 0001) ---
+
+_PAGINAS_NORMALES = ("/", "/comprobantes", "/clientes", "/configuracion")
+
+
+def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
+    """App de un solo ambiente con perfil temporal (mismo wiring que conftest)."""
+    profile = EnvironmentProfile.for_testing(
+        environment, tmp_path / f"profile-{environment.value}"
+    )
+    cert_pem, key_pem = test_cert_and_key
+    profile.paths.ensure_layout()
+    profile.paths.cert.write_bytes(cert_pem)
+    profile.paths.key.write_bytes(key_pem)
+    config = Config(env=environment, paths=profile.paths)
+    conn = db.connect(profile.paths.db)
+    seed_params(conn)
+    seed_settings(conn)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
+    return TestClient(app), profile
+
+
+@pytest.mark.parametrize(
+    ("environment", "label", "badge_extra"),
+    [
+        (ArcaEnvironment.HOMO, "Homologación", "sin valor fiscal"),
+        (ArcaEnvironment.PROD, "Producción", None),
+    ],
+)
+def test_paginas_muestran_identidad_de_ambiente(
+    environment, label, badge_extra, tmp_path, test_cert_and_key, arca
+):
+    """Badge + título en lenguaje de negocio; sin paths ni secretos."""
+    client, profile = _api_para_ambiente(
+        environment, tmp_path, test_cert_and_key, arca
+    )
+    titulo = f"facturador — {label}"
+    for path in _PAGINAS_NORMALES:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert f"<title>{titulo}</title>" in r.text
+        assert f'data-env="{environment.value}"' in r.text
+        assert f"badge-env {environment.value}" in r.text
+        assert label in r.text
+        if badge_extra:
+            assert badge_extra in r.text
+        else:
+            assert "sin valor fiscal" not in r.text
+        # Diagnóstico seguro: nada de raíces de perfil ni certificados.
+        assert str(profile.paths.root) not in r.text
+        assert "cert.crt" not in r.text
+        assert "cert.key" not in r.text
+
+
+@pytest.mark.parametrize("environment", list(ArcaEnvironment))
+def test_health_identifica_ambiente_sin_filtrar_secretos(
+    environment, tmp_path, test_cert_and_key, arca
+):
+    client, profile = _api_para_ambiente(
+        environment, tmp_path, test_cert_and_key, arca
+    )
+    r = client.get("/health")
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload == {"status": "ok", "environment": environment.value}
+    dumped = r.text
+    assert str(profile.paths.root) not in dumped
+    assert "cert.crt" not in dumped
+    assert "cert.key" not in dumped

@@ -50,7 +50,24 @@ router = APIRouter(include_in_schema=False)
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+def _ambiente_en_contexto(request: Request) -> dict[str, object]:
+    """Identidad de ambiente visible en toda la UI (ADR 0001 / FAC-31).
+
+    Solo lenguaje de negocio (Homologación / Producción) y el código corto;
+    nunca paths de perfil, certificados ni secretos.
+    """
+    profile = request.app.state.profile
+    return {
+        "env": profile.environment,
+        "env_label": profile.display_name,
+    }
+
+
+templates = Jinja2Templates(
+    directory=TEMPLATES_DIR,
+    context_processors=[_ambiente_en_contexto],
+)
 
 STATUS_LABELS = {
     InvoiceStatus.DRAFT: "Borrador",
@@ -133,7 +150,6 @@ def _contexto_form(service, error: str | None = None, aviso: str | None = None):
         except (WsfexError, httpx.HTTPError):
             pass  # sin cotización el form sigue usable; authorize revalida
     return {
-        "env": service.config.env,
         "emisor_ok": emisor_ok,
         "emisor": settings.emisor,
         "puntos_venta": settings.emisor.puntos_venta,
@@ -240,7 +256,6 @@ def _pagina_revisar(
         request,
         "revisar.html",
         {
-            "env": service.config.env,
             "f": inv,
             "items": repo.get_invoice_items(service.conn, inv["id"]),
             "error": error,
@@ -263,7 +278,6 @@ def detalle(request: Request, service: ServiceDep, invoice_id: str):
         request,
         "detalle.html",
         {
-            "env": service.config.env,
             "f": inv,
             "items": repo.get_invoice_items(service.conn, inv["id"]),
         },
@@ -330,7 +344,6 @@ def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
         request,
         "comprobantes.html",
         {
-            "env": service.config.env,
             "tabs": TAB_LABELS,
             "tab_counts": tab_counts,
             "estado": estado,
@@ -363,7 +376,6 @@ def _pagina_clientes(
         request,
         "clients.html",
         {
-            "env": service.config.env,
             "clientes": repo.list_clients(service.conn),
             "editando": editando,
             "params": params,
@@ -435,7 +447,6 @@ def _pagina_configuracion(
         request,
         "configuracion.html",
         {
-            "env": service.config.env,
             "s": service.get_settings(),
             "emisores": service.list_emisores(),
             "activo_id": activo_id,
