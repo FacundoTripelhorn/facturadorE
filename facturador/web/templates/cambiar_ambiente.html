@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <div class="cabeza"><h1>Cambiar ambiente</h1></div>
+  <div class="cuerpo">
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    <p><a href="/configuracion">Volver a Configuración</a></p>
+    {% elif pending %}
+    <p>Se pidió el cambio al launcher. Elegí <strong>Homologación</strong> o
+    <strong>Producción</strong> en la ventana de FacturadorE.</p>
+    <p class="nota">Si cancelás, seguís en {{ env_label }} sin reiniciar.
+    Al confirmar otro ambiente, esta sesión se cierra y se abre la nueva.</p>
+    <p class="nota">El ambiente de este proceso no cambia en caliente:
+    no se tocan certificados, base de datos ni clientes ARCA.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -609,3 +609,59 @@ def test_health_identifica_ambiente_sin_filtrar_secretos(
     assert str(profile.paths.root) not in dumped
     assert "cert.crt" not in dumped
     assert "cert.key" not in dumped
+
+
+# --- cambio de ambiente por reinicio (FAC-32 / ADR 0001) ---
+
+
+def test_cambiar_ambiente_solo_con_launcher(monkeypatch, api):
+    """Sin FACTURADOR_LAUNCHER no se ofrece el botón ni se acepta el POST."""
+    from facturador.launcher.switch import LAUNCHER_SUPERVISED_ENV
+
+    monkeypatch.delenv(LAUNCHER_SUPERVISED_ENV, raising=False)
+    home = api.get("/")
+    assert home.status_code == 200
+    assert "Cambiar ambiente" not in home.text
+    assert 'action="/ui/cambiar-ambiente"' not in home.text
+
+    r = api.post("/ui/cambiar-ambiente")
+    assert r.status_code == 422
+    assert "launcher" in r.text.lower()
+
+
+def test_cambiar_ambiente_con_launcher_escribe_pedido_sin_hot_switch(
+    monkeypatch, tmp_path, test_cert_and_key, arca
+):
+    """Con launcher: botón visible; POST pide reinicio sin mutar el ambiente."""
+    from facturador.launcher.switch import (
+        LAUNCHER_SUPERVISED_ENV,
+        LAUNCHER_SUPERVISED_VALUE,
+        read_change_environment_request,
+    )
+
+    monkeypatch.setenv(LAUNCHER_SUPERVISED_ENV, LAUNCHER_SUPERVISED_VALUE)
+    client, profile = _api_para_ambiente(
+        ArcaEnvironment.HOMO, tmp_path, test_cert_and_key, arca
+    )
+
+    home = client.get("/")
+    assert home.status_code == 200
+    assert "Cambiar ambiente" in home.text
+    assert 'action="/ui/cambiar-ambiente"' in home.text
+
+    before = client.app.state.profile.environment
+    before_cfg = client.app.state.service.config.env
+    wsfex_id = id(client.app.state.service.wsfex)
+
+    r = client.post("/ui/cambiar-ambiente")
+    assert r.status_code == 200
+    assert "launcher" in r.text.lower() or "Homologación" in r.text
+    assert "Cancelar" in r.text or "cancelás" in r.text
+
+    assert client.app.state.profile.environment is before is ArcaEnvironment.HOMO
+    assert client.app.state.service.config.env is before_cfg is ArcaEnvironment.HOMO
+    assert id(client.app.state.service.wsfex) == wsfex_id
+    req = read_change_environment_request(profile.paths)
+    assert req is not None
+    assert req.from_environment is ArcaEnvironment.HOMO
+    assert str(profile.paths.root) not in r.text

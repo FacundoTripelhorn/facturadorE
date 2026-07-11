@@ -68,6 +68,19 @@
     background: rgba(255, 255, 255, .12); color: #d7e4ff;
     border: 1px solid rgba(215, 228, 255, .4);
   }
+  .cambiar-ambiente {
+    margin: 0; display: inline;
+  }
+  .cambiar-ambiente button {
+    background: transparent; border: 1px solid rgba(255,255,255,.35);
+    color: rgba(255,255,255,.9); font: inherit; font-size: .75rem;
+    font-weight: 650; padding: .18rem .65rem; border-radius: 999px;
+    cursor: pointer; letter-spacing: .01em; white-space: nowrap;
+  }
+  .cambiar-ambiente button:hover {
+    background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.55);
+    color: #fff;
+  }
 
   main { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
 
@@ -235,6 +248,13 @@
     <span class="badge-env {{ env }}" data-env="{{ env }}">
       {% if env == "prod" %}{{ env_label }}{% else %}{{ env_label }} — sin valor fiscal{% endif %}
     </span>
+    {% if launcher_supervised %}
+    <form class="cambiar-ambiente" method="post" action="/ui/cambiar-ambiente">
+      <button type="submit" title="Cierra esta sesión y abre el selector de ambiente">
+        Cambiar ambiente
+      </button>
+    </form>
+    {% endif %}
   </div>
 </header>
 <main>
