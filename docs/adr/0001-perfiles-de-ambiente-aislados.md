@@ -5,9 +5,7 @@
   proyecto *Seamless Environment Profiles*.
 - **Autoridad:** este documento es **la fuente autoritativa** del contrato de
   ambientes/perfiles. Si otro documento (README, `docs/design.md`, guías de
-  setup, diagramas de agentes) lo contradice, vale este ADR; la corrección del
-  resto de la documentación se hace al implementar
-  ([FAC-34](https://linear.app/ftripelhorn/issue/FAC-34/update-product-and-agent-docs-for-isolated-environment-profiles)).
+  setup, diagramas de agentes) lo contradice, vale este ADR.
 
 ## Contexto
 
@@ -68,7 +66,7 @@ Reglas que componen el contrato:
   reinicio es irrelevante para ~1 factura/semana y elimina la clase de error
   completa.
 - **Ambiente por configuración compartida** (`ARCA_ENV` en `.env` + un
-  `secrets/` con ambos pares). Es el modelo actual: funciona, pero mantiene
+  `secrets/` con ambos pares). Fue el modelo previo: funciona, pero mantiene
   ambos mundos en el mismo home y convierte la edición manual de un archivo
   en el mecanismo de cambio. Superado por este ADR.
 - **Ambiente como atributo por emisor dentro de una única DB.** Mezcla filas
@@ -124,23 +122,26 @@ sequenceDiagram
   L->>U: reabrir la app (badge: Producción)
 ```
 
-## Implicaciones de migración (modelo shared-home actual)
+## Implicaciones de migración (modelo shared-home previo)
 
-Lo implementado hoy — que las guías de setup siguen describiendo hasta que el
-proyecto se ejecute — es: un único `FACTURADOR_HOME` (default `~/facturador`)
-con `.env` (`ARCA_ENV`) como selector, ambos certificados en `secrets/`, una
-sola DB con `emisores.ambiente` y `active_emisor_id_<ambiente>`, TA cache
+Antes de este ADR — y de FAC-23 … FAC-34 — el modelo era un único
+`FACTURADOR_HOME` (default `~/facturador`) con `.env` (`ARCA_ENV`) como
+selector, ambos certificados en `secrets/`, una sola DB con
+`emisores.ambiente` y `active_emisor_id_<ambiente>`, TA cache
 `data/ta-wsfex-<env>.json`, y `data/pdfs/`, logs y `backups/` compartidos.
-Consecuencias del pasaje al modelo de perfiles:
+Consecuencias del pasaje al modelo de perfiles (ya implementado):
 
 - **Raíces por perfil, no un home compartido.** Los perfiles se resuelven
   internamente desde el app-data del SO
   ([FAC-23](https://linear.app/ftripelhorn/issue/FAC-23/introduce-environmentprofile-and-profilepaths-abstractions));
   el usuario deja de conocer/gestionar el layout.
-- **`ARCA_ENV` en `.env` deja de ser el selector.** El ambiente se inyecta
-  una sola vez al construir la app
+- **`ARCA_ENV` en `.env` deja de ser el selector de producto.** El ambiente se
+  inyecta una sola vez al construir la app
   ([FAC-24](https://linear.app/ftripelhorn/issue/FAC-24/boot-the-backend-from-one-explicit-environment-profile));
-  las URLs de ARCA y los paths derivan de ese perfil.
+  las URLs de ARCA y los paths derivan de ese perfil. El launcher
+  ([FAC-28](https://linear.app/ftripelhorn/issue/FAC-28/add-launcher-process-supervisor) /
+  [FAC-29](https://linear.app/ftripelhorn/issue/FAC-29/add-launcher-environment-chooser))
+  es quien elige Homologación / Producción.
 - **Todo archivo de runtime pasa por `ProfilePaths`** (DB, certs, PDFs, TA,
   params, logs, staging de backups, onboarding)
   ([FAC-25](https://linear.app/ftripelhorn/issue/FAC-25/route-all-profile-owned-runtime-files-through-profilepaths));
@@ -153,23 +154,16 @@ Consecuencias del pasaje al modelo de perfiles:
   [FAC-27](https://linear.app/ftripelhorn/issue/FAC-27/remove-environment-selection-from-emisor-api-and-ui)).
   `invoices.environment` se mantiene como auditoría inmutable y se valida
   contra el perfil corriente.
-- **Los datos existentes del home compartido corresponden al perfil de su
-  ambiente** (`ARCA_ENV` vigente al crearlos). La mecánica concreta de mover
-  ese estado a los nuevos perfiles se define en los issues de implementación;
-  este ADR no incluye migración de esquema (no-goal).
-- **Backups por perfil.** El tarball cifrado pasa a cubrir el estado de un
-  perfil, no un home mixto.
-- **Nuevas obligaciones del launcher:** supervisión de proceso y readiness
-  ([FAC-28](https://linear.app/ftripelhorn/issue/FAC-28/add-launcher-process-supervisor)),
+- **Backups por perfil.** El tarball cifrado cubre el estado de un perfil, no
+  un home mixto.
+- **Launcher:** supervisión y readiness ([FAC-28](https://linear.app/ftripelhorn/issue/FAC-28/add-launcher-process-supervisor)),
   chooser ([FAC-29](https://linear.app/ftripelhorn/issue/FAC-29/add-launcher-environment-chooser)),
-  lock contra instancias duplicadas sobre el mismo perfil
-  ([FAC-30](https://linear.app/ftripelhorn/issue/FAC-30/prevent-duplicate-launcher-and-backend-instances)),
-  y flujo "Cambiar ambiente" por reinicio
-  ([FAC-32](https://linear.app/ftripelhorn/issue/FAC-32/add-restart-based-change-environment-flow)).
-- **Identidad de ambiente en la app**
-  ([FAC-31](https://linear.app/ftripelhorn/issue/FAC-31/show-persistent-environment-identity-inside-the-app))
-  y **tests de aislamiento entre perfiles**
-  ([FAC-33](https://linear.app/ftripelhorn/issue/FAC-33/add-profile-isolation-integration-tests)).
+  lock contra instancias duplicadas ([FAC-30](https://linear.app/ftripelhorn/issue/FAC-30/prevent-duplicate-launcher-and-backend-instances)),
+  identidad de ambiente en la app ([FAC-31](https://linear.app/ftripelhorn/issue/FAC-31/show-persistent-environment-identity-inside-the-app)),
+  flujo "Cambiar ambiente" por reinicio ([FAC-32](https://linear.app/ftripelhorn/issue/FAC-32/add-restart-based-change-environment-flow)),
+  tests de aislamiento ([FAC-33](https://linear.app/ftripelhorn/issue/FAC-33/add-profile-isolation-integration-tests)),
+  y documentación de producto/agentes alineada
+  ([FAC-34](https://linear.app/ftripelhorn/issue/FAC-34/update-product-and-agent-docs-for-isolated-environment-profiles)).
 
 Lo que **no cambia**: localhost-only, secretos fuera del repo con permisos
 `400/600`, ARCA como autoridad de numeración, un solo proceso sin workers, y
@@ -183,5 +177,4 @@ backups cifrados del lado del cliente.
   inmutable en vez de estado seleccionable).
 - Costos aceptados: cambiar de ambiente requiere reinicio (segundos, para un
   uso de ~1 factura/semana); el launcher asume responsabilidades nuevas
-  (supervisión, locking, readiness); hay una migración documental y de código
-  por delante (issues FAC-23 … FAC-34).
+  (supervisión, locking, readiness).

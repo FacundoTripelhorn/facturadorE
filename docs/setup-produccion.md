@@ -1,12 +1,14 @@
 # Setup: producción
 
-Guía paso a paso para pasar el facturador a **producción**. A partir de acá los
+Guía paso a paso para pasar FacturadorE a **Producción**. A partir de acá los
 comprobantes autorizados son reales, con validez fiscal y numeración que no se
 puede deshacer: cada CAE emitido queda registrado en ARCA a nombre del emisor.
 
 **Prerrequisito:** haber completado el circuito de homologación de punta a
 punta ([`setup-homologacion.md`](setup-homologacion.md)). El código no cambia
-entre ambientes; producción es un trámite de certificado + configuración.
+entre ambientes; producción es un trámite de certificado + elegir **Producción**
+en el launcher (perfil aislado, sin segunda instalación). Contrato:
+[`adr/0001-perfiles-de-ambiente-aislados.md`](adr/0001-perfiles-de-ambiente-aislados.md).
 
 ## 1. Certificado de producción
 
@@ -14,15 +16,15 @@ entre ambientes; producción es un trámite de certificado + configuración.
    homologación):
 
    ```bash
-   openssl genrsa -out prod.key 2048
-   openssl req -new -key prod.key \
+   openssl genrsa -out cert.key 2048
+   openssl req -new -key cert.key \
      -subj "/C=AR/O=MiEmpresa/CN=facturador/serialNumber=CUIT 20XXXXXXXXX" \
      -out pedido-prod.csr
    ```
 
 2. En el portal de ARCA, entrar al servicio **"Administración de Certificados
    Digitales"**, crear un alias, subir el CSR y descargar el certificado
-   emitido (`prod.crt`).
+   emitido (`cert.crt`).
 
 ## 2. Asociar el servicio de facturación de exportación
 
@@ -48,49 +50,45 @@ para Responsable Inscripto).
 Si corresponde, completar además el empadronamiento en **"Regímenes de
 facturación y registración (REAR/RECE/RFI)"**.
 
-## 4. Configuración local
+## 4. Configuración local (perfil Producción)
 
-> **Nota ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)):** este paso
-> describe el modelo vigente (home compartido + `ARCA_ENV` en `.env`), que
-> quedó superado por la decisión de perfiles aislados por ambiente elegidos
-> desde el launcher. Seguí estos pasos hasta que la implementación llegue; la
-> guía se reescribirá en FAC-34.
+Producción usa su **propio perfil aislado** (DB, certificados, caches y
+backups separados de Homologación). No se mezclan pares en un `secrets/`
+compartido ni se "cambia el flag" dentro del mismo proceso.
 
-Copiar el par de producción junto al de homologación (pueden convivir en el
-mismo `secrets/`; la app solo usa el par del ambiente activo):
+**Sin Docker:**
 
 ```bash
-cp prod.key prod.crt ~/facturador/secrets/
-chmod 400 ~/facturador/secrets/prod.key
+uv run python -m facturador.launcher --env prod
 ```
 
-Actualizar el `.env` del directorio de datos (`~/facturador/.env`, el que la
-app creó en el primer arranque; es el único `.env` que se lee):
+Si faltan certificados, el mensaje indica el `secrets/` del perfil Producción.
+Colocá ahí `cert.crt` / `cert.key` (key en `400`) y relanzá.
 
-```dotenv
-ARCA_ENV=prod
+**Con Docker** (estado bajo `<FACTURADOR_HOME>/profiles/prod/`):
+
+```bash
+mkdir -p ~/facturador/profiles/prod/secrets
+cp cert.key cert.crt ~/facturador/profiles/prod/secrets/
+chmod 400 ~/facturador/profiles/prod/secrets/cert.key
 ```
 
-Y en la página **Configuración** de la app, cambiar el **punto de venta** al
-número del PV RECE creado en el paso 3 (el resto de la configuración —
-emisor, backups — ya quedó cargada desde homologación y viaja en la DB).
+En la página **Configuración** de la sesión **Producción**, cargá el
+**punto de venta** del PV RECE del paso 3 y los datos del emisor (la DB de
+producción es distinta a la de homologación: no viajan solos al cambiar de
+ambiente).
 
-Con `ARCA_ENV=prod` la app deriva automáticamente las URLs productivas
-(`wsaa.afip.gov.ar` y `servicios1.afip.gov.ar`) y los paths
-`secrets/prod.key` / `secrets/prod.crt`. No hay overrides por URL: el
-certificado de homologación no puede usarse contra producción ni viceversa.
-Además, cada comprobante queda registrado en la DB con su columna
-`environment` (`homo`/`prod`), así que el historial de pruebas no se confunde
-con el real.
+Cada comprobante queda registrado con su columna `environment` (`homo`/`prod`)
+como auditoría; el historial de pruebas no vive en la misma base que el real.
 
 ## 5. Smoke test (sin emitir nada)
 
 ```bash
 # Ticket de acceso productivo (verifica certificado + asociación del servicio)
-uv run python scripts/get_ta.py
+ARCA_ENV=prod uv run python scripts/get_ta.py
 
 # FEXDummy + descarga de tablas de parámetros (solo lectura, no emite)
-uv run python scripts/check_wsfex.py
+ARCA_ENV=prod uv run python scripts/check_wsfex.py
 ```
 
 Ambos deben mostrar `Ambiente: prod` y las URLs productivas. Si `get_ta.py`
@@ -99,9 +97,11 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
 
 ## 6. Primera factura real
 
-1. Levantar la app (`uv run python -m facturador`) y verificar en el detalle
-   del form que la cotización de la moneda llega bien (viene de
-   `FEXGetPARAM_Ctz` para la fecha).
+1. Levantar con Producción
+   (`uv run python -m facturador.launcher --env prod`, o **Cambiar ambiente**
+   desde Homologación — el launcher reinicia el backend) y verificar el badge
+   **Producción**. Comprobar que la cotización de la moneda llega bien
+   (`FEXGetPARAM_Ctz` para la fecha).
 2. Emitir una **primera factura de monto chico** por el flujo normal
    (form → revisar → confirmar).
 3. Verificar el CAE en el portal de ARCA con **"Constatación de Comprobantes"**
@@ -118,12 +118,13 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
   con "Registro local desactualizado". En homologación eso se fuerza sin
   problema (punto de venta compartido); **en producción significa que la DB
   local no es la última** (por ejemplo, se emitió desde otra máquina): restaurar
-  el último backup antes de emitir. Forzar (`force_desync`) solo si se entiende
-  exactamente por qué difiere.
-- **Backups.** El estado completo es `data/` + `secrets/`. Hacer backup después
-  de cada emisión; para snapshots de la DB usar `sqlite3 .backup`, nunca copiar
-  el archivo en caliente. Si el backup sale de la máquina (p. ej. S3), **cifrar
-  del lado del cliente** antes de subir: el tarball contiene la clave fiscal.
+  el último backup del perfil Producción antes de emitir. Forzar
+  (`force_desync`) solo si se entiende exactamente por qué difiere.
+- **Backups.** El estado de un perfil es `data/` + `secrets/`. Hacer backup
+  después de cada emisión (`facturador.backup --env prod`); para snapshots de
+  la DB usar `sqlite3 .backup`, nunca copiar el archivo en caliente. Si el
+  backup sale de la máquina (p. ej. S3), **cifrar del lado del cliente** antes
+  de subir: el tarball contiene la clave fiscal.
 - **Una sola máquina emite.** Si se usan varias computadoras, una es la
   primaria; en la secundaria se restaura el backup antes de emitir. Nunca
   emitir desde dos copias en paralelo (el chequeo de registro desactualizado
@@ -137,15 +138,18 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
 - **No exponer la app.** Escucha solo en `127.0.0.1` por diseño. Si algún día
   hace falta acceso remoto, el camino es una red privada (Tailscale/WireGuard)
   hacia una máquina propia; nunca abrir el puerto a internet.
+- **Cambio de ambiente.** Usá **Cambiar ambiente** / el launcher: reinicia el
+  backend. No hay hot switching de certificados, DB o clientes ARCA en el
+  mismo proceso.
 
 ## Checklist final
 
 - [ ] Certificado productivo emitido y descargado (paso 1).
 - [ ] Certificado asociado a "Facturación Electrónica de Exportación" (paso 2).
 - [ ] Punto de venta RECE exclusivo de exportación creado y anotado (paso 3).
-- [ ] `secrets/prod.key` (chmod 400) y `secrets/prod.crt` en su lugar (paso 4).
-- [ ] `~/facturador/.env` con `ARCA_ENV=prod` y el punto de venta del PV
-      nuevo cargado en Configuración (paso 4).
+- [ ] `cert.key` (chmod 400) y `cert.crt` en el `secrets/` del perfil
+      Producción (paso 4).
+- [ ] Sesión Producción levantada; PV RECE cargado en Configuración (paso 4).
 - [ ] `get_ta.py` y `check_wsfex.py` OK contra producción (paso 5).
 - [ ] Primera factura de monto chico emitida y CAE constatado en el portal (paso 6).
-- [ ] Backup post-emisión funcionando.
+- [ ] Backup post-emisión del perfil Producción funcionando.

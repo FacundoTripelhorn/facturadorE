@@ -174,7 +174,7 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
 
 Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla como oráculo de comportamiento. Al escribir el cliente propio, verificar explícitamente que NO se pierda ninguna de estas protecciones que la librería ya resuelve. Esto es parte del "definition of done" del `ArcaClient`:
 
-1. **Consistencia ambiente/certificado:** pyafipws advierte que hubo casos reales de CAE de homologación emitidos contra certificados cruzados. Replicar su mitigación: la config deriva URLs + paths de cert de un ÚNICO flag `ARCA_ENV`; imposible mezclar por construcción. Además, registrar el ambiente en cada comprobante y verificar el CAE emitido (ver punto 6).
+1. **Consistencia ambiente/certificado:** pyafipws advierte que hubo casos reales de CAE de homologación emitidos contra certificados cruzados. Replicar su mitigación: cada proceso backend arranca con **exactamente un ambiente inmutable** (perfil aislado); URLs y paths de cert salen del mismo perfil — imposible mezclar por construcción. Además, registrar el ambiente en cada comprobante y verificar el CAE emitido (ver punto 6).
 2. **Validación del TA recibido:** parsear y validar `expirationTime` del ticket antes de usarlo/cachearlo; no asumir las 12 h. Rechazar TAs con `destination`/`service` que no sean `wsfex`.
 3. **Reproceso seguro:** al reintentar un `FEXAuthorize` con el mismo `Id`, pyafipws compara que la respuesta corresponda a los mismos datos enviados (monto, tipo, punto de venta) antes de aceptar el CAE como propio. Replicar: nunca aceptar ciegamente un CAE de reproceso sin verificar contra el request persistido.
 4. **XML injection/escaping:** todos los campos de texto libre (razón social, descripción de ítems, observaciones, domicilio) deben escaparse al armar el XML. Con templates a mano este es EL riesgo nuevo que pyafipws no tenía (usa serialización). Usar siempre el serializador de la lib XML, jamás f-strings/concatenación para valores.
@@ -263,44 +263,24 @@ Jinja2 + HTMX servido por la misma app FastAPI: formulario de factura con select
 
 ### 2.5 Infraestructura y despliegue
 
-> **Actualización 2026-07-10 —
-> [ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md):** el modelo de
-> selección de ambiente descripto en esta sección (un home compartido con
-> `ARCA_ENV` en `.env` y ambos certificados en el mismo `secrets/`) queda
-> **superado**. La dirección aprobada es un launcher con dos perfiles
-> internos aislados (uno por ambiente, un CUIT por perfil), backend inmutable
-> por proceso y cambio de ambiente solo por reinicio; **el hot switching está
-> explícitamente rechazado**. El ADR es la fuente autoritativa; lo que sigue
-> describe la implementación vigente hasta que el proyecto *Seamless
-> Environment Profiles* (FAC-23 … FAC-34) la reemplace.
-
 **Decisión: la app corre en la máquina local del usuario, accesible solo por `localhost`. No hay servidor público.**
 
 Fundamento: el uso es 1 emisión/semana, un solo usuario, desde su propia computadora. Publicar la app en internet agregaría todo lo que NO queremos: gestión de TLS, capa de autenticación, superficie de ataque sobre un servicio que custodia la clave fiscal, y costo/operación de un VPS (un servicio externo más). Con `localhost` la única conexión de red es **saliente** hacia ARCA — la app no escucha para nadie más. Esto elimina de raíz clases enteras de riesgo.
 
+**Ambientes (DECIDIDO — [ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)):** una sola app FacturadorE con dos opciones de negocio (**Homologación** / **Producción**). El launcher elige el ambiente; cada uno mapea a un **perfil interno oculto** (app-data del SO) con su propia SQLite, certificados, PDFs, caches WSAA/params, logs, onboarding y backups. Un proceso backend = un ambiente inmutable + un perfil. Cambiar de ambiente **detiene** el backend y arranca otro; **no hay hot switching**. Un CUIT fiscal por perfil. Las rutas de perfil no se exponen en la UI normal.
+
 Componentes:
 
-- **Launcher (experiencia de app de escritorio):** script/acceso directo de doble click que levanta el servidor si no está corriendo y abre `http://localhost:PORT` en el browser. El uso diario es indistinguible de una app nativa. Se evaluó y descartó una desktop app real (Electron/Tauri/Qt): agrega empaquetado, otro stack de GUI y costo de distribución sin beneficio para un único usuario local, y entierra la API que es el objetivo principal. Si a futuro se quiere ventana propia, `pywebview` envuelve el mismo servidor sin cambiar nada más.
-- **Runtime (DECIDIDO): Docker Desktop**, porque el usuario alterna entre Windows y macOS. La misma imagen corre en ambos; los permisos POSIX de la key y el chequeo de arranque se implementan una sola vez dentro del contenedor (Linux). Bind mount de `~/facturador/` (o su equivalente en Windows) al contenedor; bind explícito del puerto a `127.0.0.1` (nunca `0.0.0.0`).
-- **Estado en múltiples máquinas:** el directorio de datos vive en UNA máquina primaria; la app no sincroniza estado entre computadoras. Para emitir desde la secundaria: restaurar el último backup desde S3 (ver bullet de backups) — la numeración se resincroniza sola contra ARCA vía `FEXGetLast_CMP`, y el chequeo de DB desactualizada bloquea la emisión si se olvidó el restore. Nunca correr las dos copias emitiendo en paralelo.
-- **Layout de datos (fuera del repo):** `FACTURADOR_HOME` (default `~/facturador`; dentro del contenedor, `/facturador` fijado por ENV) es la única raíz de datos — no hay fallback al directorio de trabajo, ni en la app ni en backup/restore. La app crea el home y su estructura en el primer arranque.
-  ```
-  ~/facturador/
-    .env                  # bootstrap mínimo: ARCA_ENV (+ puerto opcional)
-    secrets/              # chmod 700
-      homo.key / homo.crt # chmod 400
-      prod.key / prod.crt
-    data/
-      facturador.db       # SQLite (incluye la tabla settings)
-      pdfs/               # comprobantes emitidos
-    backups/
-  ```
-- **Configuración: la app es dueña de su configuración.** El `.env` (leído SOLO de `<home>/.env`; si no existe la app lo crea con `ARCA_ENV=homo`) queda reducido al bootstrap que no puede vivir en la DB: el flag `ARCA_ENV` (`homo`|`prod`) del que se derivan URLs y paths de certificados (checklist §2.1.1 punto 1) y `FACTURADOR_PORT`. El CUIT emisor se extrae del certificado. Todo lo demás — datos del emisor que van al PDF, punto de venta, config de backups — vive en la tabla `settings` de la DB y se edita desde la página Configuración de la UI; así viaja dentro del backup cifrado como parte del estado completo. La app se niega a arrancar si el par cert/ambiente es inconsistente o si los permisos de la key son laxos, y no permite emitir hasta que los datos del emisor estén completos.
-- **Backups (DECIDIDO): S3 como depósito cifrado, fuera del camino crítico.** El estado completo es `data/` + `secrets/`. Script post-emisión: snapshot de la DB con `sqlite3 .backup` (nunca `cp` en caliente), tarball de datos + secrets, **cifrado del lado del cliente con `age`** (passphrase del usuario, nunca en el repo ni en AWS) y upload del `.tar.age` a un bucket privado. El backup contiene la clave fiscal: jamás sube en claro; el cifrado server-side de S3 NO alcanza. Config del bucket: Block Public Access, **versioning habilitado** (protege contra pisar un backup bueno con uno corrupto), IAM user dedicado con política mínima (Put/Get/List solo sobre ese bucket). Script inverso de restore para la máquina secundaria. La emisión nunca depende de S3: si está caído, solo se degrada la portabilidad.
-- **Detección de DB desactualizada (obligatorio dado el esquema multi-máquina):** al arrancar (o antes de autorizar), comparar `FEXGetLast_CMP` contra el máximo `cbte_nro` local. Si ARCA conoce comprobantes que la DB local no tiene, warning bloqueante: "registro local desactualizado — restaurar el último backup antes de emitir". Esto hace el flujo primaria/secundaria a prueba de olvidos.
+- **Launcher (experiencia de app de escritorio):** `python -m facturador.launcher` muestra Homologación/Producción, resuelve el perfil oculto, supervisa el proceso hijo (`python -m facturador`), espera `GET /health`, abre el browser y detiene el hijo al salir. "Cambiar ambiente" en la UI pide un reinicio orquestado por el launcher. Se evaluó y descartó una desktop app real (Electron/Tauri/Qt). Doble click Docker: `scripts/launch.cmd` / `scripts/launch.command`.
+- **Runtime (DECIDIDO): Docker Desktop**, porque el usuario alterna entre Windows y macOS. La misma imagen corre en ambos; los permisos POSIX de la key y el chequeo de arranque se implementan una sola vez dentro del contenedor (Linux). Bind mount de `FACTURADOR_HOME` al contenedor; bind explícito del puerto a `127.0.0.1` (nunca `0.0.0.0`). Un contenedor = un ambiente.
+- **Estado en múltiples máquinas:** el estado de cada perfil vive en UNA máquina primaria; la app no sincroniza entre computadoras. Para emitir desde la secundaria: restaurar el último backup del perfil desde S3 — la numeración se resincroniza sola contra ARCA vía `FEXGetLast_CMP`, y el chequeo de DB desactualizada bloquea la emisión si se olvidó el restore. Nunca correr dos copias emitiendo en paralelo.
+- **Layout de datos (fuera del repo, detalle de implementación):** el bootstrap mínimo (`FACTURADOR_HOME`, default `~/facturador`; en Docker `/facturador`) guarda solo el `.env` opcional de puerto/ambiente para entrypoints sin launcher. **Todo el runtime** (DB, `secrets/cert.{crt,key}`, PDFs, TA cache, logs, backups) vive bajo el perfil del ambiente vía `ProfilePaths` / `EnvironmentProfile` (`facturador/profile.py`) — sin sufijos `<env>` en nombres de archivo dentro del perfil. La app crea el layout en el primer arranque; el usuario no administra dos instalaciones.
+- **Configuración: la app es dueña de su configuración.** El ambiente lo inyecta el launcher (o un `ARCA_ENV` explícito en el proceso) **una sola vez** antes de construir FastAPI/SQLite/clientes ARCA (checklist §2.1.1 punto 1). El CUIT emisor se extrae del certificado. Todo lo demás — datos del emisor, punto de venta, config de backups — vive en la DB del perfil y se edita desde Configuración. El emisor es **local al perfil** (sin selector de ambiente en el form/API). La app se niega a arrancar sin el par cert/key en modo `400`/`600`, y no permite emitir hasta que los datos del emisor estén completos.
+- **Backups (DECIDIDO): S3 como depósito cifrado, fuera del camino crítico.** El estado de **un perfil** es `data/` + `secrets/`. Script post-emisión: snapshot de la DB con `sqlite3 .backup` (nunca `cp` en caliente), tarball, **cifrado del lado del cliente con `age`** y upload opcional a un bucket privado. El backup contiene la clave fiscal: jamás sube en claro. Config del bucket: Block Public Access, **versioning habilitado**, IAM user dedicado con política mínima. Script inverso de restore. La emisión nunca depende de S3.
+- **Detección de DB desactualizada (obligatorio dado el esquema multi-máquina):** al arrancar (o antes de autorizar), comparar `FEXGetLast_CMP` contra el máximo `cbte_nro` local. Si ARCA conoce comprobantes que la DB local no tiene, warning bloqueante: "registro local desactualizado — restaurar el último backup antes de emitir".
 - **Reloj:** requisito de NTP activo en la máquina (macOS/Linux lo traen por defecto; documentar la verificación). Sin reloj sincronizado, WSAA falla.
-- **Logs:** archivo local con rotación. Token/sign del TA y CMS firmado siempre redactados (checklist §2.1.1 punto 9).
-- **CI (contract tests contra homologación):** correr localmente con un comando (`make contract-tests`). NO subir certificados de homologación a GitHub Actions en el spike — un runner externo con la key es un riesgo innecesario; si a futuro se quiere CI remota, se genera un certificado de homologación dedicado y descartable para eso.
+- **Logs:** archivo local del perfil con rotación. Token/sign del TA y CMS firmado siempre redactados (checklist §2.1.1 punto 9).
+- **CI (contract tests contra homologación):** correr localmente con un comando (`make contract-tests`). NO subir certificados de homologación a GitHub Actions — un runner externo con la key es un riesgo innecesario; si a futuro se quiere CI remota, se genera un certificado de homologación dedicado y descartable para eso.
 
 **Evolución futura (fuera de alcance, documentada para no re-decidir):** si algún día se quiere emitir desde el teléfono, el camino es mover la misma imagen Docker a una máquina siempre encendida propia (mini-PC/Raspberry) y acceder por una red privada tipo Tailscale/WireGuard — nunca exponiendo el puerto a internet. Un VPS es la última opción, porque implica custodiar la clave fiscal fuera de hardware propio.
 
@@ -315,7 +295,7 @@ Componentes:
 | Doble emisión por reintentos | `Id` secuencial persistido pre-llamada + reproceso ARCA + reconciliación `FEXGetCMP` |
 | Numeración desincronizada | ARCA es la fuente de verdad: siempre `FEXGetLast_CMP` antes de autorizar, nunca contador local |
 | Tablas dinámicas desactualizadas (moneda/país dado de baja) | Refresh diario del cache + revalidar código contra ARCA al autorizar |
-| Certificado homo usado contra prod (o viceversa) | Config atómica por ambiente: un solo flag `ARCA_ENV` deriva URLs y paths de cert; log del ambiente en cada CAE |
+| Certificado homo usado contra prod (o viceversa) | Un ambiente inmutable por proceso + perfil aislado: URLs y cert del mismo perfil; log del ambiente en cada CAE |
 | WSDL/ASMX quirks (SOAPAction, encoding) | Tests de contrato contra homologación en CI (al menos `FEXDummy` + `FEXGetPARAM_MON`) |
 | Cambios normativos (tipo RG 5616) llegan como "eventos" | Loguear y alertar sobre todo bloque `Events`/`Obs` de las respuestas |
 | Clave privada filtrada | Fuera del repo, permisos 400, secret manager en prod, rotación documentada |
@@ -344,9 +324,9 @@ Componentes:
 
 **Fase 5 — PDF + QR (RG 4892).**
 
-**Fase 6 — Frontend mínimo:** form precargado con el cliente default (el flujo "1 click + monto" para la factura semanal), selector de cliente para los futuros, listado con estado/CAE, descarga de PDF. Incluye el empaquetado de §2.5: Docker Compose (o comando uvicorn), layout `~/facturador/`, script de backup y chequeos de arranque (permisos de key, consistencia cert/ambiente, bind a localhost).
+**Fase 6 — Frontend mínimo:** form precargado con el cliente default (el flujo "1 click + monto" para la factura semanal), selector de cliente para los futuros, listado con estado/CAE, descarga de PDF. Incluye el empaquetado de §2.5: Docker Compose (o comando uvicorn), launcher con perfiles aislados, script de backup y chequeos de arranque (permisos de key, consistencia cert/ambiente, bind a localhost).
 
-**Fase 7 — Checklist a producción:** certificado prod, asociación al servicio "Facturación Electrónica de Exportación", punto de venta RECE exclusivo de exportación, flag `ARCA_ENV=prod`, smoke test con `FEXDummy`, primera factura real de monto chico y verificación del CAE en el portal de ARCA ("constatación de comprobantes" / WSCDC como verificación automatizada opcional).
+**Fase 7 — Checklist a producción:** certificado prod, asociación al servicio "Facturación Electrónica de Exportación", punto de venta RECE exclusivo de exportación, arranque en Producción (launcher o `--env prod`), smoke test con `FEXDummy`, primera factura real de monto chico y verificación del CAE en el portal de ARCA ("constatación de comprobantes" / WSCDC como verificación automatizada opcional).
 
 ---
 
@@ -367,7 +347,7 @@ Componentes:
    - El TA del WSAA (12 h de vida) probablemente se pida fresco en cada emisión — el cache sigue siendo necesario para reintentos dentro de la misma sesión, pero no hace falta nada sofisticado.
    - El refresh del cache de parámetros puede ser lazy (al momento de emitir, si `fetched_at` > 24 h) en lugar de un job programado.
 3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al autorizar (razón social, domicilio, id impositivo, país, CUIT país): el comprobante autorizado es inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default.
-4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` y el ambiente por emisor; implementación en FAC-23 … FAC-34.
+4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md), implementado FAC-23 … FAC-34).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` compartido y el ambiente por emisor.
 
 **Siguen abiertas:**
 

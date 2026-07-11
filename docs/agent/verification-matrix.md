@@ -48,18 +48,19 @@ finishing.
 | HTMX / HTML UI | `facturador/web/` | `uv run pytest tests/test_web.py` |
 | PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (needs WeasyPrint system libs; CI installs them) |
 | Row ↔ SOAP mapping | `facturador/mappers.py`, `facturador/constants.py` | `uv run pytest tests/test_mappers.py tests/test_constants.py` |
-| Bootstrap config / certs | `facturador/config.py` | `uv run pytest tests/test_config.py` |
+| Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |
 | SQLite settings / emisor | `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` | `uv run pytest tests/test_settings.py` |
 | Backup / restore CLI | `facturador/backup.py`, `facturador/restore.py` | `uv run pytest tests/test_backup.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/db.py` | `uv run pytest` (full suite — many modules touch the DB) |
-| Docker / launchers | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py`; `docker build -t facturador:ci .` if image/entrypoint changed |
-| Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md` | None required; spot-check links and command snippets |
+| Docker / launchers / profiles | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `facturador/profile.py`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py tests/test_profile.py tests/test_profile_isolation.py`; `docker build -t facturador:ci .` if image/entrypoint changed |
+| Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md`, `docs/adr/` | None required; spot-check links and Mermaid diagrams |
 
 **Lint/types scope:** `ruff` and `mypy` run on the whole tree; there is no
 per-module narrow mode. After a focused edit, still run both once.
 
-**Manual UI check** (optional, localhost only): `uv run python -m facturador`
-then open `http://127.0.0.1:8399`. Requires a configured `FACTURADOR_HOME`; ARCA
+**Manual UI check** (optional, localhost only):
+`uv run python -m facturador.launcher --env homo` then open
+`http://127.0.0.1:8399`. Requires certs on the Homologación profile; ARCA
 calls need a real homologación certificate (see below).
 
 ---
@@ -96,9 +97,9 @@ Local **contract scripts** under `scripts/` (`get_ta.py`, `check_wsfex.py`,
 | `scripts/get_ta.py`, `scripts/check_wsfex.py` | **Yes** | WSASS-registered homologación cert authorized for `wsfex` |
 | `scripts/authorize_homo.py` | **Yes** | End-to-end homologación invoice |
 | Running the app: cotización, draft, authorize, health | **Yes** | Self-signed cert is rejected (`cms.cert.untrusted`) |
-| Production invoicing | **Yes** | Production cert in `FACTURADOR_HOME/secrets/prod.{crt,key}` |
+| Production invoicing | **Yes** | Production cert in the Producción profile `secrets/cert.{crt,key}` |
 
-Real credentials live only under `<FACTURADOR_HOME>/secrets/` (mode 400/600),
+Real credentials live only under the active profile’s `secrets/` (mode 400/600),
 never in the repo or CI. Missing or untrusted certs causing 5xx on ARCA-backed
 endpoints is an **environment limitation**, not a test failure — see
 `AGENTS.md` § Known environment limitations.
@@ -118,7 +119,7 @@ check that matters for the task — not only failures.
 | **Passed** | Command ran; exit code 0 | `ruff`, `mypy`, `pytest`, `docker build`, manual check succeeded |
 | **Failed** | Command ran; errors found | Include the command and a one-line summary of the failure |
 | **Not run** | Deliberately omitted; no blocker | Docs-only change, out of scope, or full suite deferred with reason |
-| **Skipped** | Would run but could not | Missing WeasyPrint libs, no `FACTURADOR_HOME`, no homologación cert |
+| **Skipped** | Would run but could not | Missing WeasyPrint libs, no profile certs, no homologación cert |
 | **Blocked** | External constraint prevents the check | Wrong repo access, CI secret unavailable, network policy |
 
 For **Skipped** or **Blocked**, always add **why** and **residual risk** (what
@@ -154,7 +155,7 @@ subset and note that the full suite was not executed.
 > - `uv run mypy` — Passed
 > - `uv run pytest tests/test_web.py` — Passed (12 tests)
 > - `uv run pytest` (full) — Not run; will run before merge
-> - Manual browser check — Skipped (no local `FACTURADOR_HOME`)
+> - Manual browser check — Skipped (no Homologación profile certs)
 
 **Docs-only:**
 

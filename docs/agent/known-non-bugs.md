@@ -10,7 +10,8 @@ at hand, treat it as a real bug.
 
 For commands, constraints, and the expected agent response format, see
 [`AGENTS.md`](../../AGENTS.md). For architecture diagrams, see
-[`architecture-graphs.md`](architecture-graphs.md).
+[`architecture-graphs.md`](architecture-graphs.md). Environment/profile
+contract: [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md).
 
 ---
 
@@ -94,8 +95,8 @@ homologación are local-only (`.github/workflows/ci.yml`).
 - Add certs to the repo or CI.
 
 **Fix:** Follow [`docs/setup-homologacion.md`](../setup-homologacion.md) — place
-`secrets/homo.crt` and `secrets/homo.key` under `FACTURADOR_HOME`, register in
-WSASS, authorize service `wsfex`.
+`secrets/cert.crt` and `secrets/cert.key` on the Homologación profile, register
+in WSASS, authorize service `wsfex`.
 
 ---
 
@@ -120,16 +121,19 @@ in `tests/conftest.py`) but will **never** obtain a real TA from WSAA.
 
 ---
 
-## SQLite as intentional source of truth
+## SQLite as intentional source of truth (per profile)
 
 **Symptom:** Domain configuration (emisor, punto de venta, S3 backup bucket,
-clients, invoices) lives in `FACTURADOR_HOME/data/facturador.db`, not in `.env`
-or environment variables. Agents may look for “missing env vars” for emisor/PV.
+clients, invoices) lives in the **active profile’s** SQLite DB, not in `.env`
+or environment variables. Agents may look for “missing env vars” for emisor/PV
+or expect a shared `~/facturador/data/facturador.db` for both environments.
 
-**Expected.** SQLite is the local source of truth by design (~1 invoice/week,
-single user, single process). Bootstrap `.env` holds only `ARCA_ENV` and optional
-`FACTURADOR_PORT`; CUIT comes from the certificate. Emisor and backup settings
-are edited via `/configuracion` and travel inside encrypted backups.
+**Expected.** Each Homologación / Producción profile owns its DB (~1 invoice/week,
+single user, single process per environment). Bootstrap `.env` under
+`FACTURADOR_HOME` is optional for non-launcher entrypoints (`ARCA_ENV`,
+`FACTURADOR_PORT`); CUIT comes from the certificate. Emisor and backup settings
+are edited via `/configuracion` and travel inside encrypted backups of that
+profile.
 
 Invoice numbering is **not** a local-only counter: always reconcile with ARCA
 `FEXGetLast_CMP` before authorizing.
@@ -139,9 +143,30 @@ Invoice numbering is **not** a local-only counter: always reconcile with ARCA
 - Move emisor/PV/backup config into `.env` without an explicit design change.
 - Add Postgres, Redis, queues, or sync services to “fix” perceived scale limits.
 - Rely on a local sequence alone for `Cbte_nro`.
+- Assume one shared DB holds both homologación and producción data.
 
 Multi-machine use is via **restore from S3**, not live replication
 ([`docs/design.md`](../design.md) §2.5).
+
+---
+
+## No hot environment switching
+
+**Symptom:** Editing `ARCA_ENV`, swapping certs, or expecting the UI to change
+WSAA/WSFEX clients inside a running backend does not switch environments
+in-process. “Cambiar ambiente” stops the current backend and starts another.
+
+**Expected.** ADR 0001 invariant: one backend process = one immutable
+environment + one profile. The launcher orchestrates restart-based switching.
+There is one FacturadorE app — not two installations — with two isolated
+profiles.
+
+**Do not:**
+
+- Implement in-process hot switching of ARCA clients, certificates, or DB.
+- Document or recommend editing `.env` mid-flight as the way to change
+  environment without restart.
+- Treat restart-on-change as a bug.
 
 ---
 
@@ -176,23 +201,23 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 
 ## Multi-emisor: schema ready, selection UI pending (FAC-8)
 
-**Symptom:** The `emisores` table holds multiple rows for the same `ambiente`,
-but the app always invoices with the **oldest** emisor. `/configuracion` edits
-a single emisor and does not offer alta or switching. Saving settings appears to
-“ignore” extra rows.
+**Symptom:** The `emisores` table can hold multiple rows in the same profile
+DB, but without an explicit `active_emisor_id` there is no operative emisor.
+`/configuracion` does not offer a full alta/lista UX yet. Environment is not a
+user-editable field on the emisor form (it is a profile seal).
 
-**Expected.** The data model and repo layer (`facturador/repo/emisores.py`,
-`facturador/settings.py`) were prepared for multi-emisor work; the **UI and
-runtime selection** for FAC-8 are not implemented yet. `upsert_emisor` updates
-the oldest row for that ambiente; `load_settings(conn, env)` resolves the same
-row. Invoicing uses `Emisor.punto_venta` (first entry in `puntos_venta`).
+**Expected.** Emisores are **local to the profile** (FAC-26 / FAC-27). Runtime
+uses `active_emisor_id` (`facturador/settings.py`). Invoicing uses
+`Emisor.punto_venta` (first entry in `puntos_venta`). FAC-8 (richer multi-emisor
+UI / PV selection) is still open.
 
 **Do not:**
 
-- Delete “duplicate” emisor rows as a bugfix unless the task explicitly covers
+- Reintroduce per-emisor environment selection in the API/UI.
+- Delete “duplicate” emisor rows as a bug fix unless the task explicitly covers
   data migration.
 - Move emisor fields back into the flat `settings` key/value table.
-- Assume `/configuracion` already implements alta de emisores — that is FAC-8.
+- Assume `/configuracion` already implements full alta de emisores — that is FAC-8.
 
 **Fix (when scoped):** implement FAC-8 (alta/lista/selección de emisor y PV).
 Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
@@ -207,6 +232,8 @@ Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 | `0.0.0.0` in `docker ps` / container logs | Docker internal listen | Expected; check host publish is `127.0.0.1` |
 | 5xx on authorize / cotización | No real homologación cert | Setup credentials or use tests |
 | `cms.cert.untrusted` | Self-signed test cert | WSASS cert or `arca_fake` tests |
-| Emisor not in `.env` | Config in SQLite | Use `/configuracion` or DB seed |
+| Emisor not in `.env` | Config in profile SQLite | Use `/configuracion` or DB seed |
 | Looking for WSFEv1 code | Wrong service for Factura E | Use WSFEX (`FEX*` methods) |
-| Extra `emisores` rows ignored | FAC-8 UI not built yet | Expected; see § Multi-emisor |
+| Extra `emisores` rows / no active | FAC-8 UI incomplete | Expected; set `active_emisor_id` |
+| Env did not change in-process | Restart-based switch | Expected; use launcher / Cambiar ambiente |
+| Shared `~/facturador/data` for both envs | Old shared-home model | Use per-profile roots via `ProfilePaths` |

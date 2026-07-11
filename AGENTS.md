@@ -33,10 +33,14 @@ of exploring the repo blindly.
 - **Stack:** Python 3.12, single-process FastAPI (JSON API + Jinja/HTMX frontend),
   SQLite datastore, WeasyPrint PDFs.
 - **Domain:** Argentine export invoices ("Factura E") via ARCA WSAA/WSFEX SOAP.
+- **Environments:** one app, launcher-selected **Homologación** / **Producción**,
+  isolated hidden profiles, one immutable environment per backend process
+  ([ADR 0001](docs/adr/0001-perfiles-de-ambiente-aislados.md)).
 - **Layout:** one service package under `facturador/`; tests in `tests/`; scripts in
   `scripts/`; schema in `facturador/schema.sql`.
-- **Dev entrypoint:** `uv run python -m facturador` (binds `127.0.0.1:8399`; port
-  override via `FACTURADOR_PORT`).
+- **Dev entrypoint:** `uv run python -m facturador.launcher` (chooser; binds
+  `127.0.0.1:8399`; port override via `FACTURADOR_PORT` / `--port`). Backend
+  alone: `uv run python -m facturador` with an explicit `ARCA_ENV`.
 - **Tooling:** [uv](https://docs.astral.sh/uv/). Dev deps live in the `dev`
   dependency-group.
 
@@ -58,31 +62,39 @@ For narrower scopes by task type, see
 
 ## Local dev prerequisites
 
-Data lives under `FACTURADOR_HOME` (default `~/facturador`), outside the repo.
-On first start the app creates the home layout and a bootstrap `.env`; only the
-cert/key pair must be placed manually. See the setup docs and
-[`README.md`](README.md) § Configuración.
+Runtime state lives in **launcher-selected isolated profiles** (ADR 0001), not
+in a shared home with both environments mixed. The launcher
+(`uv run python -m facturador.launcher`) offers **Homologación** /
+**Producción**; each maps to a hidden profile (OS app-data) owning its own DB,
+certs, PDF cache, WSAA TA cache, params cache, logs, onboarding, and backups.
+One backend process = one immutable environment. Changing environment restarts
+the backend — no hot switching. See setup docs and [`README.md`](README.md).
 
-- **Bootstrap `.env`:** read only from `<FACTURADOR_HOME>/.env`, never the CWD.
-  Auto-created with `ARCA_ENV=homo` if missing. Holds only `ARCA_ENV` and
-  optional `FACTURADOR_PORT`; CUIT is extracted from the certificate.
-  Note: `ARCA_ENV`-based selection is superseded by
-  [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md)
-  (launcher-selected isolated profiles, restart-based switching); this stays
-  the implemented behavior until that project lands.
+- **Environment selection:** launcher chooser (or `--env homo|prod`). Backend
+  entrypoints without the launcher need an explicit `ARCA_ENV` in the process
+  environment (or bootstrap `.env`). There is no silent default to homologación.
+- **Bootstrap `.env`:** optional, read only from `<FACTURADOR_HOME>/.env`
+  (default `~/facturador`), never the CWD. Holds optional `ARCA_ENV` /
+  `FACTURADOR_PORT` for non-launcher entrypoints; CUIT comes from the
+  certificate. Authoritative contract:
+  [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
 - **App config:** emisor fields, punto de venta, and S3 backup settings live in
-  SQLite and are edited via `/configuracion` — they travel inside encrypted
-  backups, not in `.env`.
-- **Backups:** `facturador.backup` reads the S3 bucket/prefix from the `settings`
-  row in the snapshot being backed up. On a fresh machine with no DB yet,
-  `facturador.restore --latest` needs `--bucket`/`--prefix` on the CLI.
-- **Certificates:** `secrets/<env>.crt` and `secrets/<env>.key` (mode 400/600).
-  Private keys have **no passphrase** (product decision). All gitignored.
+  the **profile SQLite** and are edited via `/configuracion` — they travel
+  inside encrypted backups, not in `.env`. Emisor environment is not user-
+  selectable (profile-local; `ambiente` is a seal).
+- **Backups:** `facturador.backup --env homo|prod` backs up one profile. On a
+  fresh machine with no DB yet, `facturador.restore --latest` needs
+  `--bucket`/`--prefix` on the CLI.
+- **Certificates:** `secrets/cert.crt` and `secrets/cert.key` under the active
+  profile (mode 400/600). Private keys have **no passphrase** (product
+  decision). All gitignored. Paths resolve via `ProfilePaths`
+  (`facturador/profile.py`).
 
 For offline work without real ARCA credentials:
 
-- Point `FACTURADOR_HOME` at a test directory, place a self-signed pair there
-  (subject must include `CUIT <11 digits>`). Recipe: `tests/conftest.py`.
+- Use a test profile root (`EnvironmentProfile.for_testing` / fixtures in
+  `tests/conftest.py`), place a self-signed pair as `cert.crt`/`cert.key`
+  (subject must include `CUIT <11 digits>`).
 - **Client management** (`/clientes`, `POST /clients`) works fully offline once
   `arca_params` is seeded (`facturador/repo/params.py::replace_params`;
   `seed_params` in `tests/conftest.py`).
@@ -100,9 +112,11 @@ Do not regress these without an explicit design change in `docs/design.md`:
   auth layers to expose the service on a network.
 - **Secrets stay local.** Cert/key pairs never belong in the repo, CI, or logs.
   Key files must remain mode 400/600.
-- **SQLite is the local source of truth.** Domain config (emisor, punto de
-  venta, backup bucket) lives in the DB, not in env vars. No external DB, queues,
-  or sync services unless explicitly scoped.
+- **SQLite is the local source of truth (per profile).** Domain config (emisor,
+  punto de venta, backup bucket) lives in the profile DB, not in env vars. No
+  external DB, queues, or sync services unless explicitly scoped.
+- **One environment per backend process.** Environment is fixed at boot from the
+  selected profile; no in-process hot switching of ARCA clients, certs, or DB.
 - **ARCA is authoritative for numbering.** Always reconcile with `FEXGetLast_CMP`;
   never rely on a local counter alone.
 - **Single-process, no workers.** Volume is ~1 invoice/week; keep the stack simple.

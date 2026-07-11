@@ -4,44 +4,49 @@ Curated Mermaid diagrams for **orientation and architectural intent**. They are
 **navigation aids only** — not a substitute for reading the code.
 
 **Authoritative sources:** implementation under `facturador/`, tests under
-`tests/`, and [`docs/design.md`](../design.md). When a diagram disagrees with
-those, trust the code and design doc.
+`tests/`, [`docs/design.md`](../design.md), and
+[`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md)
+(environment/profile contract). When a diagram disagrees with those, trust the
+code, design doc, and ADR.
 
 For file-level navigation, see [`repo-map.md`](repo-map.md). For commands and
 constraints, see [`AGENTS.md`](../../AGENTS.md). For verification scopes by task,
 see [`verification-matrix.md`](verification-matrix.md).
 
-> **Heads-up ([ADR 0001](../adr/0001-perfiles-de-ambiente-aislados.md)):** the
-> environment model shown here (shared `FACTURADOR_HOME`, `ARCA_ENV` in
-> `.env`) reflects the current implementation but is superseded by
-> launcher-selected isolated environment profiles — one immutable
-> environment/profile per backend process, restart-based switching, no hot
-> switching. Diagrams will be updated as the profile work lands (FAC-34).
-
 ---
 
 ## Runtime architecture
 
-Single-process FastAPI app: JSON API + Jinja/HTMX UI, SQLite, outbound SOAP to
-ARCA. No workers, queues, or external database.
+One FacturadorE launcher, two hidden profiles (Homologación / Producción), one
+immutable environment per backend process. Single-process FastAPI: JSON API +
+Jinja/HTMX UI, SQLite, outbound SOAP to ARCA. No workers, queues, or external
+database. Changing environment restarts the backend (no hot switching).
 
 ```mermaid
 flowchart TB
-  subgraph user["User machine (localhost only)"]
-    BROWSER["Browser"]
-    LAUNCHER["Launcher scripts<br/>scripts/launch.*"]
-    HOME["FACTURADOR_HOME<br/>.env · secrets/ · data/"]
+  USER["Usuario"] --> CHOICE
+
+  subgraph launcher["Launcher FacturadorE"]
+    CHOICE{"Elegir ambiente<br/>Homologación / Producción"}
+    SUP["ProcessSupervisor<br/>start · stop · readiness · lock"]
+    CHOICE --> SUP
   end
 
-  subgraph process["facturador process (uvicorn)"]
-  direction TB
+  SUP -->|"arranca UN backend<br/>con el perfil elegido"| PROC
+
+  subgraph proc["Backend process (uvicorn) — ambiente fijo"]
+    direction TB
     API["api/<br/>JSON routes"]
-    WEB["web/<br/>Jinja + HTMX"]
+    WEB["web/<br/>Jinja + HTMX + badge"]
     SVC["service.py<br/>InvoiceService"]
     REPO["repo/<br/>SQLite queries"]
     PDF["pdf/<br/>WeasyPrint + QR"]
     ARCA["arca/<br/>WsaaClient + WsfexClient"]
-    DB[("SQLite<br/>data/facturador.db")]
+  end
+
+  subgraph profiles["Perfiles internos ocultos (app-data del SO)"]
+    SEL["Perfil ELEGIDO<br/>SQLite · cert.crt/key<br/>PDFs · TA · params<br/>logs · backups"]
+    OTHER["Perfil del OTRO ambiente<br/>(intacto)"]
   end
 
   subgraph external["External (outbound HTTPS only)"]
@@ -50,23 +55,40 @@ flowchart TB
     S3["S3 backup<br/>(CLI, off critical path)"]
   end
 
-  BROWSER -->|"http://127.0.0.1:PORT"| API
-  BROWSER --> WEB
-  LAUNCHER --> BROWSER
+  PROC -->|"lee/escribe SOLO su perfil"| SEL
+  PROC -.-x|"nunca"| OTHER
   API --> SVC
   WEB --> SVC
   SVC --> REPO
   SVC --> ARCA
   SVC --> PDF
-  REPO --> DB
   ARCA --> WSAA
   ARCA --> WSFEX
-  HOME -.->|"certs, .env, data dir"| process
   subgraph backup_cli["Backup CLI (off critical path)"]
     BAK["backup.py / restore.py"]
   end
   BAK -.-> S3
-  BAK -.-> HOME
+  BAK -.-> SEL
+```
+
+Cambio de ambiente (siempre por reinicio):
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant L as Launcher
+  participant BH as Backend (perfil homo)
+  participant BP as Backend (perfil prod)
+
+  U->>BH: Cambiar ambiente
+  BH->>L: pedido de reinicio (archivo en perfil)
+  L->>U: chooser (backend aún vivo)
+  U->>L: confirma Producción
+  L->>BH: stop limpio
+  BH-->>L: proceso terminado
+  L->>BP: start con perfil producción
+  BP-->>L: ready (GET /health)
+  L->>U: reabrir app (badge: Producción)
 ```
 
 ---
@@ -91,7 +113,7 @@ flowchart LR
 
   subgraph persistence["Persistence"]
     REPO["repo/*"]
-    DB[("SQLite")]
+    DB[("SQLite (perfil)")]
   end
 
   subgraph integration["ARCA integration"]
@@ -103,11 +125,15 @@ flowchart LR
     PDF["pdf/*"]
   end
 
-  subgraph config["Config (read-only at runtime)"]
-    CFG["config.py<br/>FACTURADOR_HOME, certs"]
+  subgraph config["Config (immutable at boot)"]
+    PROF["profile.py<br/>EnvironmentProfile + ProfilePaths"]
+    CFG["config.py<br/>load_config(profile)"]
     SET["settings.py<br/>emisor, PV, backups"]
+    LAUNCH["launcher/<br/>chooser + supervisor"]
   end
 
+  LAUNCH --> PROF
+  PROF --> CFG
   API --> SVC
   WEB --> SVC
   SVC --> MAP
@@ -131,6 +157,8 @@ flowchart LR
 | `repo/` | SQLite CRUD | ARCA calls, HTTP |
 | `arca/` | WSAA/WSFEX SOAP | Invoice state machine |
 | `pdf/` | HTML → PDF, QR payload | ARCA or DB writes |
+| `launcher/` | Choose env, supervise one profile | Mutate ARCA clients in a live backend |
+| `profile.py` | Resolve isolated roots / paths | Expose profile paths in normal UI |
 
 ---
 
@@ -164,6 +192,7 @@ flowchart TB
     F6["external network → app<br/>(reverse proxy, tunnel, 0.0.0.0 bind)"]
     F7["secrets → repo / CI / logs"]
     F8["local counter alone<br/>(skip FEXGetLast_CMP)"]
+    F9["hot-switch ARCA_ENV / certs / DB<br/>inside a live backend"]
   end
 
   style F1 fill:#fee,stroke:#c00
@@ -174,6 +203,7 @@ flowchart TB
   style F6 fill:#fee,stroke:#c00
   style F7 fill:#fee,stroke:#c00
   style F8 fill:#fee,stroke:#c00
+  style F9 fill:#fee,stroke:#c00
 ```
 
 **Quick checks before merging:**
@@ -182,6 +212,7 @@ flowchart TB
 - `repo/` has no `httpx`, no `arca` imports.
 - `pdf/` receives already-authorized data; it does not call WSFEX.
 - Uvicorn binds `127.0.0.1` on the host; Docker publishes `127.0.0.1:PORT` only.
+- Environment is fixed at boot from `EnvironmentProfile`; no in-process ARCA/env swap.
 
 ---
 
@@ -231,7 +262,7 @@ sequenceDiagram
     A-->>W: CAE + vencimiento
     W-->>S: AuthResult
     S->>R: status=authorized, CAE, raw_response
-    S->>S: render PDF to data/pdfs/
+    S->>S: render PDF to profile pdfs/
     S-->>H: authorized invoice
   else ARCA business error
     W-->>S: WsfexError
@@ -258,7 +289,7 @@ sequenceDiagram
   participant S as InvoiceService / WsfexClient
   participant W as WsfexClient
   participant WA as WsaaClient
-  participant DISK as TA cache (disk)
+  participant DISK as TA cache (perfil)
   participant WSAA as ARCA WSAA
   participant WSFEX as ARCA WSFEX
 
@@ -287,8 +318,8 @@ sequenceDiagram
 
 **Notes:**
 
-- `ARCA_ENV` (`homo` | `prod`) derives both WSAA and WSFEX URLs and cert paths
-  atomically — never mix environments.
+- The boot `EnvironmentProfile` derives both WSAA and WSFEX URLs and cert paths
+  atomically — never mix environments; never hot-switch mid-process.
 - Token, sign, and CMS payloads are redacted in logs (credentials).
 - Clock skew breaks WSAA; NTP is required on the host.
 
@@ -314,17 +345,16 @@ flowchart TB
     subgraph allowed_local["Allowed: localhost only"]
       BROWSER["Browser<br/>127.0.0.1:PORT"]
       subgraph bind["Server bind"]
-        NATIVE["uv run python -m facturador<br/>host = 127.0.0.1"]
+        NATIVE["python -m facturador<br/>host = 127.0.0.1"]
         DOCKER["Docker container<br/>process 0.0.0.0:8399"]
         PUBLISH["docker-compose publish<br/>127.0.0.1:PORT → container"]
       end
     end
 
-  subgraph secrets["FACTURADOR_HOME (never in repo)"]
-      ENV[".env bootstrap"]
-      KEY["secrets/*.key mode 400/600"]
-      CRT["secrets/*.crt"]
-      DB[("SQLite + PDFs")]
+    subgraph secrets["Perfil activo (nunca en el repo)"]
+      KEY["secrets/cert.key mode 400/600"]
+      CRT["secrets/cert.crt"]
+      DB[("SQLite + PDFs + TA")]
     end
   end
 
@@ -347,6 +377,7 @@ flowchart TB
 - Reverse proxies, Tailscale/WireGuard exposure, or auth layers to reach the app
   from another machine
 - Cert/key pairs in the repo, CI, or logs
+- In-process hot switching of `ARCA_ENV`, certificates, or database
 
 **Future multi-machine use** (documented in `docs/design.md` §2.5): restore
 encrypted backup on a secondary machine; still localhost-only on that machine.

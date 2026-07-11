@@ -17,9 +17,9 @@ Before broad repo search or exploratory greps, read:
 ## Quick reference
 
 - Python 3.12, FastAPI + HTMX, SQLite, WeasyPrint; single process, no workers.
-- Dev: `uv sync` then `uv run python -m facturador` (binds `127.0.0.1:8399`).
+- Dev: `uv sync` then `uv run python -m facturador.launcher` (binds `127.0.0.1:8399`).
 - Verify: `uv run ruff check .` → `uv run mypy` → `uv run pytest`.
-- Runtime data lives under `FACTURADOR_HOME`, not in the repo.
+- Runtime data lives in launcher-selected isolated profiles (ADR 0001), not in the repo.
 - Domain design: [`docs/design.md`](docs/design.md).
 
 End every task with **Summary / Changed files / Verification / Remaining risks** (see AGENTS.md).
