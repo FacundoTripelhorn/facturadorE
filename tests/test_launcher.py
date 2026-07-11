@@ -334,12 +334,33 @@ def test_profile_lock_acquire_release_y_metadata(tmp_path):
     assert holder.environment == "homo"
     assert holder.pid == os.getpid()
     assert read_lock_holder(path) == holder
+    # Sentinel en byte 0; JSON legible sin tomar el lock.
+    raw = path.read_bytes()
+    assert raw[:1] == b"\0"
+    assert b'"port": 8399' in raw or b'"port":8399' in raw
 
     lock.release()
     assert not lock.is_held
     # El archivo queda: flock es la autoridad; unlink post-unlock es racy.
     assert path.is_file()
     assert read_lock_holder(path) == holder
+
+
+def test_read_lock_holder_acepta_json_legacy_sin_sentinel(tmp_path):
+    """Archivos pre-sentinel (solo JSON) siguen siendo legibles."""
+    from facturador.launcher import read_lock_holder
+
+    path = tmp_path / "data" / "launcher.lock"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '{"v":1,"pid":42,"port":8399,"environment":"prod"}\n',
+        encoding="utf-8",
+    )
+    holder = read_lock_holder(path)
+    assert holder is not None
+    assert holder.pid == 42
+    assert holder.port == 8399
+    assert holder.environment == "prod"
 
 
 def test_profile_lock_release_no_borra_archivo_para_evitar_race(tmp_path):
@@ -482,6 +503,47 @@ def test_segundo_launcher_reutiliza_sesion_sana(tmp_path, test_cert_and_key):
         # El primero sigue siendo el dueño del proceso.
         assert first.is_running
         assert first.process is not None and first.process.pid == first_pid
+    finally:
+        second.stop()
+        first.stop()
+
+
+def test_reuso_actualiza_plan_del_supervisor_si_puerto_difiere(
+    tmp_path, test_cert_and_key
+):
+    """Tras reuse, supervisor.plan/base_url apuntan al puerto de la sesión."""
+    app_data = tmp_path / "appdata"
+    home = tmp_path / "home"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    live_port = _free_port()
+    other_port = _free_port()
+    assert live_port != other_port
+
+    first = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=live_port,
+        app_data_root=app_data,
+        home=home,
+        readiness_timeout=30.0,
+        open_browser=False,
+    )
+    second = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=other_port,
+        app_data_root=app_data,
+        home=home,
+        readiness_timeout=5.0,
+        open_browser=False,
+    )
+    try:
+        first.start()
+        result = second.start()
+        assert result.reused
+        assert result.plan.port == live_port
+        # Callers que solo miran el supervisor (no LaunchResult) también.
+        assert second.plan.port == live_port
+        assert second.base_url == f"http://127.0.0.1:{live_port}"
+        assert second.plan.health_url == f"http://127.0.0.1:{live_port}/health"
     finally:
         second.stop()
         first.stop()
