@@ -88,16 +88,21 @@ como auditoría; el historial de pruebas no vive en la misma base que el real.
 ## 5. Smoke test (sin emitir nada)
 
 ```bash
-# Ticket de acceso productivo (verifica certificado + asociación del servicio)
+# Launcher nativo
 ARCA_ENV=prod uv run python scripts/get_ta.py
+ARCA_ENV=prod uv run python scripts/check_wsfex.py
 
-# FEXDummy + descarga de tablas de parámetros (solo lectura, no emite)
+# Docker (certs bajo ~/facturador/profiles/prod/)
+export FACTURADOR_APP_DATA=~/facturador/profiles
+ARCA_ENV=prod uv run python scripts/get_ta.py
 ARCA_ENV=prod uv run python scripts/check_wsfex.py
 ```
 
 Ambos deben mostrar `Ambiente: prod` y las URLs productivas. Si `get_ta.py`
 falla acá, revisar los pasos 1 y 2; si falla `check_wsfex.py` con el ticket ya
 emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
+Sin `FACTURADOR_APP_DATA` apuntando al layout Docker, el script busca el
+perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
 
 ## 6. Primera factura real
 

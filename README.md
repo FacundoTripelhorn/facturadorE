@@ -166,12 +166,14 @@ La misma app expone la API (documentación interactiva en `/docs`):
 
 ### Scripts de diagnóstico
 
-Útiles para verificar la conectividad con ARCA paso a paso:
+Útiles para verificar la conectividad con ARCA paso a paso (requieren
+`ARCA_ENV` explícito). Con el launcher nativo alcanza eso; si los datos están
+en el layout Docker, sumá `FACTURADOR_APP_DATA=~/facturador/profiles`:
 
 ```bash
-uv run python scripts/get_ta.py         # obtiene (o reutiliza) el ticket WSAA
-uv run python scripts/check_wsfex.py    # FEXDummy + descarga de tablas de parámetros
-uv run python scripts/authorize_homo.py # flujo completo de emisión en homologación
+ARCA_ENV=homo uv run python scripts/get_ta.py         # ticket WSAA
+ARCA_ENV=homo uv run python scripts/check_wsfex.py    # FEXDummy + params
+ARCA_ENV=homo uv run python scripts/authorize_homo.py # emisión de prueba
 ```
 
 ## Backups
