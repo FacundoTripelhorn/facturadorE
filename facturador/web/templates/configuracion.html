@@ -140,9 +140,10 @@
 
 <p class="nota">
   El ambiente ARCA ({{ env_label }}) es contexto de solo lectura del perfil
-  activo; el puerto se define en el <code>.env</code> del directorio de datos
-  y los certificados van en <code>secrets/</code>. Para facturar en otro
-  ambiente, arrancar la app con el perfil correspondiente.
+  activo. {% if launcher_supervised %}Para facturar en el otro ambiente, usá
+  <strong>Cambiar ambiente</strong> en la barra superior: el launcher cierra
+  esta sesión y abre la elegida.{% else %}Para facturar en otro ambiente,
+  abrí FacturadorE desde el launcher y elegí Homologación o Producción.{% endif %}
 </p>
 
 {% endblock %}

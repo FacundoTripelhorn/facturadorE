@@ -7,6 +7,11 @@ espera readiness, abre el browser y permanece en primer plano hasta Ctrl+C.
 Si el perfil ya tiene una sesión sana (FAC-30), reabre el browser y sale sin
 duplicar el backend. Un error de arranque desde el chooser vuelve a la
 pantalla de elección.
+
+FAC-32: si la UI pide "Cambiar ambiente", el launcher muestra el chooser
+mientras el backend actual sigue vivo (cancelar = seguir igual). Al confirmar
+otro ambiente, detiene el backend corriente *antes* de arrancar el perfil
+nuevo; un fallo de arranque del destino no muta ninguno de los dos perfiles.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
@@ -25,6 +31,13 @@ from .supervisor import LauncherError, ProcessSupervisor
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
+
+
+@dataclass(frozen=True)
+class SwitchTo:
+    """El usuario confirmó otro ambiente: arrancar ese perfil a continuación."""
+
+    environment: ArcaEnvironment
 
 
 def _parse_port(value: str) -> int:
@@ -92,40 +105,55 @@ def main(
     chooser = choose or choose_environment
     fail = report_failure or _report_failure
 
+    # Sesión inicial: --env fija el primer perfil; sin flag, el chooser.
     if args.env is not None:
         try:
-            environment = resolve_launch_environment(args.env)
+            pending: ArcaEnvironment | None = resolve_launch_environment(
+                args.env
+            )
         except ProfileError as exc:
             fail(str(exc))
             return 2
-        code = _run_session(
-            environment, args, factory=factory, report_failure=fail
-        )
-        # Sin chooser: _run_session nunca pide reintento (None).
-        return 0 if code is None else code
+        allow_chooser_retry = False
+    else:
+        pending = None
+        allow_chooser_retry = True
 
-    # Chooser interactivo: un error de arranque vuelve a la elección.
     while True:
-        try:
-            selected = chooser()
-        except ChooserUnavailable as exc:
-            fail(
-                "No se pudo mostrar el selector de ambiente. "
-                f"{exc}"
-            )
-            return 2
-        if selected is None:
-            return 0
-        code = _run_session(
+        if pending is None:
+            try:
+                selected = chooser()
+            except ChooserUnavailable as exc:
+                fail(
+                    "No se pudo mostrar el selector de ambiente. "
+                    f"{exc}"
+                )
+                return 2
+            if selected is None:
+                return 0
+        else:
+            selected = pending
+            pending = None
+
+        outcome = _run_session(
             selected,
             args,
             factory=factory,
+            choose=chooser,
             report_failure=fail,
-            return_to_chooser_on_startup_error=True,
+            return_to_chooser_on_startup_error=allow_chooser_retry,
         )
-        if code is None:
+        if isinstance(outcome, SwitchTo):
+            # Ya confirmado en el chooser del cambio: arrancar sin re-preguntar.
+            pending = outcome.environment
+            allow_chooser_retry = True
             continue
-        return code
+        if outcome is None:
+            # Fallo de arranque / caída: volver al chooser si está permitido.
+            if allow_chooser_retry:
+                continue
+            return 1
+        return outcome
 
 
 def _run_session(
@@ -133,10 +161,18 @@ def _run_session(
     args: argparse.Namespace,
     *,
     factory: Callable[..., ProcessSupervisor],
+    choose: _ChooseFn,
     report_failure: Callable[[str], None],
     return_to_chooser_on_startup_error: bool = False,
-) -> int | None:
-    """Supervisa una sesión. ``None`` = volver al chooser tras fallo de start."""
+) -> int | None | SwitchTo:
+    """Supervisa una sesión.
+
+    Retornos:
+    - ``int``: código de salida del proceso launcher.
+    - ``None``: volver al chooser (fallo de start o caída post-arranque).
+    - ``SwitchTo``: el usuario eligió otro ambiente; el backend actual ya
+      está detenido.
+    """
     supervisor = factory(
         environment=environment,
         port=args.port,
@@ -174,6 +210,13 @@ def _run_session(
     try:
         while supervisor.is_running:
             assert supervisor.process is not None
+            switch = _handle_change_environment_request(
+                supervisor,
+                current=environment,
+                choose=choose,
+            )
+            if switch is not None:
+                return switch
             try:
                 supervisor.process.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
@@ -193,6 +236,65 @@ def _run_session(
         print("\nDeteniendo…", flush=True)
         supervisor.stop()
         return 0
+
+
+def _handle_change_environment_request(
+    supervisor: ProcessSupervisor,
+    *,
+    current: ArcaEnvironment,
+    choose: _ChooseFn,
+) -> SwitchTo | None:
+    """FAC-32: chooser con el backend aún vivo; stop solo si confirma otro.
+
+    ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
+    """
+    request = supervisor.poll_change_environment_request()
+    if request is None:
+        return None
+
+    print(
+        "Cambio de ambiente pedido desde la app. "
+        "Elegí Homologación o Producción (Cancelar mantiene el actual).",
+        flush=True,
+    )
+    try:
+        selected = choose()
+    except ChooserUnavailable as exc:
+        # Sin chooser no se puede cambiar: limpiar pedido y seguir.
+        supervisor.clear_change_environment_request()
+        print(
+            f"No se pudo mostrar el selector de ambiente ({exc}). "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
+        return None
+
+    supervisor.clear_change_environment_request()
+    if selected is None:
+        # Cancelar: el backend corriente sigue corriendo.
+        print("Cambio de ambiente cancelado.", flush=True)
+        return None
+    if selected is current:
+        # Mismo ambiente: reabrir la app sin reiniciar.
+        print(
+            f"Ya estás en {supervisor.plan.profile.display_name}.",
+            flush=True,
+        )
+        if supervisor.open_browser:
+            try:
+                supervisor.browser_opener(f"{supervisor.base_url}/")
+            except Exception:
+                pass
+        return None
+
+    # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro.
+    print(
+        f"Deteniendo {supervisor.plan.profile.display_name} "
+        "antes de abrir el otro ambiente…",
+        flush=True,
+    )
+    supervisor.stop()
+    return SwitchTo(selected)
 
 
 def _report_failure(message: str) -> None:

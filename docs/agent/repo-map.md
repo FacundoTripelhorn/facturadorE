@@ -223,7 +223,7 @@ one operates; PV selection when more than one is enabled. See
 
 Never commit secrets. Key files must stay mode 400/600.
 
-**Launcher supervisor (FAC-28 / FAC-30):** `python -m facturador.launcher`
+**Launcher supervisor (FAC-28 / FAC-30 / FAC-32):** `python -m facturador.launcher`
 (optionally `--env homo|prod`) shows the Homologación/Producción chooser
 (FAC-29) unless `--env` is passed, resolves the hidden profile, takes a
 per-profile lock (`ProfilePaths.launcher_lock`), starts `python -m facturador`
@@ -232,7 +232,11 @@ when ready, and stops the child on Ctrl+C without orphaning it. A second
 launch against the same profile reuses a healthy session (reopens the
 browser) or fails with a clear message; stale lock files without a live flock
 do not block startup (the lock file is kept on disk — flock is the authority).
-Startup failures from the chooser return to the chooser.
+Startup failures from the chooser return to the chooser. **Cambiar ambiente**
+(FAC-32): the UI writes a request file under the current profile; the
+launcher shows the chooser while the backend is still running (cancel keeps
+it); confirming another environment stops the current backend before starting
+the target profile (no in-process hot-switch).
 
 ### Tests
 

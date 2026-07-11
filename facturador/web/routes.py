@@ -31,6 +31,10 @@ from .. import repo
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
+from ..launcher.switch import (
+    is_launcher_supervised,
+    write_change_environment_request,
+)
 from ..schemas import (
     BackupSettingsIn,
     ClientIn,
@@ -55,12 +59,14 @@ def _ambiente_en_contexto(request: Request) -> dict[str, object]:
     """Identidad de ambiente visible en toda la UI (ADR 0001 / FAC-31).
 
     Solo lenguaje de negocio (Homologación / Producción) y el código corto;
-    nunca paths de perfil, certificados ni secretos.
+    nunca paths de perfil, certificados ni secretos. FAC-32: ``launcher``
+    indica si el proceso está supervisado y puede pedir cambio por reinicio.
     """
     profile = request.app.state.profile
     return {
         "env": profile.environment,
         "env_label": profile.display_name,
+        "launcher_supervised": is_launcher_supervised(),
     }
 
 
@@ -584,3 +590,50 @@ def guardar_backup(
         )
     service.update_backup_settings(payload)
     return RedirectResponse("/configuracion?aviso=backup", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Cambio de ambiente por reinicio (FAC-32 / ADR 0001)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ui/cambiar-ambiente", response_class=HTMLResponse)
+def pedir_cambiar_ambiente(request: Request, service: ServiceDep):
+    """Pide al launcher un reinicio: no muta ambiente, clientes ARCA ni DB."""
+    profile = request.app.state.profile
+    # Cinturón: el servicio y el perfil deben seguir apuntando al mismo
+    # ambiente inmutable (no hay hot-switch).
+    if service.config.env != profile.environment:
+        return templates.TemplateResponse(
+            request,
+            "cambiar_ambiente.html",
+            {
+                "error": (
+                    "Inconsistencia interna de ambiente; "
+                    "reiniciá la app desde el launcher."
+                ),
+                "pending": False,
+            },
+            status_code=500,
+        )
+    if not is_launcher_supervised():
+        return templates.TemplateResponse(
+            request,
+            "cambiar_ambiente.html",
+            {
+                "error": (
+                    "El cambio de ambiente solo está disponible cuando "
+                    "abrís FacturadorE desde el launcher."
+                ),
+                "pending": False,
+            },
+            status_code=422,
+        )
+    write_change_environment_request(profile.paths, profile.environment)
+    # El ambiente del proceso NO cambia: solo el pedido en disco.
+    assert service.config.env == profile.environment
+    return templates.TemplateResponse(
+        request,
+        "cambiar_ambiente.html",
+        {"pending": True, "error": None},
+    )

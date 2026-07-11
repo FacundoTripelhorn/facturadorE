@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile, ProfileError, parse_environment
+from .switch import mark_launcher_supervised
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ def build_backend_env(
     env["ARCA_ENV"] = environment.value
     env["FACTURADOR_PORT"] = str(port)
     env.pop("FACTURADOR_IN_DOCKER", None)
+    mark_launcher_supervised(env)
     if home is not None:
         env["FACTURADOR_HOME"] = str(home)
     if app_data_root is not None:

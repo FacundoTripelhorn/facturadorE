@@ -1,9 +1,10 @@
-"""Supervisor de proceso del launcher (FAC-28 / FAC-30, ADR 0001).
+"""Supervisor de proceso del launcher (FAC-28 / FAC-30 / FAC-32, ADR 0001).
 
 Arranca un backend ligado a un único perfil, espera ``GET /health``, abre el
 browser solo si quedó listo, y apaga el hijo sin dejarlo huérfano. El lock de
 perfil (FAC-30) evita un segundo backend sobre el mismo SQLite; si ya hay una
-sesión sana, se reutiliza abriendo el browser.
+sesión sana, se reutiliza abriendo el browser. FAC-32: el supervisor expone el
+pedido de cambio de ambiente escrito por la UI (sin hot-switch).
 """
 
 from __future__ import annotations
@@ -28,6 +29,11 @@ from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile
 from .command import BackendLaunchPlan, plan_backend_launch
 from .lock import LockHolder, ProfileLock, ProfileLockHeld
+from .switch import (
+    ChangeEnvironmentRequest,
+    clear_change_environment_request,
+    read_change_environment_request,
+)
 
 DEFAULT_READINESS_TIMEOUT_S = 60.0
 DEFAULT_STOP_TIMEOUT_S = 10.0
@@ -176,6 +182,14 @@ class ProcessSupervisor:
             self._stop_process(timeout=timeout)
         finally:
             self._release_lock()
+
+    def poll_change_environment_request(self) -> ChangeEnvironmentRequest | None:
+        """Pedido FAC-32 escrito por la UI; no muta el ambiente del proceso."""
+        return read_change_environment_request(self.plan.profile.paths)
+
+    def clear_change_environment_request(self) -> None:
+        """Cancela o consume el pedido de cambio de ambiente."""
+        clear_change_environment_request(self.plan.profile.paths)
 
     def __enter__(self) -> ProcessSupervisor:
         self.start()

@@ -1,7 +1,7 @@
 """Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28).
 
-También cubre el chooser de ambiente (FAC-29) y el lock anti-duplicado
-(FAC-30).
+También cubre el chooser de ambiente (FAC-29), el lock anti-duplicado
+(FAC-30) y el cambio de ambiente por reinicio (FAC-32).
 """
 
 from __future__ import annotations
@@ -99,6 +99,7 @@ def test_build_backend_env_pasa_un_solo_ambiente(tmp_path):
     assert env["FACTURADOR_PORT"] == "8401"
     assert env["FACTURADOR_HOME"] == str(tmp_path / "home")
     assert env["FACTURADOR_APP_DATA"] == str(tmp_path / "appdata")
+    assert env["FACTURADOR_LAUNCHER"] == "1"
     assert "FACTURADOR_IN_DOCKER" not in env
     # Un solo ambiente: el valor previo de homo queda reemplazado, no duplicado.
     assert list(k for k in env if k == "ARCA_ENV") == ["ARCA_ENV"]
@@ -1037,3 +1038,336 @@ def test_backend_huerfano_sano_falla_claro_sin_segundo_proceso(
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --- FAC-32: cambio de ambiente por reinicio ---------------------------------
+
+
+def test_change_environment_request_write_read_clear(tmp_path):
+    from facturador.launcher import (
+        clear_change_environment_request,
+        read_change_environment_request,
+        write_change_environment_request,
+    )
+    from facturador.profile import ProfilePaths
+
+    paths = ProfilePaths(root=tmp_path / "homo")
+    paths.ensure_layout()
+    assert read_change_environment_request(paths) is None
+
+    write_change_environment_request(paths, ArcaEnvironment.HOMO)
+    req = read_change_environment_request(paths)
+    assert req is not None
+    assert req.from_environment is ArcaEnvironment.HOMO
+    assert req.requested_at > 0
+
+    clear_change_environment_request(paths)
+    assert read_change_environment_request(paths) is None
+
+
+def test_handle_change_cancel_mantiene_backend_sin_stop(tmp_path):
+    """Cancelar el chooser limpia el pedido y no detiene el backend actual."""
+    from facturador.launcher.__main__ import _handle_change_environment_request
+    from facturador.launcher.switch import (
+        read_change_environment_request,
+        write_change_environment_request,
+    )
+    from facturador.profile import ProfilePaths
+
+    paths = ProfilePaths(root=tmp_path / "homo")
+    paths.ensure_layout()
+    write_change_environment_request(paths, ArcaEnvironment.HOMO)
+
+    stopped: list[str] = []
+
+    class _Fake:
+        plan = type(
+            "P",
+            (),
+            {
+                "profile": type(
+                    "Pr",
+                    (),
+                    {"paths": paths, "display_name": "Homologación"},
+                )(),
+            },
+        )()
+        open_browser = False
+        base_url = "http://127.0.0.1:8399"
+        browser_opener = lambda _url: None  # noqa: E731
+
+        def poll_change_environment_request(self):
+            return read_change_environment_request(paths)
+
+        def clear_change_environment_request(self):
+            from facturador.launcher.switch import clear_change_environment_request
+
+            clear_change_environment_request(paths)
+
+        def stop(self):
+            stopped.append("stop")
+
+    result = _handle_change_environment_request(
+        _Fake(),  # type: ignore[arg-type]
+        current=ArcaEnvironment.HOMO,
+        choose=lambda: None,
+    )
+    assert result is None
+    assert stopped == []
+    assert read_change_environment_request(paths) is None
+
+
+def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
+    """Al confirmar el otro ambiente, stop() corre antes de devolver SwitchTo."""
+    from facturador.launcher.__main__ import SwitchTo, _handle_change_environment_request
+    from facturador.launcher.switch import write_change_environment_request
+    from facturador.profile import ProfilePaths
+
+    paths = ProfilePaths(root=tmp_path / "homo")
+    paths.ensure_layout()
+    write_change_environment_request(paths, ArcaEnvironment.HOMO)
+
+    order: list[str] = []
+
+    class _Fake:
+        plan = type(
+            "P",
+            (),
+            {
+                "profile": type(
+                    "Pr",
+                    (),
+                    {"paths": paths, "display_name": "Homologación"},
+                )(),
+            },
+        )()
+        open_browser = False
+        base_url = "http://127.0.0.1:8399"
+
+        def poll_change_environment_request(self):
+            from facturador.launcher.switch import read_change_environment_request
+
+            return read_change_environment_request(paths)
+
+        def clear_change_environment_request(self):
+            from facturador.launcher.switch import clear_change_environment_request
+
+            clear_change_environment_request(paths)
+            order.append("clear")
+
+        def stop(self):
+            order.append("stop")
+
+    result = _handle_change_environment_request(
+        _Fake(),  # type: ignore[arg-type]
+        current=ArcaEnvironment.HOMO,
+        choose=lambda: ArcaEnvironment.PROD,
+    )
+    assert isinstance(result, SwitchTo)
+    assert result.environment is ArcaEnvironment.PROD
+    # Pedido consumido y backend detenido antes de arrancar el otro perfil.
+    assert order == ["clear", "stop"]
+
+
+def test_handle_change_mismo_ambiente_no_reinicia(tmp_path):
+    from facturador.launcher.__main__ import _handle_change_environment_request
+    from facturador.launcher.switch import (
+        read_change_environment_request,
+        write_change_environment_request,
+    )
+    from facturador.profile import ProfilePaths
+
+    paths = ProfilePaths(root=tmp_path / "prod")
+    paths.ensure_layout()
+    write_change_environment_request(paths, ArcaEnvironment.PROD)
+    opened: list[str] = []
+    stopped: list[str] = []
+
+    class _Fake:
+        plan = type(
+            "P",
+            (),
+            {
+                "profile": type(
+                    "Pr",
+                    (),
+                    {"paths": paths, "display_name": "Producción"},
+                )(),
+            },
+        )()
+        open_browser = True
+        base_url = "http://127.0.0.1:8410"
+        browser_opener = opened.append
+
+        def poll_change_environment_request(self):
+            return read_change_environment_request(paths)
+
+        def clear_change_environment_request(self):
+            from facturador.launcher.switch import clear_change_environment_request
+
+            clear_change_environment_request(paths)
+
+        def stop(self):
+            stopped.append("stop")
+
+    result = _handle_change_environment_request(
+        _Fake(),  # type: ignore[arg-type]
+        current=ArcaEnvironment.PROD,
+        choose=lambda: ArcaEnvironment.PROD,
+    )
+    assert result is None
+    assert stopped == []
+    assert opened == ["http://127.0.0.1:8410/"]
+
+
+def test_main_switch_stop_antes_de_arrancar_destino_y_fallo_vuelve_chooser():
+    """Flujo FAC-32: stop del actual → start del nuevo; fallo vuelve al chooser."""
+    from facturador.launcher.__main__ import main
+    from facturador.launcher.command import plan_backend_launch
+    from facturador.launcher.supervisor import LaunchResult
+
+    events: list[tuple[str, str]] = []
+    # 1ª = arranque homo; 2ª = chooser del cambio → prod; 3ª = tras fallo → homo.
+    picks = iter(
+        [ArcaEnvironment.HOMO, ArcaEnvironment.PROD, ArcaEnvironment.HOMO]
+    )
+    session_n = {"homo": 0}
+
+    class _Proc:
+        returncode = 0
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout or 1)
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = _Proc()
+            self.is_running = True
+            self.open_browser = False
+            self.browser_opener = lambda _url: None
+            self._plan = plan_backend_launch(environment, port=8399)
+            self._polled = False
+            if environment is ArcaEnvironment.HOMO:
+                session_n["homo"] += 1
+                self._session = session_n["homo"]
+            else:
+                self._session = 0
+
+        @property
+        def plan(self):
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self._plan.base_url
+
+        def start(self):
+            events.append(("start", self.environment.value))
+            if self.environment is ArcaEnvironment.PROD:
+                self.is_running = False
+                raise LauncherError(
+                    "No se pudo iniciar el backend de Producción: sin certificados."
+                )
+            # Segunda sesión homo: sesión "reused" → main sale 0 sin wait loop.
+            if self._session >= 2:
+                return LaunchResult(plan=self._plan, reused=True)
+            return LaunchResult(plan=self._plan, reused=False)
+
+        def poll_change_environment_request(self):
+            from facturador.launcher.switch import ChangeEnvironmentRequest
+
+            if (
+                self.environment is ArcaEnvironment.HOMO
+                and self._session == 1
+                and not self._polled
+            ):
+                self._polled = True
+                return ChangeEnvironmentRequest(
+                    from_environment=ArcaEnvironment.HOMO,
+                    requested_at=1.0,
+                )
+            return None
+
+        def clear_change_environment_request(self):
+            events.append(("clear", self.environment.value))
+
+        def stop(self):
+            events.append(("stop", self.environment.value))
+            self.is_running = False
+
+    code = main(
+        [],
+        choose=lambda: next(picks),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == [
+        ("start", "homo"),
+        ("clear", "homo"),
+        ("stop", "homo"),
+        ("start", "prod"),
+        ("start", "homo"),
+    ]
+
+
+def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch):
+    """El endpoint solo escribe el pedido; Config/perfil quedan inmutables."""
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from facturador import db
+    from facturador.api import create_app
+    from facturador.arca.wsfex import WsfexClient
+    from facturador.config import Config
+    from facturador.launcher.switch import (
+        LAUNCHER_SUPERVISED_ENV,
+        LAUNCHER_SUPERVISED_VALUE,
+        read_change_environment_request,
+    )
+    from facturador.profile import EnvironmentProfile
+    from tests.arca_fake import FakeArca, FakeWsaa
+    from tests.conftest import seed_params, seed_settings
+
+    monkeypatch.setenv(LAUNCHER_SUPERVISED_ENV, LAUNCHER_SUPERVISED_VALUE)
+    profile = EnvironmentProfile.for_testing(
+        ArcaEnvironment.HOMO, tmp_path / "profile-homo"
+    )
+    cert_pem, key_pem = test_cert_and_key
+    profile.paths.ensure_layout()
+    profile.paths.cert.write_bytes(cert_pem)
+    profile.paths.key.write_bytes(key_pem)
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    conn = db.connect(profile.paths.db)
+    seed_params(conn)
+    seed_settings(conn, ambiente="homo")
+    arca = FakeArca()
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
+    client = TestClient(app)
+
+    # Config frozen: no hay setter de ambiente.
+    with pytest.raises(Exception):
+        config.env = ArcaEnvironment.PROD  # type: ignore[misc]
+
+    before_env = app.state.profile.environment
+    before_service_env = app.state.service.config.env
+    before_wsfex_id = id(app.state.service.wsfex)
+    before_conn_id = id(app.state.service.conn)
+
+    r = client.post("/ui/cambiar-ambiente")
+    assert r.status_code == 200
+    assert "no se tocan" in r.text.lower() or "no cambia en caliente" in r.text.lower()
+
+    assert app.state.profile.environment is before_env is ArcaEnvironment.HOMO
+    assert app.state.service.config.env is before_service_env is ArcaEnvironment.HOMO
+    assert id(app.state.service.wsfex) == before_wsfex_id
+    assert id(app.state.service.conn) == before_conn_id
+    req = read_change_environment_request(profile.paths)
+    assert req is not None
+    assert req.from_environment is ArcaEnvironment.HOMO
