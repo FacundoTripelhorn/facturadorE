@@ -11,7 +11,7 @@
 </div>
 {% elif not emisores %}
 <div class="panel neutro">
-  <div>Dar de alta al menos un emisor del perfil {{ env }} para poder emitir.</div>
+  <div>Dar de alta al menos un emisor del perfil {{ env_label }} para poder emitir.</div>
 </div>
 {% endif %}
 
@@ -55,7 +55,7 @@
     <div class="fila">
       <div>
         <label>Ambiente ARCA</label>
-        <p class="nota" style="margin-top:0"><b>Ambiente ARCA:</b> {{ env }}
+        <p class="nota" style="margin-top:0"><b>Ambiente ARCA:</b> {{ env_label }}
         (read-only; lo define el perfil activo)</p>
       </div>
       <div>
@@ -107,7 +107,7 @@
         {% endfor %}
       </tbody>
     </table>
-    <p class="nota">★ = emisor activo en el perfil {{ env }} (con el que se emite).</p>
+    <p class="nota">★ = emisor activo en el perfil {{ env_label }} (con el que se emite).</p>
     {% else %}
     <p class="vacio">Todavía no hay emisores cargados.</p>
     {% endif %}
@@ -139,10 +139,10 @@
 </section>
 
 <p class="nota">
-  El ambiente ARCA ({{ env }}) es contexto de solo lectura del perfil activo;
-  el puerto se define en el <code>.env</code> del directorio de datos y los
-  certificados van en <code>secrets/</code>. Para facturar en otro ambiente,
-  arrancar la app con el perfil correspondiente.
+  El ambiente ARCA ({{ env_label }}) es contexto de solo lectura del perfil
+  activo; el puerto se define en el <code>.env</code> del directorio de datos
+  y los certificados van en <code>secrets/</code>. Para facturar en otro
+  ambiente, arrancar la app con el perfil correspondiente.
 </p>
 
 {% endblock %}
