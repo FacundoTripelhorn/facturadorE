@@ -462,8 +462,6 @@ def test_segundo_launcher_falla_claro_si_lock_vivo_sin_health(tmp_path):
     """Lock tomado pero /health caído → LauncherError visible, sin segundo backend."""
     import subprocess
 
-    from facturador.launcher import ProfileLock
-
     app_data = tmp_path / "appdata"
     profile = resolve_launch_profile(ArcaEnvironment.HOMO, app_data_root=app_data)
     profile.paths.ensure_layout()

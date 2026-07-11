@@ -125,7 +125,7 @@ class ProcessSupervisor:
         return self._reused
 
     def start(self) -> LaunchResult:
-        """Arranca el backend (o reutiliza sesión sana) y opcionalmente abre el browser."""
+        """Arranca el backend (o reutiliza sesión sana) y abre el browser."""
         if self.is_running:
             raise LauncherError(
                 "Ya hay un backend en marcha para este launcher. "
