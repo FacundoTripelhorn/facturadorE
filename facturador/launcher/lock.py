@@ -7,6 +7,10 @@ Comportamiento:
 - Adquisición no bloqueante con ``fcntl.flock`` / ``msvcrt.locking``.
 - El SO libera el flock al morir el proceso → locks stale no bloquean el
   arranque (se reescribe el metadata al adquirir).
+- El archivo ``launcher.lock`` **no se borra** al soltar: un unlink tras el
+  unlock abre una ventana donde otro proceso puede tomar el flock sobre un
+  inode que luego desaparece, y un tercero crea un archivo nuevo en el mismo
+  path (dos dueños aparentes del perfil).
 - Si el lock está tomado, el segundo launcher lee puerto/ambiente y puede
   reutilizar la sesión sana (abrir el browser) o fallar con mensaje claro.
 """
@@ -111,10 +115,14 @@ class ProfileLock:
             raise
 
     def release(self) -> None:
-        """Suelta el flock y borra el archivo si seguimos siendo dueños."""
+        """Suelta el flock; deja el archivo en disco (el flock es la autoridad).
+
+        No hacemos ``unlink``: entre unlock y unlink otro proceso puede adquirir
+        el flock sobre el mismo inode, y el unlink dejaría ese flock sobre un
+        archivo huérfano mientras un tercero crea un ``launcher.lock`` nuevo.
+        """
         fh = self._fh
         self._fh = None
-        holder = self._holder
         self._holder = None
         if fh is None:
             return
@@ -122,12 +130,6 @@ class ProfileLock:
             _unlock(fh)
         finally:
             fh.close()
-        if holder is not None and holder.pid == os.getpid():
-            try:
-                self.path.unlink(missing_ok=True)
-            except OSError:
-                # El archivo puede quedar; el flock ya no está tomado.
-                pass
 
     def __enter__(self) -> ProfileLock:
         return self
