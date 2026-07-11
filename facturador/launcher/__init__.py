@@ -16,7 +16,7 @@ from .lock import (
     is_process_alive,
     read_lock_holder,
 )
-from .supervisor import LaunchResult, LauncherError, ProcessSupervisor, start_backend
+from .supervisor import LauncherError, LaunchResult, ProcessSupervisor, start_backend
 
 __all__ = [
     "BackendLaunchPlan",
