@@ -244,6 +244,7 @@ def test_choose_environment_force_tty_usa_prompt_tty():
 
 def test_prompt_environment_gui_selecciona_homologacion(monkeypatch):
     """Humo de la ventana: programa un click y verifica el ambiente elegido."""
+    pytest.importorskip("tkinter")
     import tkinter
     from tkinter import ttk
 
@@ -269,6 +270,12 @@ def test_prompt_environment_gui_selecciona_homologacion(monkeypatch):
         original_mainloop(self)
 
     monkeypatch.setattr(tkinter.Tk, "mainloop", _auto_select)
+    try:
+        root_probe = tkinter.Tk()
+        root_probe.destroy()
+    except tkinter.TclError as exc:
+        pytest.skip(f"display no disponible para tkinter: {exc}")
+
     assert prompt_environment_gui(ENVIRONMENT_OPTIONS) is ArcaEnvironment.HOMO
 
 
