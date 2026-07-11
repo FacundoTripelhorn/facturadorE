@@ -78,7 +78,6 @@ archivo montado):
 ```dotenv
 # ~/facturador/.env  (obligatorio para Docker)
 ARCA_ENV=homo
-#FACTURADOR_PORT=8399
 ```
 
 Sin `ARCA_ENV` en ese archivo el contenedor no arranca. Para pasar a
@@ -89,7 +88,12 @@ cambio en caliente.
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
 `scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
 `http://localhost:8399`. Equivalente manual: `docker compose up -d`. Si
-`FACTURADOR_HOME` no es `~/facturador`, exportarlo antes de levantar compose.
+`FACTURADOR_HOME` no es `~/facturador`, exportarlo en el **shell del host**
+antes de levantar compose (compose interpola esa variable; no se lee del
+`.env` montado). El puerto publicado en el host se cambia igual:
+`export FACTURADOR_PORT=8400` antes de `compose up` / `launch.*` — no pongas
+`FACTURADOR_PORT` en `~/facturador/.env` (adentro del contenedor el puerto
+queda fijo en 8399).
 
 El puerto se publica **solo en `127.0.0.1`**: la app no es accesible desde la
 red. Dentro del contenedor, el entrypoint copia los secretos a un directorio
