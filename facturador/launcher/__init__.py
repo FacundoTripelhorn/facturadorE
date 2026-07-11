@@ -1,4 +1,4 @@
-"""Launcher de FacturadorE: supervisión de un backend por perfil (FAC-28)."""
+"""Launcher de FacturadorE: supervisión y lock de perfil (FAC-28 / FAC-30)."""
 
 from .command import (
     BackendLaunchPlan,
@@ -8,15 +8,30 @@ from .command import (
     resolve_launch_environment,
     resolve_launch_profile,
 )
-from .supervisor import LauncherError, ProcessSupervisor, start_backend
+from .lock import (
+    LockHolder,
+    ProfileLock,
+    ProfileLockError,
+    ProfileLockHeld,
+    is_process_alive,
+    read_lock_holder,
+)
+from .supervisor import LaunchResult, LauncherError, ProcessSupervisor, start_backend
 
 __all__ = [
     "BackendLaunchPlan",
+    "LaunchResult",
     "LauncherError",
+    "LockHolder",
     "ProcessSupervisor",
+    "ProfileLock",
+    "ProfileLockError",
+    "ProfileLockHeld",
     "build_backend_command",
     "build_backend_env",
+    "is_process_alive",
     "plan_backend_launch",
+    "read_lock_holder",
     "resolve_launch_environment",
     "resolve_launch_profile",
     "start_backend",

@@ -6,8 +6,9 @@ fija el ambiente inmutable; ``ProfilePaths`` deriva todos los archivos de
 runtime del perfil desde una única raíz.
 
 Todo archivo de runtime del backend (DB, certificados, PDFs, TA cache,
-params cache, logs, staging de backups, onboarding) se resuelve por acá
-(FAC-25); ningún módulo construye paths por ambiente por su cuenta.
+params cache, logs, staging de backups, onboarding, lock del launcher) se
+resuelve por acá (FAC-25 / FAC-30); ningún módulo construye paths por ambiente
+por su cuenta.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ KEY_FILENAME = "cert.key"
 WSAA_TA_CACHE_FILENAME = "ta-wsfex.json"
 LOG_FILENAME = "facturador.log"
 ONBOARDING_FILENAME = "onboarding.json"
+LAUNCHER_LOCK_FILENAME = "launcher.lock"
 
 _DISPLAY_NAMES = {
     ArcaEnvironment.HOMO: "Homologación",
@@ -157,6 +159,11 @@ class ProfilePaths:
     @property
     def onboarding(self) -> Path:
         return self.data_dir / ONBOARDING_FILENAME
+
+    @property
+    def launcher_lock(self) -> Path:
+        """Lock anti-duplicado del launcher sobre este perfil (FAC-30)."""
+        return self.data_dir / LAUNCHER_LOCK_FILENAME
 
     def ensure_layout(self) -> None:
         """Crea la estructura mínima del perfil en el primer arranque.

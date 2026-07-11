@@ -2,7 +2,9 @@
 
 Sin chooser (FAC-29): el ambiente se pasa explícito. Arranca el backend del
 perfil oculto, espera readiness, abre el browser y permanece en primer plano
-hasta Ctrl+C; entonces apaga el hijo sin dejarlo huérfano.
+hasta Ctrl+C; entonces apaga el hijo sin dejarlo huérfano. Si el perfil ya
+tiene una sesión sana (FAC-30), reabre el browser y sale sin duplicar el
+backend.
 """
 
 from __future__ import annotations
@@ -82,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         readiness_timeout=args.timeout,
     )
     try:
-        plan = supervisor.start()
+        result = supervisor.start()
     except LauncherError as exc:
         _report_failure(str(exc))
         return 1
@@ -93,6 +95,15 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         # start() ya apagó el hijo; no dejar traceback al usuario.
         print("\nDeteniendo…", flush=True)
+        return 0
+
+    plan = result.plan
+    if result.reused:
+        print(
+            f"FacturadorE ({plan.profile.display_name}) ya estaba en marcha "
+            f"en {plan.base_url}/; se reabrió la sesión existente.",
+            flush=True,
+        )
         return 0
 
     print(

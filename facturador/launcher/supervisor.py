@@ -1,8 +1,9 @@
-"""Supervisor de proceso del launcher (FAC-28, ADR 0001).
+"""Supervisor de proceso del launcher (FAC-28 / FAC-30, ADR 0001).
 
 Arranca un backend ligado a un único perfil, espera ``GET /health``, abre el
-browser solo si quedó listo, y apaga el hijo sin dejarlo huérfano. Sin
-chooser (FAC-29) ni locks anti-duplicado (FAC-30): acá solo supervisión.
+browser solo si quedó listo, y apaga el hijo sin dejarlo huérfano. El lock de
+perfil (FAC-30) evita un segundo backend sobre el mismo SQLite; si ya hay una
+sesión sana, se reutiliza abriendo el browser.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from typing import Any
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile
 from .command import BackendLaunchPlan, plan_backend_launch
+from .lock import LockHolder, ProfileLock, ProfileLockHeld
 
 DEFAULT_READINESS_TIMEOUT_S = 60.0
 DEFAULT_STOP_TIMEOUT_S = 10.0
@@ -36,6 +38,14 @@ _log = logging.getLogger(__name__)
 
 class LauncherError(RuntimeError):
     """Fallo de arranque/parada visible para el usuario (sin jerga interna)."""
+
+
+@dataclass(frozen=True)
+class LaunchResult:
+    """Resultado de ``ProcessSupervisor.start``: plan y si se reutilizó sesión."""
+
+    plan: BackendLaunchPlan
+    reused: bool = False
 
 
 @dataclass
@@ -53,6 +63,9 @@ class ProcessSupervisor:
     base_env: Mapping[str, str] | None = None
     # Inyectable en tests: reemplaza ``python -m facturador``.
     command_override: list[str] | None = None
+    # FAC-30: por defecto toma el lock de perfil; False solo en tests unitarios
+    # del ciclo start/stop sin contención.
+    acquire_profile_lock: bool = True
 
     _plan: BackendLaunchPlan | None = field(default=None, init=False, repr=False)
     _process: subprocess.Popen[bytes] | None = field(
@@ -63,6 +76,8 @@ class ProcessSupervisor:
     _output_thread: threading.Thread | None = field(
         default=None, init=False, repr=False
     )
+    _lock: ProfileLock | None = field(default=None, init=False, repr=False)
+    _reused: bool = field(default=False, init=False, repr=False)
 
     @property
     def plan(self) -> BackendLaunchPlan:
@@ -103,10 +118,14 @@ class ProcessSupervisor:
 
     @property
     def is_ready(self) -> bool:
-        return self._ready and self.is_running
+        return self._ready and (self._reused or self.is_running)
 
-    def start(self) -> BackendLaunchPlan:
-        """Arranca el backend, espera readiness y opcionalmente abre el browser."""
+    @property
+    def was_reused(self) -> bool:
+        return self._reused
+
+    def start(self) -> LaunchResult:
+        """Arranca el backend (o reutiliza sesión sana) y opcionalmente abre el browser."""
         if self.is_running:
             raise LauncherError(
                 "Ya hay un backend en marcha para este launcher. "
@@ -114,6 +133,24 @@ class ProcessSupervisor:
             )
         plan = self.plan
         self._ready = False
+        self._reused = False
+
+        if self.acquire_profile_lock:
+            reused = self._acquire_or_reuse(plan)
+            if reused is not None:
+                self._reused = True
+                self._ready = True
+                self._open_browser_if_needed(reused.base_url)
+                # Plan sintético con el puerto de la sesión existente.
+                reused_plan = BackendLaunchPlan(
+                    environment=plan.environment,
+                    profile=plan.profile,
+                    command=list(plan.command),
+                    env=dict(plan.env),
+                    port=reused.port,
+                )
+                return LaunchResult(plan=reused_plan, reused=True)
+
         self._process = self._spawn(plan)
         try:
             payload = self._wait_until_ready(plan)
@@ -123,24 +160,18 @@ class ProcessSupervisor:
             # El hijo vive en su propia session/process group: Ctrl+C solo
             # llega al launcher. Hay que apagarlo acá o queda huérfano.
             self._stop_process(timeout=DEFAULT_STOP_TIMEOUT_S)
+            self._release_lock()
             raise
-        if self.open_browser:
-            try:
-                self.browser_opener(f"{plan.base_url}/")
-            except Exception:
-                # El backend ya está listo: un fallo al abrir el browser no
-                # debe tumbar el launcher ni dejar el proceso sin supervisión.
-                _log.warning(
-                    "No se pudo abrir el navegador; la app ya está en %s/",
-                    plan.base_url,
-                    exc_info=True,
-                )
-        return plan
+        self._open_browser_if_needed(plan.base_url)
+        return LaunchResult(plan=plan, reused=False)
 
     def stop(self, *, timeout: float = DEFAULT_STOP_TIMEOUT_S) -> None:
-        """Apagado limpio: SIGTERM/terminate y kill si no responde."""
+        """Apagado limpio: SIGTERM/terminate y kill si no responde; suelta el lock."""
         self._ready = False
-        self._stop_process(timeout=timeout)
+        try:
+            self._stop_process(timeout=timeout)
+        finally:
+            self._release_lock()
 
     def __enter__(self) -> ProcessSupervisor:
         self.start()
@@ -148,6 +179,62 @@ class ProcessSupervisor:
 
     def __exit__(self, *exc: object) -> None:
         self.stop()
+
+    def _acquire_or_reuse(self, plan: BackendLaunchPlan) -> LockHolder | None:
+        """Toma el lock del perfil, o devuelve el holder si hay sesión reutilizable.
+
+        Raises:
+            LauncherError: lock tomado y sesión no reutilizable.
+        """
+        lock = ProfileLock(plan.profile.paths.launcher_lock)
+        try:
+            lock.acquire(port=plan.port, environment=plan.environment.value)
+        except ProfileLockHeld as exc:
+            holder = exc.holder
+            if self._holder_session_healthy(holder, plan.environment):
+                return holder
+            # Sesión viva (lock tomado) pero /health no OK: mensaje claro.
+            raise LauncherError(
+                f"{exc} "
+                "Si no ves la ventana, cerrá la otra instancia e intentá de nuevo."
+            ) from exc
+        self._lock = lock
+        return None
+
+    def _holder_session_healthy(
+        self, holder: LockHolder, expected: ArcaEnvironment
+    ) -> bool:
+        if holder.environment != expected.value:
+            return False
+        try:
+            payload = self._get_health(holder.health_url)
+        except LauncherError:
+            return False
+        try:
+            self._assert_ready_environment(payload, expected)
+        except LauncherError:
+            return False
+        return True
+
+    def _release_lock(self) -> None:
+        lock = self._lock
+        self._lock = None
+        if lock is not None:
+            lock.release()
+
+    def _open_browser_if_needed(self, base_url: str) -> None:
+        if not self.open_browser:
+            return
+        try:
+            self.browser_opener(f"{base_url}/")
+        except Exception:
+            # El backend ya está listo: un fallo al abrir el browser no
+            # debe tumbar el launcher ni dejar el proceso sin supervisión.
+            _log.warning(
+                "No se pudo abrir el navegador; la app ya está en %s/",
+                base_url,
+                exc_info=True,
+            )
 
     def _spawn(self, plan: BackendLaunchPlan) -> subprocess.Popen[bytes]:
         self._output_chunks = []
