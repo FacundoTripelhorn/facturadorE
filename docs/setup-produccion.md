@@ -71,6 +71,10 @@ Colocá ahí `cert.crt` / `cert.key` (key en `400`) y relanzá.
 mkdir -p ~/facturador/profiles/prod/secrets
 cp cert.key cert.crt ~/facturador/profiles/prod/secrets/
 chmod 400 ~/facturador/profiles/prod/secrets/cert.key
+
+# Fijar Producción y reiniciar el contenedor (no hay hot-switch)
+printf 'ARCA_ENV=prod\n' > ~/facturador/.env
+docker compose down && docker compose up -d
 ```
 
 En la página **Configuración** de la sesión **Producción**, cargá el
@@ -121,7 +125,8 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
   el último backup del perfil Producción antes de emitir. Forzar
   (`force_desync`) solo si se entiende exactamente por qué difiere.
 - **Backups.** El estado de un perfil es `data/` + `secrets/`. Hacer backup
-  después de cada emisión (`facturador.backup --env prod`); para snapshots de
+  después de cada emisión: nativo `facturador.backup --env prod`; Docker
+  `facturador.backup --root ~/facturador/profiles/prod`. Para snapshots de
   la DB usar `sqlite3 .backup`, nunca copiar el archivo en caliente. Si el
   backup sale de la máquina (p. ej. S3), **cifrar del lado del cliente** antes
   de subir: el tarball contiene la clave fiscal.
