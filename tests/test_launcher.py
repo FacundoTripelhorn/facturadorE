@@ -1119,7 +1119,10 @@ def test_handle_change_cancel_mantiene_backend_sin_stop(tmp_path):
 
 def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
     """Al confirmar el otro ambiente, stop() corre antes de devolver SwitchTo."""
-    from facturador.launcher.__main__ import SwitchTo, _handle_change_environment_request
+    from facturador.launcher.__main__ import (
+        SwitchTo,
+        _handle_change_environment_request,
+    )
     from facturador.launcher.switch import write_change_environment_request
     from facturador.profile import ProfilePaths
 
@@ -1222,6 +1225,8 @@ def test_handle_change_mismo_ambiente_no_reinicia(tmp_path):
 
 def test_main_switch_stop_antes_de_arrancar_destino_y_fallo_vuelve_chooser():
     """Flujo FAC-32: stop del actual → start del nuevo; fallo vuelve al chooser."""
+    import subprocess
+
     from facturador.launcher.__main__ import main
     from facturador.launcher.command import plan_backend_launch
     from facturador.launcher.supervisor import LaunchResult
@@ -1352,7 +1357,9 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     client = TestClient(app)
 
     # Config frozen: no hay setter de ambiente.
-    with pytest.raises(Exception):
+    from dataclasses import FrozenInstanceError
+
+    with pytest.raises(FrozenInstanceError):
         config.env = ArcaEnvironment.PROD  # type: ignore[misc]
 
     before_env = app.state.profile.environment
