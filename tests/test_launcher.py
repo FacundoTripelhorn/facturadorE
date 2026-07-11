@@ -1,4 +1,8 @@
-"""Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28)."""
+"""Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28).
+
+También cubre el chooser de ambiente (FAC-29) y el lock anti-duplicado
+(FAC-30).
+"""
 
 from __future__ import annotations
 
@@ -14,15 +18,19 @@ import pytest
 
 from facturador.constants import ArcaEnvironment
 from facturador.launcher import (
+    ENVIRONMENT_OPTIONS,
     LauncherError,
     ProcessSupervisor,
     build_backend_command,
     build_backend_env,
+    choose_environment,
+    environment_options,
     plan_backend_launch,
+    prompt_environment_tty,
     resolve_launch_environment,
     resolve_launch_profile,
 )
-from facturador.profile import ProfileError, resolve_app_data_root
+from facturador.profile import EnvironmentProfile, ProfileError, resolve_app_data_root
 
 
 def _free_port() -> int:
@@ -124,6 +132,269 @@ def test_facturador_app_data_relativo_rechazado(monkeypatch):
     monkeypatch.setenv("FACTURADOR_APP_DATA", "relative/path")
     with pytest.raises(ProfileError, match="FACTURADOR_APP_DATA"):
         resolve_app_data_root()
+
+
+# --- FAC-29: chooser de ambiente --------------------------------------------
+
+
+_FORBIDDEN_CHOOSER_TERMS = (
+    "docker",
+    "profile",
+    "perfil",
+    "FACTURADOR_HOME",
+    "FACTURADOR_APP_DATA",
+    "ARCA_ENV",
+    ".env",
+    "sqlite",
+    "uvicorn",
+    "localhost",
+    "127.0.0.1",
+    "secrets/",
+    "cert.crt",
+    "cert.key",
+    "/homo",
+    "/prod",
+)
+
+
+def test_chooser_options_lenguaje_de_negocio_sin_jerga_interna(tmp_path):
+    options = environment_options()
+    assert options is ENVIRONMENT_OPTIONS
+    assert len(options) == 2
+
+    by_env = {opt.environment: opt for opt in options}
+    assert by_env[ArcaEnvironment.HOMO].title == "Homologación"
+    assert by_env[ArcaEnvironment.PROD].title == "Producción"
+    # Títulos alineados con el display_name del perfil.
+    for environment, option in by_env.items():
+        profile = EnvironmentProfile.for_testing(
+            environment, tmp_path / environment.value
+        )
+        assert option.title == profile.display_name
+
+    homo_desc = by_env[ArcaEnvironment.HOMO].description.lower()
+    prod_desc = by_env[ArcaEnvironment.PROD].description.lower()
+    assert "prueba" in homo_desc or "seguro" in homo_desc
+    assert "valor fiscal" in homo_desc
+    assert "fiscal" in prod_desc
+    assert "real" in prod_desc
+
+    visible = " ".join(
+        f"{opt.title} {opt.description}" for opt in options
+    ).lower()
+    for term in _FORBIDDEN_CHOOSER_TERMS:
+        assert term.lower() not in visible, term
+
+
+def test_prompt_environment_tty_selecciona_por_numero():
+    outputs: list[str] = []
+    answers = iter(["1"])
+
+    chosen = prompt_environment_tty(
+        ENVIRONMENT_OPTIONS,
+        input_fn=lambda _prompt: next(answers),
+        print_fn=lambda *args, **_kwargs: outputs.append(" ".join(map(str, args))),
+    )
+
+    assert chosen is ArcaEnvironment.HOMO
+    joined = "\n".join(outputs)
+    assert "Homologación" in joined
+    assert "Producción" in joined
+    assert "prueba" in joined.lower() or "seguro" in joined.lower()
+    assert "fiscal" in joined.lower()
+    for term in ("docker", "ARCA_ENV", "FACTURADOR_HOME", ".env"):
+        assert term.lower() not in joined.lower()
+
+
+def test_prompt_environment_tty_cancelar_con_enter():
+    chosen = prompt_environment_tty(
+        ENVIRONMENT_OPTIONS,
+        input_fn=lambda _prompt: "",
+        print_fn=lambda *_args, **_kwargs: None,
+    )
+    assert chosen is None
+
+
+def test_prompt_environment_tty_acepta_nombre_de_negocio():
+    answers = iter(["producción"])
+    chosen = prompt_environment_tty(
+        ENVIRONMENT_OPTIONS,
+        input_fn=lambda _prompt: next(answers),
+        print_fn=lambda *_args, **_kwargs: None,
+    )
+    assert chosen is ArcaEnvironment.PROD
+
+
+def test_choose_environment_force_tty_usa_prompt_tty():
+    called: list[object] = []
+
+    def _tty(options):
+        called.append(options)
+        return ArcaEnvironment.PROD
+
+    def _gui(_options):
+        raise AssertionError("no debería abrir GUI con force_tty")
+
+    assert (
+        choose_environment(force_tty=True, prompt_tty=_tty, prompt_gui=_gui)
+        is ArcaEnvironment.PROD
+    )
+    assert called == [ENVIRONMENT_OPTIONS]
+
+
+def test_prompt_environment_gui_selecciona_homologacion(monkeypatch):
+    """Humo de la ventana: programa un click y verifica el ambiente elegido."""
+    import tkinter
+    from tkinter import ttk
+
+    from facturador.launcher.chooser import prompt_environment_gui
+
+    original_mainloop = tkinter.Tk.mainloop
+
+    def _auto_select(self: tkinter.Tk) -> None:
+        def _walk(widget: tkinter.Misc):
+            yield widget
+            for child in widget.winfo_children():
+                yield from _walk(child)
+
+        def _click() -> None:
+            for widget in _walk(self):
+                if isinstance(widget, ttk.Button):
+                    text = str(widget.cget("text"))
+                    if text.startswith("Abrir Homologación"):
+                        widget.invoke()
+                        return
+
+        self.after(50, _click)
+        original_mainloop(self)
+
+    monkeypatch.setattr(tkinter.Tk, "mainloop", _auto_select)
+    assert prompt_environment_gui(ENVIRONMENT_OPTIONS) is ArcaEnvironment.HOMO
+
+
+def test_main_sin_env_usa_chooser_y_arranca_solo_ese_perfil():
+    from facturador.launcher.__main__ import main
+
+    started: list[ArcaEnvironment] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            started.append(self.environment)
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            plan = plan_backend_launch(self.environment, port=8399)
+            return LaunchResult(plan=plan, reused=True)
+
+        def stop(self):
+            return None
+
+    code = main(
+        [],
+        choose=lambda: ArcaEnvironment.HOMO,
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+    assert started == [ArcaEnvironment.HOMO]
+
+
+def test_main_con_env_no_abre_chooser():
+    from facturador.launcher.__main__ import main
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            return LaunchResult(
+                plan=plan_backend_launch(self.environment, port=8399),
+                reused=True,
+            )
+
+    def _boom_chooser():
+        raise AssertionError("con --env no debe abrirse el chooser")
+
+    code = main(
+        ["--env", "prod"],
+        choose=_boom_chooser,
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+
+
+def test_main_chooser_cancel_sale_cero():
+    from facturador.launcher.__main__ import main
+
+    def _boom_factory(**_kwargs):
+        raise AssertionError("cancelar no debe crear supervisor")
+
+    assert main([], choose=lambda: None, supervisor_factory=_boom_factory) == 0
+
+
+def test_main_startup_error_vuelve_al_chooser():
+    """Tras un fallo de arranque el chooser sigue usable (segunda elección)."""
+    from facturador.launcher.__main__ import main
+
+    picks = iter([ArcaEnvironment.PROD, ArcaEnvironment.HOMO])
+    attempts: list[ArcaEnvironment] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            attempts.append(self.environment)
+            if self.environment is ArcaEnvironment.PROD:
+                raise LauncherError(
+                    "No se pudo iniciar el backend de Producción: sin certificados."
+                )
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            return LaunchResult(
+                plan=plan_backend_launch(self.environment, port=8399),
+                reused=True,
+            )
+
+    code = main(
+        [],
+        choose=lambda: next(picks),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert attempts == [ArcaEnvironment.PROD, ArcaEnvironment.HOMO]
+
+
+def test_main_startup_error_con_env_no_reintenta():
+    from facturador.launcher.__main__ import main
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+
+        def start(self):
+            raise LauncherError("fallo de arranque")
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 1
 
 
 # --- Supervisor: fallos visibles y humo launcher→backend --------------------

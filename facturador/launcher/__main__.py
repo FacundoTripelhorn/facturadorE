@@ -1,22 +1,30 @@
-"""CLI del launcher: ``python -m facturador.launcher --env homo|prod``.
+"""CLI del launcher: ``python -m facturador.launcher [--env homo|prod]``.
 
-Sin chooser (FAC-29): el ambiente se pasa explícito. Arranca el backend del
-perfil oculto, espera readiness, abre el browser y permanece en primer plano
-hasta Ctrl+C; entonces apaga el hijo sin dejarlo huérfano. Si el perfil ya
-tiene una sesión sana (FAC-30), reabre el browser y sale sin duplicar el
-backend.
+Sin ``--env`` muestra el chooser (FAC-29): Homologación o Producción en
+lenguaje de negocio. Con ``--env`` arranca ese ambiente de una vez (tests /
+automatización). El supervisor (FAC-28) arranca el backend del perfil oculto,
+espera readiness, abre el browser y permanece en primer plano hasta Ctrl+C.
+Si el perfil ya tiene una sesión sana (FAC-30), reabre el browser y sale sin
+duplicar el backend. Un error de arranque desde el chooser vuelve a la
+pantalla de elección.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
+from collections.abc import Callable
 
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
+from .chooser import ChooserUnavailable, choose_environment
 from .command import resolve_launch_environment
 from .supervisor import LauncherError, ProcessSupervisor
+
+# Inyectable en tests: reemplaza la pantalla/menú del chooser.
+_ChooseFn = Callable[..., ArcaEnvironment | None]
 
 
 def _parse_port(value: str) -> int:
@@ -38,16 +46,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m facturador.launcher",
         description=(
-            "Supervisor del launcher de FacturadorE: arranca un backend "
-            "ligado a Homologación o Producción, espera /health y abre el "
-            "navegador."
+            "Launcher de FacturadorE: elegí Homologación o Producción, "
+            "arranca el backend, espera /health y abre el navegador."
         ),
     )
     parser.add_argument(
         "--env",
-        required=True,
+        required=False,
+        default=None,
         choices=[e.value for e in ArcaEnvironment],
-        help="Ambiente a iniciar: homo (Homologación) o prod (Producción).",
+        help=(
+            "Ambiente a iniciar sin mostrar el chooser: "
+            "homo (Homologación) o prod (Producción)."
+        ),
     )
     parser.add_argument(
         "--port",
@@ -69,15 +80,64 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    choose: _ChooseFn | None = None,
+    supervisor_factory: Callable[..., ProcessSupervisor] | None = None,
+    report_failure: Callable[[str], None] | None = None,
+) -> int:
     args = _build_parser().parse_args(argv)
-    try:
-        environment = resolve_launch_environment(args.env)
-    except ProfileError as exc:
-        _report_failure(str(exc))
-        return 2
+    factory = supervisor_factory or ProcessSupervisor
+    chooser = choose or choose_environment
+    fail = report_failure or _report_failure
 
-    supervisor = ProcessSupervisor(
+    if args.env is not None:
+        try:
+            environment = resolve_launch_environment(args.env)
+        except ProfileError as exc:
+            fail(str(exc))
+            return 2
+        code = _run_session(
+            environment, args, factory=factory, report_failure=fail
+        )
+        # Sin chooser: _run_session nunca pide reintento (None).
+        return 0 if code is None else code
+
+    # Chooser interactivo: un error de arranque vuelve a la elección.
+    while True:
+        try:
+            selected = chooser()
+        except ChooserUnavailable as exc:
+            fail(
+                "No se pudo mostrar el selector de ambiente. "
+                f"{exc}"
+            )
+            return 2
+        if selected is None:
+            return 0
+        code = _run_session(
+            selected,
+            args,
+            factory=factory,
+            report_failure=fail,
+            return_to_chooser_on_startup_error=True,
+        )
+        if code is None:
+            continue
+        return code
+
+
+def _run_session(
+    environment: ArcaEnvironment,
+    args: argparse.Namespace,
+    *,
+    factory: Callable[..., ProcessSupervisor],
+    report_failure: Callable[[str], None],
+    return_to_chooser_on_startup_error: bool = False,
+) -> int | None:
+    """Supervisa una sesión. ``None`` = volver al chooser tras fallo de start."""
+    supervisor = factory(
         environment=environment,
         port=args.port,
         open_browser=not args.no_browser,
@@ -86,12 +146,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = supervisor.start()
     except LauncherError as exc:
-        _report_failure(str(exc))
-        return 1
+        report_failure(str(exc))
+        return None if return_to_chooser_on_startup_error else 1
     except ProfileError as exc:
         # Cinturón por si el plan falla fuera del parser (p.ej. puerto vía API).
-        _report_failure(str(exc))
-        return 2
+        report_failure(str(exc))
+        return None if return_to_chooser_on_startup_error else 2
     except KeyboardInterrupt:
         # start() ya apagó el hijo; no dejar traceback al usuario.
         print("\nDeteniendo…", flush=True)
@@ -123,11 +183,12 @@ def main(argv: list[str] | None = None) -> int:
             if supervisor.process is not None
             else 1
         )
-        _report_failure(
+        report_failure(
             f"El backend de {plan.profile.display_name} se detuvo solo "
             f"(código {code})."
         )
-        return 1
+        # Caída post-arranque: desde el chooser se puede elegir de nuevo.
+        return None if return_to_chooser_on_startup_error else 1
     except KeyboardInterrupt:
         print("\nDeteniendo…", flush=True)
         supervisor.stop()
@@ -135,8 +196,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _report_failure(message: str) -> None:
-    """Falla visible: stderr siempre; diálogo nativo si no hay TTY."""
+    """Falla visible: stderr siempre; diálogo nativo si no hay TTY.
+
+    Sin diálogo bajo pytest (``PYTEST_CURRENT_TEST``) para no bloquear la suite
+    con un messagebox modal en el display del agente.
+    """
     print(f"ERROR: {message}", file=sys.stderr, flush=True)
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
     if sys.stdin.isatty() and sys.stderr.isatty():
         return
     try:
