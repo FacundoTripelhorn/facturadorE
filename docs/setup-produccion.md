@@ -130,11 +130,12 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
   el último backup del perfil Producción antes de emitir. Forzar
   (`force_desync`) solo si se entiende exactamente por qué difiere.
 - **Backups.** El estado de un perfil es `data/` + `secrets/`. Hacer backup
-  después de cada emisión: nativo `facturador.backup --env prod`; Docker
-  `facturador.backup --root ~/facturador/profiles/prod`. Para snapshots de
-  la DB usar `sqlite3 .backup`, nunca copiar el archivo en caliente. Si el
-  backup sale de la máquina (p. ej. S3), **cifrar del lado del cliente** antes
-  de subir: el tarball contiene la clave fiscal.
+  después de cada emisión: nativo
+  `uv run python -m facturador.backup --env prod`; Docker
+  `uv run python -m facturador.backup --root ~/facturador/profiles/prod`.
+  Para snapshots de la DB usar `sqlite3 .backup`, nunca copiar el archivo en
+  caliente. Si el backup sale de la máquina (p. ej. S3), **cifrar del lado
+  del cliente** antes de subir: el tarball contiene la clave fiscal.
 - **Una sola máquina emite.** Si se usan varias computadoras, una es la
   primaria; en la secundaria se restaura el backup antes de emitir. Nunca
   emitir desde dos copias en paralelo (el chequeo de registro desactualizado

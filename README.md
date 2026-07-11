@@ -70,20 +70,21 @@ modo `400`).
 
 Un contenedor corre **un solo ambiente** (el elegido al arrancar). Homologación
 y Producción no comparten base ni certificados. Los scripts de doble click
-**no** muestran el chooser del launcher nativo: hay que fijar el ambiente
-antes del primer `compose up`, en el `.env` del home de datos (la app lo crea
-vacío si no existe) o en el entorno del shell:
+**no** muestran el chooser del launcher nativo: hay que fijar el ambiente en
+`<FACTURADOR_HOME>/.env` **antes** del primer `compose up` (compose no pasa
+`ARCA_ENV` del shell del host al contenedor; el entrypoint solo lee ese
+archivo montado):
 
 ```dotenv
-# ~/facturador/.env  (o export ARCA_ENV=… antes de compose)
+# ~/facturador/.env  (obligatorio para Docker)
 ARCA_ENV=homo
 #FACTURADOR_PORT=8399
 ```
 
-Sin `ARCA_ENV` el contenedor no arranca. Para pasar a Producción: parar el
-contenedor, poner `ARCA_ENV=prod` (y el par `cert.*` bajo
-`profiles/prod/secrets/`), y volver a levantar — un reinicio, no un cambio en
-caliente.
+Sin `ARCA_ENV` en ese archivo el contenedor no arranca. Para pasar a
+Producción: parar el contenedor, poner `ARCA_ENV=prod` (y el par `cert.*`
+bajo `profiles/prod/secrets/`), y volver a levantar — un reinicio, no un
+cambio en caliente.
 
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
 `scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
@@ -119,12 +120,12 @@ emisor que van al PDF, punto de venta, bucket S3 de backups), así viaja
 dentro del backup cifrado como parte del estado.
 
 El ambiente lo elige el **launcher nativo** (Homologación / Producción) o, en
-Docker, `ARCA_ENV` al arrancar el contenedor. Cada proceso backend arranca con
-exactamente un ambiente inmutable; las URLs de ARCA y el par
-certificado/clave salen de ese perfil. El CUIT emisor se extrae del
-certificado. Sin el par `cert.crt` / `cert.key` (key en `400`/`600`), la app
-se niega a arrancar y muestra dónde colocarlos. Sin datos de emisor, la UI
-dirige a Configuración antes de permitir emitir.
+Docker, `ARCA_ENV` en `<FACTURADOR_HOME>/.env` al arrancar el contenedor.
+Cada proceso backend arranca con exactamente un ambiente inmutable; las URLs
+de ARCA y el par certificado/clave salen de ese perfil. El CUIT emisor se
+extrae del certificado. Sin el par `cert.crt` / `cert.key` (key en
+`400`/`600`), la app se niega a arrancar y muestra dónde colocarlos. Sin
+datos de emisor, la UI dirige a Configuración antes de permitir emitir.
 
 La clave privada va **sin passphrase**: la protegen los permisos `400`, el
 perfil local y el cifrado del backup al salir de la máquina.

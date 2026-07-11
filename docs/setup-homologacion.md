@@ -80,8 +80,8 @@ ARCA_ENV=homo
 EOF
 ```
 
-Sin `ARCA_ENV` en el entorno o en `~/facturador/.env`, el contenedor no
-arranca. Después: `docker compose up -d` (o doble click en
+Sin `ARCA_ENV` en `~/facturador/.env`, el contenedor no arranca
+(compose no inyecta el `ARCA_ENV` del shell del host). Después: `docker compose up -d` (o doble click en
 `scripts/launch.command` / `launch.cmd`).
 
 La app **se niega a arrancar** si falta el par o si la key tiene permisos más
@@ -90,10 +90,11 @@ laxos que `400`/`600`.
 ## 4. Ambiente y configuración de dominio
 
 Con el **launcher nativo**, el ambiente lo elige el chooser (Homologación).
-Con **Docker**, el ambiente se fija con `ARCA_ENV` en `FACTURADOR_HOME/.env`
-(o en el entorno) **antes** de levantar el contenedor — los scripts
-`launch.*` no muestran el chooser. Un proceso backend = un ambiente
-inmutable; no se cambia editando el flag en caliente (hay que reiniciar).
+Con **Docker**, el ambiente se fija escribiendo `ARCA_ENV` en
+`FACTURADOR_HOME/.env` **antes** de levantar el contenedor — los scripts
+`launch.*` no muestran el chooser y compose no pasa variables del shell al
+contenedor. Un proceso backend = un ambiente inmutable; no se cambia
+editando el flag en caliente (hay que reiniciar).
 
 El resto de la configuración (datos del emisor que van al PDF, punto de
 venta, backups) **vive en la app**: se completa en la página **Configuración**
