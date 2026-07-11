@@ -73,15 +73,27 @@ mkdir -p ~/facturador/profiles/homo/secrets
 cp cert.key cert.crt ~/facturador/profiles/homo/secrets/
 chmod 700 ~/facturador/profiles/homo/secrets
 chmod 400 ~/facturador/profiles/homo/secrets/cert.key
+
+# Los scripts launch.* no muestran el chooser: fijar el ambiente antes
+cat >> ~/facturador/.env <<'EOF'
+ARCA_ENV=homo
+EOF
 ```
+
+Sin `ARCA_ENV` en el entorno o en `~/facturador/.env`, el contenedor no
+arranca. Después: `docker compose up -d` (o doble click en
+`scripts/launch.command` / `launch.cmd`).
 
 La app **se niega a arrancar** si falta el par o si la key tiene permisos más
 laxos que `400`/`600`.
 
 ## 4. Ambiente y configuración de dominio
 
-El ambiente lo elige el **launcher** (Homologación). Un proceso backend = un
-ambiente inmutable; no se cambia editando un flag en caliente.
+Con el **launcher nativo**, el ambiente lo elige el chooser (Homologación).
+Con **Docker**, el ambiente se fija con `ARCA_ENV` en `FACTURADOR_HOME/.env`
+(o en el entorno) **antes** de levantar el contenedor — los scripts
+`launch.*` no muestran el chooser. Un proceso backend = un ambiente
+inmutable; no se cambia editando el flag en caliente (hay que reiniciar).
 
 El resto de la configuración (datos del emisor que van al PDF, punto de
 venta, backups) **vive en la app**: se completa en la página **Configuración**

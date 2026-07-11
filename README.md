@@ -69,18 +69,32 @@ certificado/clave del ambiente que vas a usar (`cert.crt` / `cert.key`, key en
 modo `400`).
 
 Un contenedor corre **un solo ambiente** (el elegido al arrancar). Homologación
-y Producción no comparten base ni certificados.
+y Producción no comparten base ni certificados. Los scripts de doble click
+**no** muestran el chooser del launcher nativo: hay que fijar el ambiente
+antes del primer `compose up`, en el `.env` del home de datos (la app lo crea
+vacío si no existe) o en el entorno del shell:
+
+```dotenv
+# ~/facturador/.env  (o export ARCA_ENV=… antes de compose)
+ARCA_ENV=homo
+#FACTURADOR_PORT=8399
+```
+
+Sin `ARCA_ENV` el contenedor no arranca. Para pasar a Producción: parar el
+contenedor, poner `ARCA_ENV=prod` (y el par `cert.*` bajo
+`profiles/prod/secrets/`), y volver a levantar — un reinicio, no un cambio en
+caliente.
 
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
 `scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
-`http://localhost:8399`. Equivalente manual: fijar el ambiente y
-`docker compose up -d`. Si `FACTURADOR_HOME` no es `~/facturador`, exportarlo
-antes de levantar compose.
+`http://localhost:8399`. Equivalente manual: `docker compose up -d`. Si
+`FACTURADOR_HOME` no es `~/facturador`, exportarlo antes de levantar compose.
 
 El puerto se publica **solo en `127.0.0.1`**: la app no es accesible desde la
 red. Dentro del contenedor, el entrypoint copia los secretos a un directorio
 interno con `chmod 400` (los bind mounts de Docker Desktop no tienen semántica
-POSIX confiable) y deja datos/backups persistiendo en el host.
+POSIX confiable) y deja datos/backups persistiendo en el host bajo
+`profiles/<env>/`.
 
 ## Uso sin Docker
 
@@ -104,11 +118,12 @@ La app es dueña de su configuración: casi todo se edita desde la página
 emisor que van al PDF, punto de venta, bucket S3 de backups), así viaja
 dentro del backup cifrado como parte del estado.
 
-El ambiente lo elige el **launcher** (Homologación / Producción). Cada
-proceso backend arranca con exactamente un ambiente inmutable; las URLs de
-ARCA y el par certificado/clave salen de ese perfil. El CUIT emisor se extrae
-del certificado. Sin el par `cert.crt` / `cert.key` (key en `400`/`600`), la
-app se niega a arrancar y muestra dónde colocarlos. Sin datos de emisor, la UI
+El ambiente lo elige el **launcher nativo** (Homologación / Producción) o, en
+Docker, `ARCA_ENV` al arrancar el contenedor. Cada proceso backend arranca con
+exactamente un ambiente inmutable; las URLs de ARCA y el par
+certificado/clave salen de ese perfil. El CUIT emisor se extrae del
+certificado. Sin el par `cert.crt` / `cert.key` (key en `400`/`600`), la app
+se niega a arrancar y muestra dónde colocarlos. Sin datos de emisor, la UI
 dirige a Configuración antes de permitir emitir.
 
 La clave privada va **sin passphrase**: la protegen los permisos `400`, el
@@ -165,16 +180,25 @@ El estado del **ambiente activo** (DB — configuración incluida — + PDFs +
 secretos) se respalda cifrado del lado del cliente con age y, opcionalmente,
 se sube a un bucket S3 privado (se configura en la página Configuración). La
 passphrase es del usuario y no vive en ningún lado. Cada ambiente tiene sus
-propios backups. Correr en el host después de emitir:
+propios backups. Correr en el **host** después de emitir (no dentro del
+contenedor):
 
 ```bash
-uv run python -m facturador.backup --env homo                     # cifra y sube si hay bucket
-uv run python -m facturador.restore --latest --bucket mi-bucket   # máquina secundaria: baja y restaura
+# Launcher nativo: --env resuelve el perfil en el app-data del SO
+uv run python -m facturador.backup --env homo
+
+# Docker (recomendado): apuntar a la raíz montada en el host
+uv run python -m facturador.backup --root ~/facturador/profiles/homo
+
+uv run python -m facturador.restore --latest --bucket mi-bucket \
+  --root ~/facturador/profiles/homo   # o --env homo en nativo
 ```
 
-El bucket del backup sale de la DB (dentro del propio backup); el restore con
-`--latest` lo recibe por `--bucket` porque en una máquina nueva todavía no hay
-DB.
+`--env` y `--root` son excluyentes: el primero usa el perfil oculto del
+launcher nativo; el segundo es obligatorio cuando los datos viven bajo
+`FACTURADOR_HOME/profiles/<env>/` (layout Docker). El bucket del backup sale
+de la DB (dentro del propio backup); el restore con `--latest` lo recibe por
+`--bucket` porque en una máquina nueva todavía no hay DB.
 
 Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
 contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
