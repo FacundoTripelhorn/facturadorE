@@ -552,7 +552,7 @@ def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
     config = Config(env=environment, paths=profile.paths)
     conn = db.connect(profile.paths.db)
     seed_params(conn)
-    seed_settings(conn)
+    seed_settings(conn, ambiente=environment.value)
     wsfex = WsfexClient(
         config,
         wsaa=FakeWsaa(),
@@ -582,12 +582,12 @@ def test_paginas_muestran_identidad_de_ambiente(
         assert r.status_code == 200, path
         assert f"<title>{titulo}</title>" in r.text
         assert f'data-env="{environment.value}"' in r.text
-        assert f"badge-env {environment.value}" in r.text
+        assert f'class="badge-env {environment.value}"' in r.text
         assert label in r.text
-        if badge_extra:
-            assert badge_extra in r.text
-        else:
+        if badge_extra is None:
             assert "sin valor fiscal" not in r.text
+        else:
+            assert badge_extra in r.text
         # Diagnóstico seguro: nada de raíces de perfil ni certificados.
         assert str(profile.paths.root) not in r.text
         assert "cert.crt" not in r.text

@@ -99,12 +99,15 @@ EMISOR_PRUEBA = {
 }
 
 
-def seed_settings(conn) -> None:
+def seed_settings(conn, ambiente: str = "homo") -> None:
     """Settings de dominio con el emisor completo y activo (sin él no se
-    emite). La selección activa es local al perfil (FAC-26)."""
+    emite). La selección activa es local al perfil (FAC-26). ``ambiente``
+    debe coincidir con el perfil del backend bajo prueba."""
     from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 
-    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA)))
+    save_settings(
+        conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente=ambiente))
+    )
     from facturador import repo
 
     set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
