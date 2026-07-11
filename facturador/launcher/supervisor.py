@@ -149,6 +149,9 @@ class ProcessSupervisor:
                     env=dict(plan.env),
                     port=reused.port,
                 )
+                # Callers que solo guardan el supervisor (start_backend,
+                # context manager) deben ver base_url/plan del puerto real.
+                self._plan = reused_plan
                 return LaunchResult(plan=reused_plan, reused=True)
 
         self._process = self._spawn(plan)

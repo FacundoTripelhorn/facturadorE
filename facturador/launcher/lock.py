@@ -11,6 +11,9 @@ Comportamiento:
   unlock abre una ventana donde otro proceso puede tomar el flock sobre un
   inode que luego desaparece, y un tercero crea un archivo nuevo en el mismo
   path (dos dueños aparentes del perfil).
+- Layout del archivo: byte 0 = sentinel ``\\0`` (rango de ``msvcrt.locking``
+  en Windows, fuera del JSON); metadata JSON desde el offset 1. Así un
+  contendedor puede leer puerto/ambiente aunque el lock esté tomado.
 - Si el lock está tomado, el segundo launcher lee puerto/ambiente y puede
   reutilizar la sesión sana (abrir el browser) o fallar con mensaje claro.
 """
@@ -25,6 +28,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 _LOCK_SCHEMA_VERSION = 1
+# Byte 0 reservado para msvcrt.locking en Windows (mandatory locking sobre
+# el rango bloqueado). El JSON empieza en _METADATA_OFFSET.
+_LOCK_SENTINEL = "\0"
+_METADATA_OFFSET = 1
 
 
 @dataclass(frozen=True)
@@ -141,13 +148,14 @@ class ProfileLock:
 def read_lock_holder(path: Path) -> LockHolder | None:
     """Lee el metadata del lock sin tomarlo. ``None`` si falta o es inválido."""
     try:
-        raw = path.read_text(encoding="utf-8").strip()
+        raw = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if not raw:
+    text = _metadata_text(raw)
+    if not text:
         return None
     try:
-        payload = json.loads(raw)
+        payload = json.loads(text)
     except json.JSONDecodeError:
         return None
     return _holder_from_payload(payload)
@@ -167,6 +175,15 @@ def is_process_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _metadata_text(raw: str) -> str:
+    """Extrae el JSON: salta el sentinel ``\\0`` si está; acepta legacy sin él."""
+    if not raw:
+        return ""
+    if raw.startswith(_LOCK_SENTINEL):
+        raw = raw[_METADATA_OFFSET:]
+    return raw.strip()
 
 
 def _held_message(holder: LockHolder) -> str:
@@ -195,16 +212,18 @@ def _holder_from_payload(payload: Any) -> LockHolder | None:
 
 
 def _write_holder(fh: TextIO, holder: LockHolder) -> None:
+    """Escribe sentinel (byte 0) + JSON; el rango de lock de Windows no toca el JSON."""
     payload = {
         "v": _LOCK_SCHEMA_VERSION,
         "pid": holder.pid,
         "port": holder.port,
         "environment": holder.environment,
     }
+    body = json.dumps(payload, ensure_ascii=True) + "\n"
     fh.seek(0)
     fh.truncate()
-    fh.write(json.dumps(payload, ensure_ascii=True))
-    fh.write("\n")
+    fh.write(_LOCK_SENTINEL)
+    fh.write(body)
     fh.flush()
     try:
         os.fsync(fh.fileno())
@@ -218,12 +237,13 @@ def _try_lock(fh: TextIO) -> bool:
         import msvcrt
 
         try:
-            fh.seek(0)
-            # msvcrt.locking exige al menos un byte en el archivo.
-            if fh.read(1) == "":
-                fh.write("\0")
+            # Asegurar el sentinel en byte 0 sin avanzar el cursor al JSON.
+            fh.seek(0, os.SEEK_END)
+            if fh.tell() == 0:
+                fh.write(_LOCK_SENTINEL)
                 fh.flush()
-                fh.seek(0)
+            # Siempre bloquear exactamente el byte 0 (fuera del metadata).
+            fh.seek(0)
             msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
             return True
         except OSError:
