@@ -74,3 +74,7 @@ MONEDA_DISPLAY = {"DOL": "USD", "PES": "ARS"}
 # QR RG 4892
 QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
 TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA
+
+# Puerto local por defecto (siempre bind 127.0.0.1 en host; design.md §2.5).
+# Una sola fuente para backend, launcher CLI y plan de arranque.
+DEFAULT_PORT = 8399

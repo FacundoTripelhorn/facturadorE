@@ -170,6 +170,79 @@ def test_supervisor_timeout_de_readiness_es_visible(tmp_path):
     assert not supervisor.is_running
 
 
+def test_supervisor_ctrl_c_durante_readiness_no_deja_huerfano(tmp_path, monkeypatch):
+    """Ctrl+C en la espera de readiness debe apagar el hijo (PR review)."""
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=_free_port(),
+        app_data_root=tmp_path / "appdata",
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=True,
+        browser_opener=lambda _url: None,
+        command_override=[sys.executable, "-c", "import time; time.sleep(60)"],
+    )
+
+    def _interrupt(_plan):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(supervisor, "_wait_until_ready", _interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        supervisor.start()
+
+    assert not supervisor.is_running
+    assert not supervisor.is_ready
+
+
+def test_supervisor_browser_opener_falla_sin_tumbar_backend(
+    tmp_path, test_cert_and_key
+):
+    """Fallo al abrir el browser no debe detener un backend ya listo."""
+
+    def _boom(_url: str) -> None:
+        raise RuntimeError("browser boom")
+
+    app_data = tmp_path / "appdata"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=_free_port(),
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=True,
+        browser_opener=_boom,
+    )
+    try:
+        plan = supervisor.start()
+        assert supervisor.is_ready
+        with urllib.request.urlopen(plan.health_url, timeout=2) as response:
+            assert response.status == 200
+    finally:
+        supervisor.stop()
+    assert not supervisor.is_running
+
+
+@pytest.mark.parametrize("bad_port", ["0", "99999", "nope"])
+def test_main_puerto_invalido_sin_traceback(bad_port):
+    """``--port`` fuera de rango / no numérico: SystemExit de argparse, no stack."""
+    from facturador.launcher.__main__ import main
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--env", "homo", f"--port={bad_port}"])
+    assert excinfo.value.code == 2
+
+
+def test_plan_usa_default_port_compartido():
+    from facturador.constants import DEFAULT_PORT
+    from facturador.launcher.command import plan_backend_launch
+
+    plan = plan_backend_launch(ArcaEnvironment.HOMO)
+    assert plan.port == DEFAULT_PORT
+    assert ProcessSupervisor(environment=ArcaEnvironment.HOMO).port == DEFAULT_PORT
+
+
 @pytest.mark.parametrize("environment", list(ArcaEnvironment))
 def test_smoke_launcher_arranca_backend_abre_browser_y_apaga(
     environment, tmp_path, test_cert_and_key

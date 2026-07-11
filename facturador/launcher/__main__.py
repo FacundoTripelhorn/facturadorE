@@ -11,10 +11,25 @@ import argparse
 import subprocess
 import sys
 
-from ..constants import ArcaEnvironment
+from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
 from .command import resolve_launch_environment
 from .supervisor import LauncherError, ProcessSupervisor
+
+
+def _parse_port(value: str) -> int:
+    """Puerto TCP 1–65535; falla con mensaje de argparse (sin traceback)."""
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"puerto inválido: {value!r}"
+        ) from exc
+    if port < 1 or port > 65535:
+        raise argparse.ArgumentTypeError(
+            f"puerto fuera de rango (1-65535): {port}"
+        )
+    return port
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -34,9 +49,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--port",
-        type=int,
-        default=8399,
-        help="Puerto local del backend (default: 8399).",
+        type=_parse_port,
+        default=DEFAULT_PORT,
+        help=f"Puerto local del backend (default: {DEFAULT_PORT}).",
     )
     parser.add_argument(
         "--no-browser",
@@ -71,6 +86,14 @@ def main(argv: list[str] | None = None) -> int:
     except LauncherError as exc:
         _report_failure(str(exc))
         return 1
+    except ProfileError as exc:
+        # Cinturón por si el plan falla fuera del parser (p.ej. puerto vía API).
+        _report_failure(str(exc))
+        return 2
+    except KeyboardInterrupt:
+        # start() ya apagó el hijo; no dejar traceback al usuario.
+        print("\nDeteniendo…", flush=True)
+        return 0
 
     print(
         f"FacturadorE ({plan.profile.display_name}) listo en {plan.base_url}/",

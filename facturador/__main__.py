@@ -16,6 +16,7 @@ import uvicorn
 
 from .api import create_app
 from .config import Config, load_config, resolve_boot_profile
+from .constants import DEFAULT_PORT
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -52,7 +53,7 @@ def main() -> None:
     logging.getLogger(__name__).info(
         "Arranque en %s (%r)", profile.display_name, profile
     )
-    port = int(os.environ.get("FACTURADOR_PORT", "8399"))
+    port = int(os.environ.get("FACTURADOR_PORT", str(DEFAULT_PORT)))
     host = "0.0.0.0" if os.environ.get("FACTURADOR_IN_DOCKER") else "127.0.0.1"
     uvicorn.run(create_app(profile, config=config), host=host, port=port)
 

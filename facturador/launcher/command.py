@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..constants import ArcaEnvironment
+from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile, ProfileError, parse_environment
 
 
@@ -74,8 +74,8 @@ def build_backend_env(
     - Fija ``ARCA_ENV`` al ambiente elegido (única fuente para el backend).
     - Fija ``FACTURADOR_PORT`` al puerto del launcher.
     - Quita ``FACTURADOR_IN_DOCKER`` para forzar bind a ``127.0.0.1`` en host.
-    - Opcionalmente aísla app-data (``XDG_DATA_HOME``) y home de bootstrap
-      (tests / arranques controlados).
+    - Opcionalmente aísla app-data (``FACTURADOR_APP_DATA``) y home de
+      bootstrap (tests / arranques controlados).
     """
     env = dict(base_env if base_env is not None else os.environ)
     env["ARCA_ENV"] = environment.value
@@ -93,7 +93,7 @@ def build_backend_env(
 def plan_backend_launch(
     environment: ArcaEnvironment,
     *,
-    port: int = 8399,
+    port: int = DEFAULT_PORT,
     app_data_root: Path | None = None,
     home: Path | None = None,
     python: str | None = None,
