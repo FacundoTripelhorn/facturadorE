@@ -38,102 +38,81 @@ Qué incluye:
 - Para backups: **[age](https://age-encryption.org)** (`winget install
   FiloSottile.age` / `brew install age`) y, si se sube a S3, **aws CLI**.
 
-## Setup por ambiente
+## Ambientes: una sola app
 
-> **Nota (ADR 0001):** la selección de ambiente vía `ARCA_ENV` en `.env` y el
-> home compartido descriptos abajo siguen siendo el comportamiento
-> implementado, pero fueron **superados por decisión de diseño**: la dirección
-> aprobada es un launcher que elige entre Homologación y Producción, cada uno
-> con un perfil interno aislado, y cambio de ambiente solo por reinicio del
-> backend (sin hot switching). Ver
-> [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md);
-> esta documentación se actualizará al implementarse (FAC-34).
+**FacturadorE** es una sola aplicación con dos ambientes de negocio:
+**Homologación** (prueba, sin efecto fiscal) y **Producción** (comprobantes
+reales). Al abrirla, el launcher te deja elegir cuál usar. Cada ambiente
+tiene su propio estado aislado (base, certificados, PDFs, caches, backups);
+no hace falta instalar dos copias ni administrar dos directorios a mano.
 
-Cada ambiente tiene su guía paso a paso (trámites en ARCA, certificados,
-configuración local y verificación):
+Cambiar de ambiente **reinicia** el backend con el otro perfil: no hay cambio
+en caliente dentro del mismo proceso. El ambiente activo se ve siempre en la
+app (badge). Contrato completo:
+[`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
 
-- **[Homologación](docs/setup-homologacion.md)** — ambiente de prueba, sin
-  efectos fiscales. Por acá se empieza: certificado vía WSASS, autorización al
-  servicio `wsfex`, verificación de conectividad con los scripts y primera
-  emisión de prueba.
+Guías paso a paso (trámites en ARCA, certificados y verificación):
+
+- **[Homologación](docs/setup-homologacion.md)** — empezar acá: certificado vía
+  WSASS, autorización al servicio `wsfex`, smoke tests y primera emisión de
+  prueba.
 - **[Producción](docs/setup-produccion.md)** — certificado productivo,
-  asociación al servicio "Facturación Electrónica de Exportación", punto de
-  venta RECE exclusivo de exportación, smoke test y primera factura real, más
-  los cuidados operativos (backups, numeración, multi-máquina).
+  asociación a "Facturación Electrónica de Exportación", punto de venta RECE,
+  smoke test y primera factura real, más cuidados operativos.
 
 ## Uso con Docker (recomendado)
 
-El directorio de datos (`FACTURADOR_HOME`, default `~/facturador`) vive fuera
-del repo y del contenedor. **La app lo crea sola en el primer arranque**,
-incluido el `.env` de bootstrap; lo único que se coloca a mano son los
-certificados:
+El directorio de datos del host (`FACTURADOR_HOME`, default `~/facturador`)
+vive fuera del repo y del contenedor. **La app crea sola** el bootstrap y el
+layout interno por ambiente; lo único que se coloca a mano es el par
+certificado/clave del ambiente que vas a usar (`cert.crt` / `cert.key`, key en
+modo `400`).
 
-```
-~/facturador/
-  .env                # lo crea la app: ARCA_ENV (+ puerto opcional)
-  secrets/            # colocar acá el par del ambiente activo
-    homo.key          # chmod 400 — la app se niega a arrancar con permisos laxos
-    homo.crt
-    prod.key          # solo al pasar a producción
-    prod.crt
-  data/               # la crea la app: facturador.db, pdfs/, logs/
-  backups/            # .tar.gz.age generados por facturador.backup
-```
+Un contenedor corre **un solo ambiente** (el elegido al arrancar). Homologación
+y Producción no comparten base ni certificados.
 
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
 `scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
-`http://localhost:8399`. Equivalente manual: `docker compose up -d`. Si
-`FACTURADOR_HOME` no es `~/facturador`, exportarlo antes de levantar compose.
+`http://localhost:8399`. Equivalente manual: fijar el ambiente y
+`docker compose up -d`. Si `FACTURADOR_HOME` no es `~/facturador`, exportarlo
+antes de levantar compose.
 
 El puerto se publica **solo en `127.0.0.1`**: la app no es accesible desde la
 red. Dentro del contenedor, el entrypoint copia los secretos a un directorio
 interno con `chmod 400` (los bind mounts de Docker Desktop no tienen semántica
-POSIX confiable) y deja `data/` y `backups/` apuntando al host para que todo
-persista.
+POSIX confiable) y deja datos/backups persistiendo en el host.
 
 ## Uso sin Docker
 
 ```bash
 git clone <url-del-repo> facturador && cd facturador
 uv sync
-uv run python -m facturador
+uv run python -m facturador.launcher   # elige Homologación o Producción
 ```
 
 Abre `http://127.0.0.1:8399`. La app escucha **solo en localhost** por diseño
 (el host no es configurable): la única conexión de red es saliente hacia ARCA.
 
+Para desarrollo o scripts sin el chooser:
+`uv run python -m facturador.launcher --env homo` (o `prod`), o
+`ARCA_ENV=homo uv run python -m facturador` (un ambiente explícito por proceso).
+
 ### Configuración
 
 La app es dueña de su configuración: casi todo se edita desde la página
-**Configuración** de la UI y se guarda en la DB (datos del emisor que van al
-PDF, punto de venta, bucket S3 de backups), así viaja dentro del backup
-cifrado como parte del estado.
+**Configuración** de la UI y se guarda en la DB del ambiente activo (datos del
+emisor que van al PDF, punto de venta, bucket S3 de backups), así viaja
+dentro del backup cifrado como parte del estado.
 
-Lo único que queda afuera es el **bootstrap**, en `<FACTURADOR_HOME>/.env`
-(la app lo crea en el primer arranque; **nunca** se lee un `.env` del
-directorio de trabajo):
-
-```dotenv
-# Ambiente: "homo" o "prod". De este ÚNICO flag se derivan las URLs de
-# WSAA/WSFEX y los paths de certificado (secrets/<env>.key / <env>.crt);
-# es imposible por construcción mezclar cert de homologación con producción.
-ARCA_ENV=homo
-
-# Puerto local (siempre en 127.0.0.1).
-#FACTURADOR_PORT=8399
-```
+El ambiente lo elige el **launcher** (Homologación / Producción). Cada
+proceso backend arranca con exactamente un ambiente inmutable; las URLs de
+ARCA y el par certificado/clave salen de ese perfil. El CUIT emisor se extrae
+del certificado. Sin el par `cert.crt` / `cert.key` (key en `400`/`600`), la
+app se niega a arrancar y muestra dónde colocarlos. Sin datos de emisor, la UI
+dirige a Configuración antes de permitir emitir.
 
 La clave privada va **sin passphrase**: la protegen los permisos `400`, el
-home local y el cifrado del backup al salir de la máquina.
-
-La raíz de datos se elige con la variable de entorno `FACTURADOR_HOME`
-(default `~/facturador`). El CUIT emisor no se configura: se extrae del
-certificado.
-
-En el arranque la app crea el home y su estructura si no existen, y valida
-que existan `secrets/<env>.crt` y `secrets/<env>.key` con la key en permisos
-`400`/`600`; si no, se niega a arrancar con un mensaje explicativo. Sin datos
-de emisor cargados, la UI dirige a Configuración antes de permitir emitir.
+perfil local y el cifrado del backup al salir de la máquina.
 
 ### Flujo en la interfaz web
 
@@ -182,21 +161,20 @@ uv run python scripts/authorize_homo.py # flujo completo de emisión en homologa
 
 ## Backups
 
-El estado completo (DB — configuración incluida — + PDFs + secretos + `.env`)
-se respalda cifrado del lado del cliente con age y, opcionalmente, se sube a
-un bucket S3 privado (se configura en la página Configuración de la app). La
-passphrase es del usuario y no vive en ningún lado. Correr en el host después
-de emitir:
+El estado del **ambiente activo** (DB — configuración incluida — + PDFs +
+secretos) se respalda cifrado del lado del cliente con age y, opcionalmente,
+se sube a un bucket S3 privado (se configura en la página Configuración). La
+passphrase es del usuario y no vive en ningún lado. Cada ambiente tiene sus
+propios backups. Correr en el host después de emitir:
 
 ```bash
-uv run python -m facturador.backup                                # cifra a backups/ y sube si hay bucket
+uv run python -m facturador.backup --env homo                     # cifra y sube si hay bucket
 uv run python -m facturador.restore --latest --bucket mi-bucket   # máquina secundaria: baja y restaura
 ```
 
-El home se resuelve igual que en la app: `--home`, `FACTURADOR_HOME` o el
-default `~/facturador` — nunca el directorio de trabajo. El bucket del backup
-sale de la DB (dentro del propio backup); el restore con `--latest` lo recibe
-por `--bucket` porque en una máquina nueva todavía no hay DB.
+El bucket del backup sale de la DB (dentro del propio backup); el restore con
+`--latest` lo recibe por `--bucket` porque en una máquina nueva todavía no hay
+DB.
 
 Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
 contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
@@ -220,16 +198,19 @@ facturador/
   web/          # frontend Jinja2 + HTMX
   pdf/          # render del comprobante + QR RG 4892
   repo/         # acceso a datos (SQLite)
+  launcher/     # chooser Homologación/Producción + supervisor de proceso
+  profile.py    # perfiles aislados (paths de runtime por ambiente)
   service.py    # lógica de dominio: numeración, idempotencia, estados
-  config.py     # bootstrap de arranque: home, .env mínimo, certificados
+  config.py     # arranque: ambiente inyectado, certificados del perfil
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
   backup.py     # backup cifrado (age → S3); restore.py es el inverso
   schema.sql    # esquema de la base
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
-scripts/        # diagnóstico, flujo de homologación y launchers
+scripts/        # diagnóstico, flujo de homologación y launchers Docker
 tests/          # pytest (incluye ARCA falso en tests/arca_fake.py)
 docs/
   design.md             # diseño, decisiones y contexto de dominio
+  adr/                  # decisiones de arquitectura (perfiles de ambiente)
   setup-homologacion.md # guía de setup del ambiente de prueba
   setup-produccion.md   # guía de pasaje a producción
 ```
@@ -240,8 +221,8 @@ docs/
   `.gitignore` excluye `secrets/`, `*.key`, `*.crt`, `.env`) y la app exige
   permisos `400`/`600` sobre ella.
 - El token/sign del WSAA y el CMS firmado nunca se loguean.
-- Los certificados de homologación y producción no pueden cruzarse: URLs y
-  paths se derivan del único flag `ARCA_ENV`.
+- Homologación y Producción no se cruzan: cada proceso backend usa un solo
+  ambiente inmutable; URLs y certificados salen del mismo perfil.
 - Los backups se cifran del lado del cliente **antes** de salir de la máquina;
   el tarball con la clave fiscal nunca toca el disco ni S3 en claro.
 
