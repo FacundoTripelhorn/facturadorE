@@ -22,6 +22,7 @@ from ..service import (
     NotFoundError,
 )
 from . import clients, health, invoices, params
+from .csrf import CsrfCookieMiddleware
 from .localhost_policy import (
     LocalhostPolicyMiddleware,
     resolve_listen_port,
@@ -55,7 +56,8 @@ def create_app(
     FAC-41: ``port`` (o ``FACTURADOR_PORT``) es el bind; la allowlist de
     Host/Origin usa ese puerto y, si aplica, ``public_port`` /
     ``FACTURADOR_PUBLIC_PORT`` (publish del host en Docker cuando difiere
-    del 8399 interno).
+    del 8399 interno). FAC-42: cookie CSRF emitida en respuestas; los
+    POST ``/ui/…`` la validan vía dependency del router HTML.
     """
     if config is None:
         config = load_config(profile)
@@ -80,8 +82,10 @@ def create_app(
     app.state.listen_port = listen_port
     app.state.policy_ports = policy_ports
 
-    # Host/Origin estrictos (FAC-41). add_middleware envuelve por fuera:
-    # corre antes que routers y static.
+    # CSRF cookie (FAC-42) + Host/Origin (FAC-41). add_middleware apila
+    # por fuera: el último agregado es el más externo. Orden de request:
+    # LocalhostPolicy → CsrfCookie → routers.
+    app.add_middleware(CsrfCookieMiddleware)
     app.add_middleware(LocalhostPolicyMiddleware, ports=policy_ports)
 
     def _handler_for(status: int):

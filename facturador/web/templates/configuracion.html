@@ -20,6 +20,7 @@
     <span class="sub">se imprime en el PDF, no viaja a ARCA</span></h2>
   <div class="cuerpo">
   <form method="post" action="/ui/emisores">
+    {% include "_csrf_field.html" %}
     {% if editando %}<input type="hidden" name="emisor_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
       <div>
@@ -98,6 +99,7 @@
           <td>
             {% if e["ambiente"] == env and e["id"] != activo_id %}
             <form method="post" action="/ui/emisores/{{ e['id'] }}/activar" style="display:inline">
+              {% include "_csrf_field.html" %}
               <button type="submit" class="secundario">Usar para emitir</button>
             </form>
             {% endif %}
@@ -118,6 +120,7 @@
   <h2>Backups <span class="sub">opcional: upload cifrado a S3</span></h2>
   <div class="cuerpo">
   <form method="post" action="/ui/configuracion/backup">
+    {% include "_csrf_field.html" %}
     <div class="fila">
       <div>
         <label for="backup_s3_bucket">Bucket S3</label>

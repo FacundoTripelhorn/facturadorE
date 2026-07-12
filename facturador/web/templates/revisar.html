@@ -18,15 +18,18 @@
     <div class="acciones-revisar">
       {% if ofrecer_force %}
       <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize?force=true">
+        {% include "_csrf_field.html" %}
         <button type="submit">Forzar de todos modos (homologación / restore reciente)</button>
       </form>
       {% else %}
       <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize">
+        {% include "_csrf_field.html" %}
         <button type="submit">Confirmar y autorizar en ARCA</button>
       </form>
       {% endif %}
       <form method="post" action="/ui/facturas/{{ f['id'] }}/descartar"
             onsubmit="return confirm('¿Descartar este borrador?')">
+        {% include "_csrf_field.html" %}
         <button type="submit" class="secundario">Descartar borrador</button>
       </form>
     </div>

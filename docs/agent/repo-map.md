@@ -126,6 +126,7 @@ flowchart TB
 |------|-------|
 | App assembly, error mapping, router registration | `facturador/api/app.py` |
 | Localhost Host/Origin policy (FAC-41) | `facturador/api/localhost_policy.py` |
+| CSRF for browser forms (FAC-42) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html` |
 | Shared `InvoiceService` dependency | `facturador/api/deps.py` |
 | REST: invoices (create, authorize, list, PDF) | `facturador/api/invoices.py` |
 | REST: clients CRUD | `facturador/api/clients.py` |
@@ -136,6 +137,7 @@ flowchart TB
 | Row ↔ WSFEX `Invoice` mapping | `facturador/mappers.py` |
 | Contract tests | `tests/test_api.py`, `tests/test_authorize.py` |
 | Host/Origin policy | `tests/test_localhost_policy.py` |
+| CSRF forms | `tests/test_csrf.py`, `tests/test_web.py` |
 
 OpenAPI is served by FastAPI at `/docs` when the app is running.
 

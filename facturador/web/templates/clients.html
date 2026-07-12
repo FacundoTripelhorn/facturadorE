@@ -7,6 +7,7 @@
   <h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
   <div class="cuerpo">
   <form method="post" action="/ui/clientes">
+    {% include "_csrf_field.html" %}
     {% if editando %}<input type="hidden" name="client_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
       <div>

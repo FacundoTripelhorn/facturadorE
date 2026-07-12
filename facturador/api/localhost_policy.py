@@ -19,8 +19,9 @@ Puertos de la allowlist:
   ambos (healthcheck interno + browser en el puerto publicado).
 
 Sin TLS (design.md §2.5). Los clientes no-browser (API, health del
-launcher) que no envían Origin/Referer siguen permitidos en este issue;
-FAC-42 cubre tokens CSRF en formularios del browser.
+launcher) que no envían Origin/Referer siguen permitidos acá; los
+formularios del browser quedan cubiertos por tokens CSRF (FAC-42,
+``facturador/api/csrf.py``).
 """
 
 from __future__ import annotations

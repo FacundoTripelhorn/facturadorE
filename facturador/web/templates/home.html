@@ -25,6 +25,7 @@
   </h2>
   <div class="cuerpo">
   <form method="post" action="/ui/facturas">
+    {% include "_csrf_field.html" %}
     <div class="fila">
       <div>
         <label for="imp_total">Monto ({{ (default["moneda_default"] if default else "DOL") | moneda }})</label>

@@ -396,8 +396,11 @@ flowchart TB
   are accepted.
 
 Unexpected `Host` → 400. Unexpected `Origin`/`Referer` on POST/PUT/PATCH/DELETE → 403.
-Missing Origin/Referer on unsafe methods remains allowed for non-browser clients
-until FAC-42 (CSRF tokens).
+Missing Origin/Referer on unsafe methods remains allowed for non-browser
+clients (API / launcher health). Browser form POSTs under `/ui/` additionally
+require a CSRF double-submit token (FAC-42, `facturador/api/csrf.py`): cookie
+`facturador_csrf` + form field `csrf_token` (or `X-CSRF-Token` header).
+Missing/invalid CSRF → 403. Token material is never logged or echoed.
 
 **Future multi-machine use** (documented in `docs/design.md` §2.5): restore
 encrypted backup on a secondary machine; still localhost-only on that machine.

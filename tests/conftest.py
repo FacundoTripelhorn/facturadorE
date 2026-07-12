@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from facturador import db
 from facturador.api import create_app
+from facturador.api.csrf import CSRF_COOKIE_NAME, CSRF_FORM_FIELD
 from facturador.api.localhost_policy import loopback_base_url
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
@@ -91,6 +92,23 @@ def api(test_config, test_profile, arca):
     client = TestClient(app, base_url=loopback_base_url())
     client.conn = conn  # para asserts directos sobre la DB
     return client
+
+
+def ensure_csrf_cookie(client: TestClient) -> str:
+    """Garantiza cookie CSRF (FAC-42) y devuelve el token para forms/tests."""
+    token = client.cookies.get(CSRF_COOKIE_NAME)
+    if not token:
+        client.get("/health")
+        token = client.cookies.get(CSRF_COOKIE_NAME)
+    assert token, "el middleware CSRF debió emitir facturador_csrf"
+    return token
+
+
+def with_csrf(client: TestClient, data: dict | None = None) -> dict[str, str]:
+    """Copia de ``data`` con el campo csrf_token alineado a la cookie."""
+    payload = {str(k): str(v) for k, v in (data or {}).items()}
+    payload[CSRF_FORM_FIELD] = ensure_csrf_cookie(client)
+    return payload
 
 
 EMISOR_PRUEBA = {
