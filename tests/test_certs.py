@@ -284,7 +284,11 @@ def test_errores_nunca_incluyen_material_de_clave(profile: EnvironmentProfile):
     cert_pem, key_pem, _ = _build_pair()
     # Inyectar un fragmento único de la key en un PEM roto para detectar fugas.
     marker = b"MARKER_PRIVATE_MATERIAL_9f3a"
-    broken = b"-----BEGIN PRIVATE KEY-----\n" + marker + b"\n-----END PRIVATE KEY-----\n"
+    broken = (
+        b"-----BEGIN PRIVATE KEY-----\n"
+        + marker
+        + b"\n-----END PRIVATE KEY-----\n"
+    )
     with pytest.raises(CertificateError) as exc_info:
         validate_certificate_pair(
             cert_pem, broken, environment=profile.environment
