@@ -321,6 +321,52 @@ def test_stores_concurrentes_dejan_par_consistente(profile: EnvironmentProfile):
     assert leftovers == []
 
 
+def test_store_invalida_cache_de_ta_wsaa(profile: EnvironmentProfile):
+    """Tras rotar el cert, un TA viejo no debe reutilizarse con el CUIT nuevo."""
+    profile.paths.ensure_layout()
+    profile.paths.data_dir.mkdir(exist_ok=True)
+    cache = profile.paths.wsaa_ta_cache
+    cache.write_text(
+        '{"token":"old","sign":"old","service":"wsfex",'
+        '"environment":"homo","generation":"2026-01-01T00:00:00+00:00",'
+        '"expiration":"2099-01-01T00:00:00+00:00"}',
+        encoding="utf-8",
+    )
+    assert cache.is_file()
+
+    cert_pem, key_pem, _ = _build_pair()
+    store_certificate_pair(profile, cert_pem, key_pem)
+    assert not cache.exists()
+
+
+def test_store_fallido_no_borra_cache_de_ta(
+    profile: EnvironmentProfile, monkeypatch: pytest.MonkeyPatch
+):
+    """Si el replace falla y se restaura el par previo, el TA sigue válido."""
+    good_cert, good_key, _ = _build_pair(cuit=VALID_CUIT)
+    store_certificate_pair(profile, good_cert, good_key)
+
+    cache = profile.paths.wsaa_ta_cache
+    cache.write_text("{}", encoding="utf-8")
+
+    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    import os as os_module
+
+    real_replace = os_module.replace
+
+    def flaky_replace(src, dst):
+        if Path(dst).name == "cert.key":
+            raise OSError("simulated failure writing key")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr("facturador.certs.os.replace", flaky_replace)
+    with pytest.raises(CertificateError, match="No se pudo guardar"):
+        store_certificate_pair(profile, new_cert, new_key)
+
+    assert cache.is_file()
+    assert cache.read_text(encoding="utf-8") == "{}"
+
+
 def test_store_en_perfil_prod_marca_ambiente_prod(tmp_path: Path):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.PROD, tmp_path / "prod")
     cert_pem, key_pem, _ = _build_pair()

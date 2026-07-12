@@ -104,7 +104,8 @@ def store_certificate_pair(
 
     Si la validación falla, no toca los archivos vivos. Si la escritura falla
     a mitad de camino, restaura el par anterior (si existía). Temps por
-    llamada + lock evitan cruces ante stores concurrentes.
+    llamada + lock evitan cruces ante stores concurrentes. Tras un replace
+    exitoso se invalida el cache de TA de WSAA del perfil.
     """
     cert_bytes = _as_pem_bytes(cert_pem, label="certificado")
     key_bytes = _as_pem_bytes(key_pem, label="clave privada")
@@ -117,6 +118,9 @@ def store_certificate_pair(
 
     with _STORE_LOCK:
         _persist_validated_pair(profile, cert_bytes, key_bytes)
+        # El TA cacheado fue firmado/emitido para el cert anterior; WSFEX
+        # arma Auth con el CUIT del cert actual → hay que descartarlo.
+        _invalidate_wsaa_ta_cache(profile)
     return metadata
 
 
@@ -180,6 +184,17 @@ def _make_private_temp(secrets_dir: Path, final_name: str) -> Path:
     )
     os.close(fd)
     return Path(name)
+
+
+def _invalidate_wsaa_ta_cache(profile: EnvironmentProfile) -> None:
+    """Borra ``ta-wsfex.json`` del perfil tras rotar el par cert/key."""
+    cache = profile.paths.wsaa_ta_cache
+    try:
+        cache.unlink(missing_ok=True)
+    except OSError as exc:
+        raise CertificateError(
+            "El par se guardó pero no se pudo invalidar el cache de TA de WSAA."
+        ) from exc
 
 
 def load_certificate_metadata(
