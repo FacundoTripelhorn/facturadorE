@@ -13,9 +13,9 @@ from facturador.api.localhost_policy import (
     allowed_origins,
     check_host_header,
     check_origin_headers,
+    loopback_base_url,
     origin_from_referer,
     resolve_listen_port,
-    test_client_base_url,
 )
 from facturador.arca.wsfex import WsfexClient
 from facturador.constants import DEFAULT_PORT
@@ -198,7 +198,7 @@ def test_middleware_respeta_puerto_custom(test_profile, test_config, arca):
     app = create_app(
         test_profile, config=test_config, conn=conn, wsfex=wsfex, port=port
     )
-    client = TestClient(app, base_url=test_client_base_url(port))
+    client = TestClient(app, base_url=loopback_base_url(port))
 
     assert client.get("/health").status_code == 200
     bad = client.get(
