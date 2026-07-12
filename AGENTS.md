@@ -37,7 +37,8 @@ of exploring the repo blindly.
   isolated hidden profiles, one immutable environment per backend process
   ([ADR 0001](docs/adr/0001-perfiles-de-ambiente-aislados.md)).
 - **Layout:** one service package under `facturador/`; tests in `tests/`; scripts in
-  `scripts/`; schema in `facturador/schema.sql`.
+  `scripts/`; schema baseline in `facturador/schema.sql`, applied via
+  `facturador/migrations/` on connect (FAC-43).
 - **Dev entrypoint:** `uv run python -m facturador.launcher` (chooser; binds
   `127.0.0.1:8399`; port override via `FACTURADOR_PORT` / `--port`). Backend
   alone: `uv run python -m facturador` with an explicit `ARCA_ENV`.

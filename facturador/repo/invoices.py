@@ -182,11 +182,10 @@ def max_authorized_cbte_nro(
 def delete_draft(conn: sqlite3.Connection, invoice_id: str) -> bool:
     """Borra un borrador jamás enviado (status=draft, raw_request NULL).
 
-    Los ítems se borran ANTES que la factura para no depender de que el
-    enforcement de foreign keys esté apagado (si algún día se activa
-    PRAGMA foreign_keys=ON, borrar el padre primero fallaría). Ambos DELETE
-    repiten la guarda de estado vía subquery, así que la operación sigue
-    siendo atómica: si otro proceso ya lo transicionó, no se borra nada."""
+    Los ítems se borran ANTES que la factura porque ``PRAGMA foreign_keys=ON``
+    (FAC-43) rechazaría borrar el padre primero. Ambos DELETE repiten la
+    guarda de estado vía subquery, así que la operación sigue siendo
+    atómica: si otro proceso ya lo transicionó, no se borra nada."""
     with conn:
         conn.execute(
             "DELETE FROM invoice_items WHERE invoice_id = ("

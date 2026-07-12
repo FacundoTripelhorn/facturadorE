@@ -24,8 +24,9 @@ flowchart TB
     CFG["facturador/config.py<br/>load_config(profile)"]
     SETTINGS["facturador/settings.py<br/>emisor, PV, backups (SQLite)"]
     CONST["facturador/constants.py"]
-    SCHEMA["facturador/schema.sql"]
-    DB["facturador/db.py"]
+    SCHEMA["facturador/schema.sql<br/>baseline v1"]
+    MIG["facturador/migrations/<br/>versioned runner"]
+    DB["facturador/db.py<br/>FK + migrate on connect"]
   end
 
   subgraph app["Application package (facturador/)"]
@@ -91,7 +92,8 @@ flowchart TB
   SVC --> MAP
   SVC --> SETTINGS
   REPO --> DB
-  DB --> SCHEMA
+  DB --> MIG
+  MIG --> SCHEMA
   DB --> SQLITE
   SETTINGS --> SQLITE
   WEB --> TPL
@@ -196,7 +198,9 @@ split between `emisores` and global backup `settings` is easy to miss.
 | SQLite `emisores` table (CRUD; `ambiente` seal only) | `facturador/repo/emisores.py` |
 | Active emisor (`active_emisor_id` in settings) | `facturador/settings.py`, `facturador/repo/settings.py` |
 | Global backup bucket/prefix (`settings` table) | `facturador/repo/settings.py` |
-| Schema (`emisores`, `settings`) | `facturador/schema.sql` |
+| Schema (`emisores`, `settings`) | `facturador/schema.sql` (baseline v1) |
+| Schema migrations + FK pragma | `facturador/migrations/`, `facturador/db.py` |
+| Migration / integrity tests | `tests/test_migrations.py` |
 | Config UI | `facturador/web/routes.py`, `configuracion.html` |
 | Runtime emisor resolution | `facturador/service.py` / `load_settings(conn)` |
 | Tests | `tests/test_settings.py` |
@@ -264,6 +268,7 @@ backend before starting the target profile (no in-process hot-switch).
 | WSFEX client | `tests/test_wsfex.py` |
 | PDF | `tests/test_pdf.py` |
 | Profiles / isolation | `tests/test_profile.py`, `tests/test_profile_isolation.py` |
+| Schema migrations / FK integrity | `tests/test_migrations.py` |
 | Launcher | `tests/test_launcher.py` |
 | Mappers, constants, backup | `tests/test_mappers.py`, `tests/test_constants.py`, `tests/test_backup.py` |
 

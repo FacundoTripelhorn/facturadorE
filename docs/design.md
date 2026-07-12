@@ -167,7 +167,7 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
 - **Firma CMS (WSAA):** librería `cryptography` → `pkcs7.PKCS7SignatureBuilder` (firma nativa, sin subprocesos de openssl).
 - **PDF:** `weasyprint` (HTML→PDF) + `qrcode` para el QR RG 4892.
 - **Frontend:** Jinja2 + HTMX servido por la misma app FastAPI. Cero build tooling de JS; si a futuro se quiere SPA, la API JSON ya existe.
-- **DB:** SQLite alcanza incluso más allá del spike dado el volumen; migrar a Postgres solo si aparece multiusuario real. La app es el único registro y fuente de verdad local; no se sincroniza con herramientas externas.
+- **DB:** SQLite alcanza incluso más allá del spike dado el volumen; migrar a Postgres solo si aparece multiusuario real. La app es el único registro y fuente de verdad local; no se sincroniza con herramientas externas. El esquema se versiona con migraciones transaccionales (`facturador.migrations`, FAC-43): al conectar se aplica lo pendiente, un fallo hace rollback y bloquea el arranque, y cada conexión habilita `PRAGMA foreign_keys=ON`. La baseline es el esquema de perfiles aislados; bases experimentales anteriores se resetean (no hay shims de compatibilidad permanentes).
 - **Secretos:** cert + key nunca en el repo. Variables de entorno o archivo montado con permisos 400; la key privada es equivalente a la firma fiscal de la empresa.
 
 ### 2.1.1 pyafipws como referencia: checklist de paridad de seguridad
