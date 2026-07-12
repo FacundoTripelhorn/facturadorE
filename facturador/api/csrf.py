@@ -116,7 +116,7 @@ class CsrfCookieMiddleware:
             await self.app(scope, receive, send)
             return
 
-        state: MutableMapping[str, object] = scope.setdefault("state", {})  # type: ignore[assignment]
+        state: MutableMapping[str, object] = scope.setdefault("state", {})
         headers = MutableHeaders(scope=scope)
         cookie_header = headers.get("cookie") or ""
         existing = _cookie_value(cookie_header, CSRF_COOKIE_NAME)
