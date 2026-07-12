@@ -17,6 +17,7 @@ from facturador.certs import (
     CertificateError,
     CertificateMetadata,
     load_certificate_metadata,
+    read_live_certificate_pair,
     store_certificate_pair,
     validate_certificate_pair,
 )
@@ -181,6 +182,45 @@ def test_clave_con_passphrase_rechazada(profile: EnvironmentProfile):
         )
     assert "secreto" not in str(exc_info.value)
     assert encrypted.decode(errors="replace") not in str(exc_info.value)
+
+
+def test_clave_ed25519_rechazada(profile: EnvironmentProfile):
+    """WSAA solo firma CMS con RSA/EC: no persistir algoritmos incompatibles."""
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    subject = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "AR"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "ed25519-test"),
+            x509.NameAttribute(NameOID.SERIAL_NUMBER, f"CUIT {VALID_CUIT}"),
+        ]
+    )
+    now = dt.datetime.now(dt.UTC)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(days=1))
+        .not_valid_after(now + dt.timedelta(days=365))
+        .sign(private_key, None)
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    key_pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    with pytest.raises(CertificateError, match="RSA o EC"):
+        validate_certificate_pair(
+            cert_pem, key_pem, environment=profile.environment
+        )
+    with pytest.raises(CertificateError, match="RSA o EC"):
+        store_certificate_pair(profile, cert_pem, key_pem)
+    assert not profile.paths.cert.exists()
+    assert not profile.paths.key.exists()
 
 
 # --- persistencia atómica ---
@@ -365,6 +405,72 @@ def test_store_fallido_no_borra_cache_de_ta(
 
     assert cache.is_file()
     assert cache.read_text(encoding="utf-8") == "{}"
+
+
+def test_reader_espera_par_completo_bajo_lock(
+    profile: EnvironmentProfile, monkeypatch: pytest.MonkeyPatch
+):
+    """Un reader concurrente no observa cert nuevo + key vieja a mitad del store."""
+    import threading
+
+    old_cert, old_key, _ = _build_pair(cuit=VALID_CUIT)
+    store_certificate_pair(profile, old_cert, old_key)
+    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+
+    holding = threading.Event()
+    release = threading.Event()
+    reader_entered = threading.Event()
+    reader_finished = threading.Event()
+    seen: list[tuple[bytes, bytes]] = []
+    errors: list[BaseException] = []
+
+    import os as os_module
+
+    real_replace = os_module.replace
+
+    def gated_replace(src, dst):
+        result = real_replace(src, dst)
+        if Path(dst).name == "cert.crt":
+            holding.set()
+            assert release.wait(timeout=2.0)
+        return result
+
+    monkeypatch.setattr("facturador.certs.os.replace", gated_replace)
+
+    def writer() -> None:
+        try:
+            store_certificate_pair(profile, new_cert, new_key)
+        except BaseException as exc:  # noqa: BLE001 — recolectar para el assert
+            errors.append(exc)
+
+    def reader() -> None:
+        try:
+            assert holding.wait(timeout=2.0)
+            reader_entered.set()
+            seen.append(read_live_certificate_pair(profile.paths))
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+        finally:
+            reader_finished.set()
+
+    writer_thread = threading.Thread(target=writer)
+    reader_thread = threading.Thread(target=reader)
+    writer_thread.start()
+    reader_thread.start()
+
+    assert holding.wait(timeout=2.0)
+    assert reader_entered.wait(timeout=2.0)
+    # Sigue bloqueado en el lock mientras el store no terminó el segundo replace.
+    assert not reader_finished.wait(timeout=0.2)
+    release.set()
+    writer_thread.join(timeout=2.0)
+    reader_thread.join(timeout=2.0)
+    assert not writer_thread.is_alive()
+    assert not reader_thread.is_alive()
+    assert errors == []
+    assert seen == [(new_cert, new_key)]
+    assert (new_cert, old_key) not in seen
+    assert (old_cert, new_key) not in seen
 
 
 def test_store_en_perfil_prod_marca_ambiente_prod(tmp_path: Path):

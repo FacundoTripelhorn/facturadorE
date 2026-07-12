@@ -35,6 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, pkcs7
 from cryptography.x509.oid import NameOID
 
+from ..certs import read_live_certificate_pair
 from ..config import Config
 from ..constants import SOAP_ENV_NS
 
@@ -283,11 +284,10 @@ class WsaaClient:
 
     def _request_new_ticket(self) -> Ticket:
         tra = build_tra()
-        cms = sign_tra_cms(
-            tra,
-            self.config.paths.cert.read_bytes(),
-            self.config.paths.key.read_bytes(),
-        )
+        # Lectura bajo el mismo lock que store_certificate_pair: evita firmar
+        # con cert nuevo + key vieja si hay una rotación en curso (FAC-36).
+        cert_pem, key_pem = read_live_certificate_pair(self.config.paths)
+        cms = sign_tra_cms(tra, cert_pem, key_pem)
         request_body = build_login_request(cms)
         response = self.http.post(
             self.config.wsaa_url,

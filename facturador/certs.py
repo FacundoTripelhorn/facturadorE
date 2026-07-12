@@ -21,11 +21,12 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.x509.oid import NameOID
 
 from .constants import ArcaEnvironment
-from .profile import CERT_FILENAME, KEY_FILENAME, EnvironmentProfile
+from .profile import CERT_FILENAME, KEY_FILENAME, EnvironmentProfile, ProfilePaths
 
 # Subject ARCA: serialNumber=CUIT <11 dígitos> (así lo emite WSASS / portal).
 _CUIT_IN_SUBJECT = re.compile(r"CUIT\s+(\d{11})", re.IGNORECASE)
@@ -34,8 +35,8 @@ _CERT_MODE = 0o644
 _KEY_MODE = 0o400
 _SECRETS_DIR_MODE = 0o700
 
-# Serializa validate→write→replace del par vivo: temps únicos no bastan
-# solos (dos stores concurrentes podrían cruzar cert de A con key de B).
+# Serializa escritura del par vivo Y lectura conjunta (WSAA firma CMS):
+# sin esto un reader puede ver cert nuevo + key vieja entre los dos replace.
 _STORE_LOCK = threading.Lock()
 
 
@@ -77,6 +78,7 @@ def validate_certificate_pair(
 
     cert = _load_certificate(cert_bytes)
     key = _load_private_key(key_bytes)
+    _assert_supported_key_type(key)
     _assert_key_matches_certificate(cert, key)
 
     cuit = _cuit_from_subject(cert)
@@ -197,6 +199,25 @@ def _invalidate_wsaa_ta_cache(profile: EnvironmentProfile) -> None:
         ) from exc
 
 
+def read_live_certificate_pair(paths: ProfilePaths) -> tuple[bytes, bytes]:
+    """Lee cert+key bajo el mismo lock que ``store_certificate_pair``.
+
+    Evita que un reader (p.ej. WSAA al firmar el TRA) observe un par a
+    medias mientras otro hilo reemplaza los archivos vivos.
+    """
+    with _STORE_LOCK:
+        if not paths.cert.is_file() or not paths.key.is_file():
+            raise CertificateError(
+                "Falta el par certificado/clave en el perfil."
+            )
+        try:
+            return paths.cert.read_bytes(), paths.key.read_bytes()
+        except OSError as exc:
+            raise CertificateError(
+                "No se pudo leer el par certificado/clave del perfil."
+            ) from exc
+
+
 def load_certificate_metadata(
     profile: EnvironmentProfile,
 ) -> CertificateMetadata | None:
@@ -255,6 +276,14 @@ def _load_private_key(key_pem: bytes):
         raise CertificateError(
             "La clave privada no es un PEM válido."
         ) from exc
+
+
+def _assert_supported_key_type(key) -> None:
+    # Misma restricción que sign_tra_cms (WSAA): solo RSA o EC firman el CMS.
+    if not isinstance(key, rsa.RSAPrivateKey | ec.EllipticCurvePrivateKey):
+        raise CertificateError(
+            "La clave privada debe ser RSA o EC (requerido para firmar el CMS de WSAA)."
+        )
 
 
 def _assert_key_matches_certificate(cert: x509.Certificate, key) -> None:
