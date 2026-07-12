@@ -108,6 +108,10 @@ def store_certificate_pair(
     a mitad de camino, restaura el par anterior (si existía). Temps por
     llamada + lock evitan cruces ante stores concurrentes. Tras un replace
     exitoso se invalida el cache de TA de WSAA del perfil.
+
+    Identidad fiscal (rechazar un CUIT distinto al ya instalado / sellar el
+    perfil a un solo contribuyente) es FAC-39 — fuera del alcance de este
+    servicio de validación/persistencia.
     """
     cert_bytes = _as_pem_bytes(cert_pem, label="certificado")
     key_bytes = _as_pem_bytes(key_pem, label="clave privada")
