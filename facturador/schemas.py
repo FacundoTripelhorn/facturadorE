@@ -164,6 +164,7 @@ class InvoiceOut(BaseModel):
     cae: str | None
     cae_fch_vto: str | None
     last_error: str | None
+    cuit_emisor: str | None = None
     environment: str
     created_at: str
     updated_at: str

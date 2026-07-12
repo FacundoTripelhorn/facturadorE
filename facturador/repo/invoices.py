@@ -30,6 +30,7 @@ INVOICE_FIELDS = (
     "idioma_cbte",
     "imp_total",
     "obs",
+    "cuit_emisor",
     "environment",
 )
 

@@ -73,11 +73,15 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
         raise ConflictError(
             "La factura no tiene emisor asociado; no se puede generar el PDF."
         )
+    # Preferir el snapshot de la factura (FAC-39); filas viejas sin columna
+    # caen al CUIT del certificado vivo del perfil.
+    raw_cuit = inv["cuit_emisor"] if "cuit_emisor" in inv.keys() else None
+    cuit_emisor = int(raw_cuit) if raw_cuit else service.wsfex.cuit
     pdf = render_invoice_pdf(
         inv,
         repo.get_invoice_items(service.conn, invoice_id),
         load_emisor(service.conn, inv["emisor_id"]),
-        service.wsfex.cuit,
+        cuit_emisor,
         pais_ds=_param_ds(service.conn, "pais", inv["dst_cmp"]),
         cuit_pais_ds=_param_ds(
             service.conn, "cuit_pais", inv["cuit_pais_cliente"]
