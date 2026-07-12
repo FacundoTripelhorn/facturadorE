@@ -45,8 +45,11 @@ def resolve_listen_port(port: int | None = None) -> int:
     return resolved
 
 
-def test_client_base_url(port: int | None = None) -> str:
-    """Origen ``http://127.0.0.1:<port>`` para TestClient (Host válido)."""
+def loopback_base_url(port: int | None = None) -> str:
+    """Origen ``http://127.0.0.1:<port>`` para TestClient (Host válido).
+
+    Named without a ``test_`` prefix so pytest does not collect it.
+    """
     return f"http://127.0.0.1:{resolve_listen_port(port)}"
 
 
