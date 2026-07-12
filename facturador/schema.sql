@@ -1,9 +1,11 @@
 -- Esquema SQLite del facturador (design.md §2.2).
--- Aplicado idempotente en cada conexión (CREATE TABLE IF NOT EXISTS).
+-- Baseline del sistema de migraciones (FAC-43, versión 1).
+-- No aplicar a mano: facturador.db.connect() lo corre vía
+-- facturador.migrations (transaccional, una sola vez por DB).
 
 -- Configuración global de la app (hoy: backups). Clave/valor para que
 -- agregar un setting no requiera migración de esquema.
-CREATE TABLE IF NOT EXISTS settings (
+CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
@@ -14,7 +16,7 @@ CREATE TABLE IF NOT EXISTS settings (
 -- la app opera con el activo explícito (clave única active_emisor_id en
 -- settings). La columna ambiente es el sello del perfil al crear, no una
 -- elección del usuario.
-CREATE TABLE IF NOT EXISTS emisores (
+CREATE TABLE emisores (
     id                 TEXT PRIMARY KEY,
     razon_social       TEXT NOT NULL DEFAULT '',
     domicilio          TEXT NOT NULL DEFAULT '',
@@ -27,7 +29,7 @@ CREATE TABLE IF NOT EXISTS emisores (
     updated_at         TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS arca_params (
+CREATE TABLE arca_params (
     kind        TEXT NOT NULL,
     code        TEXT NOT NULL,
     description TEXT,
@@ -37,7 +39,7 @@ CREATE TABLE IF NOT EXISTS arca_params (
     PRIMARY KEY (kind, code)
 );
 
-CREATE TABLE IF NOT EXISTS clients (
+CREATE TABLE clients (
     id                  TEXT PRIMARY KEY,
     razon_social        TEXT NOT NULL,
     domicilio           TEXT NOT NULL DEFAULT '',
@@ -54,7 +56,7 @@ CREATE TABLE IF NOT EXISTS clients (
     updated_at          TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS invoices (
+CREATE TABLE invoices (
     id                 TEXT PRIMARY KEY,
     emisor_id          TEXT REFERENCES emisores(id),
     client_id          TEXT REFERENCES clients(id),
@@ -93,7 +95,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     updated_at         TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS invoice_items (
+CREATE TABLE invoice_items (
     id              TEXT PRIMARY KEY,
     invoice_id      TEXT NOT NULL REFERENCES invoices(id),
     pro_codigo      TEXT NOT NULL DEFAULT '0001',

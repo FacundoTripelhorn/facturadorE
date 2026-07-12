@@ -224,6 +224,23 @@ Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 
 ---
 
+## Pre-migration SQLite DBs need a profile reset (FAC-43)
+
+**Symptom:** Startup fails with `MigrationError` mentioning that the database
+predates schema migrations and must be reset.
+
+**Expected.** Versioned migrations (`facturador.migrations`) start at baseline
+v1 (profile-isolated schema). Experimental local DBs created before FAC-43 are
+**not** upgraded in place — delete the profile DB (or the profile data dir) and
+restart so `db.connect` applies the baseline cleanly.
+
+**Do not:**
+
+- Add permanent compatibility shims for unreleased pre-migration schemas.
+- Bypass migrations with `CREATE TABLE IF NOT EXISTS` on every connect.
+
+---
+
 ## Quick triage
 
 | Observation | Likely cause | Action |
@@ -237,3 +254,4 @@ Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 | Extra `emisores` rows / no active | FAC-8 UI incomplete | Expected; set `active_emisor_id` |
 | Env did not change in-process | Restart-based switch | Expected; use launcher / Cambiar ambiente |
 | Shared `~/facturador/data` for both envs | Old shared-home model | Use per-profile roots via `ProfilePaths` |
+| `MigrationError` / reset the profile | Pre-FAC-43 experimental DB | Delete profile DB and restart |

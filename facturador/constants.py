@@ -25,7 +25,7 @@ class InvoiceStatus(enum.StrEnum):
 
     Es un StrEnum: cada miembro ES su valor TEXT, así que entra sin
     conversión en la columna ``invoices.status`` y en el JSON de la API.
-    El CHECK de schema.sql enumera los mismos valores; un test los mantiene
+    El CHECK de schema.sql (baseline v1) enumera los mismos valores; un test los mantiene
     en sync.
     """
 

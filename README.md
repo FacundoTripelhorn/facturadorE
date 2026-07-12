@@ -235,7 +235,8 @@ facturador/
   config.py     # arranque: ambiente inyectado, certificados del perfil
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
   backup.py     # backup cifrado (age → S3); restore.py es el inverso
-  schema.sql    # esquema de la base
+  schema.sql    # baseline del esquema (migración v1)
+  migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
 scripts/        # diagnóstico, flujo de homologación y launchers Docker
 tests/          # pytest (incluye ARCA falso en tests/arca_fake.py)
