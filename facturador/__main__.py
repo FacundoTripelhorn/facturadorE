@@ -55,7 +55,8 @@ def main() -> None:
     )
     port = int(os.environ.get("FACTURADOR_PORT", str(DEFAULT_PORT)))
     host = "0.0.0.0" if os.environ.get("FACTURADOR_IN_DOCKER") else "127.0.0.1"
-    # Mismo puerto en bind uvicorn y allowlist Host/Origin (FAC-41).
+    # Bind = FACTURADOR_PORT. Allowlist Host/Origin también incluye
+    # FACTURADOR_PUBLIC_PORT cuando Docker publica otro puerto en el host.
     uvicorn.run(
         create_app(profile, config=config, port=port),
         host=host,

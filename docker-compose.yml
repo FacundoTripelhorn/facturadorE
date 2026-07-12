@@ -5,6 +5,11 @@
 # (secrets/, data/, backups/ — ADR 0001 / FAC-25). Default: ~/facturador.
 # El publish del puerto queda SIEMPRE en 127.0.0.1 — la app no es accesible
 # desde la red aunque el proceso interno escuche en 0.0.0.0.
+#
+# FACTURADOR_PORT en el shell del host controla el lado publicado
+# (127.0.0.1:PORT→8399). Adentro el bind sigue en 8399 (Dockerfile).
+# FACTURADOR_PUBLIC_PORT lleva ese PORT al middleware Host/Origin (FAC-41)
+# para que el browser en http://localhost:PORT no reciba 400.
 services:
   facturador:
     build: .
@@ -12,6 +17,8 @@ services:
     container_name: facturador
     ports:
       - "127.0.0.1:${FACTURADOR_PORT:-8399}:8399"
+    environment:
+      FACTURADOR_PUBLIC_PORT: ${FACTURADOR_PORT:-8399}
     volumes:
       - "${FACTURADOR_HOME:-~/facturador}:/host"
     restart: unless-stopped

@@ -382,12 +382,18 @@ flowchart TB
 - Accepting non-loopback `Host` or cross-origin `Origin`/`Referer` on
   state-changing requests (see `facturador/api/localhost_policy.py`, FAC-41)
 
-**Allowed loopback forms** (port = launcher / `FACTURADOR_PORT`):
+**Allowed loopback forms** (ports = listen ∪ optional Docker public port):
 
 | Header | Allowed values |
 |--------|----------------|
 | `Host` | `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>` |
 | `Origin` (unsafe methods) | `http://127.0.0.1:<port>`, `http://localhost:<port>`, `http://[::1]:<port>` |
+
+- Native / launcher: one port (`FACTURADOR_PORT`).
+- Docker: container listens on 8399; host publish may differ
+  (`127.0.0.1:${FACTURADOR_PORT}:8399`). Compose sets `FACTURADOR_PUBLIC_PORT`
+  to the host-side port so both internal healthchecks and the browser Host
+  are accepted.
 
 Unexpected `Host` → 400. Unexpected `Origin`/`Referer` on POST/PUT/PATCH/DELETE → 403.
 Missing Origin/Referer on unsafe methods remains allowed for non-browser clients
