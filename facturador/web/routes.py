@@ -22,12 +22,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from .. import repo
+from ..api.csrf import csrf_token_for_request, enforce_csrf
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
@@ -49,7 +50,10 @@ from ..settings import (
     get_active_emisor_id,
 )
 
-router = APIRouter(include_in_schema=False)
+router = APIRouter(
+    include_in_schema=False,
+    dependencies=[Depends(enforce_csrf)],
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -70,9 +74,14 @@ def _ambiente_en_contexto(request: Request) -> dict[str, object]:
     }
 
 
+def _csrf_en_contexto(request: Request) -> dict[str, object]:
+    """Token CSRF para campos ocultos de formularios (FAC-42)."""
+    return {"csrf_token": csrf_token_for_request(request)}
+
+
 templates = Jinja2Templates(
     directory=TEMPLATES_DIR,
-    context_processors=[_ambiente_en_contexto],
+    context_processors=[_ambiente_en_contexto, _csrf_en_contexto],
 )
 
 STATUS_LABELS = {

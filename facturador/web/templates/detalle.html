@@ -19,6 +19,7 @@
     <p class="nota">El reintento reusa el mismo Id idempotente: sin riesgo de
     doble emisión.</p>
     <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize">
+      {% include "_csrf_field.html" %}
       <button type="submit">Reintentar autorización</button>
     </form>
     {% endif %}

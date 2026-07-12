@@ -18,7 +18,7 @@ from facturador.config import Config
 from facturador.constants import ArcaEnvironment
 from facturador.profile import EnvironmentProfile
 from tests.arca_fake import FakeWsaa
-from tests.conftest import seed_params, seed_settings
+from tests.conftest import seed_params, seed_settings, with_csrf
 
 CLIENTE_FORM = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -44,7 +44,9 @@ FACTURA_FORM = {
 
 def _crear_cliente_por_form(api, **overrides):
     r = api.post(
-        "/ui/clientes", data={**CLIENTE_FORM, **overrides}, follow_redirects=False
+        "/ui/clientes",
+        data=with_csrf(api, {**CLIENTE_FORM, **overrides}),
+        follow_redirects=False,
     )
     assert r.status_code == 303, r.text
     return r
@@ -53,7 +55,9 @@ def _crear_cliente_por_form(api, **overrides):
 def _generar_borrador(api, **overrides):
     """POST del form → 303 a la página de revisión. Devuelve invoice_id."""
     r = api.post(
-        "/ui/facturas", data={**FACTURA_FORM, **overrides}, follow_redirects=False
+        "/ui/facturas",
+        data=with_csrf(api, {**FACTURA_FORM, **overrides}),
+        follow_redirects=False,
     )
     assert r.status_code == 303, r.text
     location = r.headers["location"]
@@ -63,7 +67,9 @@ def _generar_borrador(api, **overrides):
 
 def _autorizar(api, invoice_id, query=""):
     r = api.post(
-        f"/ui/facturas/{invoice_id}/authorize{query}", follow_redirects=False
+        f"/ui/facturas/{invoice_id}/authorize{query}",
+        data=with_csrf(api),
+        follow_redirects=False,
     )
     return r
 
@@ -118,9 +124,10 @@ def test_generar_redirige_a_revision_sin_tocar_arca(api, arca):
     assert "1500.00" in r.text
     assert "Confirmar y autorizar" in r.text
     assert "Descartar borrador" in r.text
-    # Página read-only: ningún campo editable (solo botones de acción).
+    # Página read-only: ningún campo editable de factura; solo CSRF (FAC-42).
     assert 'name="imp_total"' not in r.text
-    assert "<input" not in r.text
+    assert 'name="csrf_token"' in r.text
+    assert r.text.count("<input") == r.text.count('name="csrf_token"')
 
 
 def test_revisar_de_factura_no_borrador_redirige_al_detalle(api, arca):
@@ -168,7 +175,11 @@ def test_descartar_borrador_vuelve_al_form_sin_tocar_arca(api, arca):
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
 
-    r = api.post(f"/ui/facturas/{invoice_id}/descartar", follow_redirects=False)
+    r = api.post(
+        f"/ui/facturas/{invoice_id}/descartar",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert r.headers["location"] == "/?aviso=descartado"
     assert "descartado" in api.get("/?aviso=descartado").text
@@ -181,7 +192,11 @@ def test_factura_enviada_no_se_puede_descartar(api, arca):
     invoice_id = _generar_borrador(api)
     _autorizar(api, invoice_id)
 
-    r = api.post(f"/ui/facturas/{invoice_id}/descartar", follow_redirects=False)
+    r = api.post(
+        f"/ui/facturas/{invoice_id}/descartar",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert r.headers["location"] == f"/facturas/{invoice_id}"  # al detalle
     assert api.get(f"/invoices/{invoice_id}").status_code == 200  # sigue ahí
@@ -192,14 +207,16 @@ def test_factura_enviada_no_se_puede_descartar(api, arca):
 
 def test_error_de_dominio_se_muestra_en_el_form(api, arca):
     # Sin clientes: create_invoice es ConflictError => error en la misma página.
-    r = api.post("/ui/facturas", data=FACTURA_FORM)
+    r = api.post("/ui/facturas", data=with_csrf(api, FACTURA_FORM))
     assert r.status_code == 422
     assert "cliente default" in r.text
 
 
 def test_monto_invalido_es_error_de_validacion_legible(api, arca):
     _crear_cliente_por_form(api)
-    r = api.post("/ui/facturas", data={**FACTURA_FORM, "imp_total": "-5"})
+    r = api.post(
+        "/ui/facturas", data=with_csrf(api, {**FACTURA_FORM, "imp_total": "-5"})
+    )
     assert r.status_code == 422
     assert "Datos inválidos" in r.text
 
@@ -221,7 +238,10 @@ def test_db_desactualizada_reabre_revision_con_force(api, arca):
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
     arca.last_cmp[(1, 19)] = 5
-    r = api.post(f"/ui/facturas/{invoice_id}/authorize")
+    r = api.post(
+        f"/ui/facturas/{invoice_id}/authorize",
+        data=with_csrf(api),
+    )
     assert r.status_code == 409               # re-render de la revisión
     assert "desactualizado" in r.text
     assert "force=true" in r.text             # botón para forzar a conciencia
@@ -313,13 +333,18 @@ def test_alta_y_edicion_de_cliente_por_form(api, arca):
 
     editado = {**CLIENTE_FORM, "client_id": cliente_id}
     editado["razon_social"] = "RENOMBRADO S.A."
-    r = api.post("/ui/clientes", data=editado, follow_redirects=False)
+    r = api.post(
+        "/ui/clientes", data=with_csrf(api, editado), follow_redirects=False
+    )
     assert r.status_code == 303
     assert api.get("/clients").json()[0]["razon_social"] == "RENOMBRADO S.A."
 
 
 def test_alta_de_cliente_invalida_no_pierde_la_pagina(api, arca):
-    r = api.post("/ui/clientes", data={**CLIENTE_FORM, "pais_dst": "999"})
+    r = api.post(
+        "/ui/clientes",
+        data=with_csrf(api, {**CLIENTE_FORM, "pais_dst": "999"}),
+    )
     assert r.status_code == 422
     assert "pais_dst" in r.text               # error legible en la misma página
 
@@ -338,7 +363,9 @@ EMISOR_FORM = {
 
 def _guardar_emisor(api, **overrides):
     return api.post(
-        "/ui/emisores", data={**EMISOR_FORM, **overrides}, follow_redirects=False
+        "/ui/emisores",
+        data=with_csrf(api, {**EMISOR_FORM, **overrides}),
+        follow_redirects=False,
     )
 
 
@@ -346,7 +373,11 @@ def _editar_emisor_activo(api, **overrides):
     emisor_id = api.conn.execute("SELECT id FROM emisores LIMIT 1").fetchone()["id"]
     data = dict(EMISOR_FORM)
     data["emisor_id"] = emisor_id
-    return api.post("/ui/emisores", data={**data, **overrides}, follow_redirects=False)
+    return api.post(
+        "/ui/emisores",
+        data=with_csrf(api, {**data, **overrides}),
+        follow_redirects=False,
+    )
 
 
 def _sin_settings(api):
@@ -367,7 +398,7 @@ def test_primer_arranque_dirige_a_configuracion_antes_de_emitir(api, arca):
     assert "Generar borrador" not in home.text   # sin form hasta completar
 
     # El guard también existe en el dominio, no solo en la UI.
-    r = api.post("/ui/facturas", data=FACTURA_FORM)
+    r = api.post("/ui/facturas", data=with_csrf(api, FACTURA_FORM))
     assert r.status_code == 422
     assert "emisor" in r.text
 
@@ -438,7 +469,11 @@ EMISOR_FORM_SEGUNDO = {
 
 def test_alta_de_segundo_emisor_y_activacion(api, arca):
     _crear_cliente_por_form(api)
-    r = api.post("/ui/emisores", data=EMISOR_FORM_SEGUNDO, follow_redirects=False)
+    r = api.post(
+        "/ui/emisores",
+        data=with_csrf(api, EMISOR_FORM_SEGUNDO),
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     pagina = api.get("/configuracion")
     assert "OTRO EMISOR S.A." in pagina.text
@@ -450,7 +485,11 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
     ).fetchone()
     nuevo_id = emisores["id"]
 
-    r = api.post(f"/ui/emisores/{nuevo_id}/activar", follow_redirects=False)
+    r = api.post(
+        f"/ui/emisores/{nuevo_id}/activar",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     assert "★" in api.get("/configuracion").text
 
@@ -462,7 +501,7 @@ def test_alta_de_segundo_emisor_y_activacion(api, arca):
 def test_alta_de_emisor_rechaza_ambiente_obsoleto(api, arca):
     r = api.post(
         "/ui/emisores",
-        data={**EMISOR_FORM_SEGUNDO, "ambiente": "prod"},
+        data=with_csrf(api, {**EMISOR_FORM_SEGUNDO, "ambiente": "prod"}),
         follow_redirects=False,
     )
     assert r.status_code == 422
@@ -485,7 +524,11 @@ def test_edicion_de_emisor_rechaza_ambiente_obsoleto(api, arca):
 def test_no_se_puede_activar_emisor_inactivo_de_otro_perfil(api, arca):
     """FAC-27: un emisor legacy de otro ambiente puede seguir listado, pero
     no debe poder activarse ni mostrar el botón en la UI."""
-    api.post("/ui/emisores", data=EMISOR_FORM_SEGUNDO, follow_redirects=False)
+    api.post(
+        "/ui/emisores",
+        data=with_csrf(api, EMISOR_FORM_SEGUNDO),
+        follow_redirects=False,
+    )
     otro = api.conn.execute(
         "SELECT id FROM emisores WHERE razon_social = ?",
         ("OTRO EMISOR S.A.",),
@@ -503,7 +546,11 @@ def test_no_se_puede_activar_emisor_inactivo_de_otro_perfil(api, arca):
     activo_antes = api.conn.execute(
         "SELECT value FROM settings WHERE key = 'active_emisor_id'"
     ).fetchone()[0]
-    r = api.post(f"/ui/emisores/{otro['id']}/activar", follow_redirects=False)
+    r = api.post(
+        f"/ui/emisores/{otro['id']}/activar",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     activo_despues = api.conn.execute(
         "SELECT value FROM settings WHERE key = 'active_emisor_id'"
@@ -625,7 +672,7 @@ def test_cambiar_ambiente_solo_con_launcher(monkeypatch, api):
     assert "Cambiar ambiente" not in home.text
     assert 'action="/ui/cambiar-ambiente"' not in home.text
 
-    r = api.post("/ui/cambiar-ambiente")
+    r = api.post("/ui/cambiar-ambiente", data=with_csrf(api))
     assert r.status_code == 422
     assert "launcher" in r.text.lower()
 
@@ -654,7 +701,7 @@ def test_cambiar_ambiente_con_launcher_escribe_pedido_sin_hot_switch(
     before_cfg = client.app.state.service.config.env
     wsfex_id = id(client.app.state.service.wsfex)
 
-    r = client.post("/ui/cambiar-ambiente")
+    r = client.post("/ui/cambiar-ambiente", data=with_csrf(client))
     assert r.status_code == 200
     assert "launcher" in r.text.lower() or "Homologación" in r.text
     assert "Cancelar" in r.text or "cancelás" in r.text

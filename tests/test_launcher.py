@@ -1334,7 +1334,7 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     )
     from facturador.profile import EnvironmentProfile
     from tests.arca_fake import FakeArca, FakeWsaa
-    from tests.conftest import seed_params, seed_settings
+    from tests.conftest import seed_params, seed_settings, with_csrf
 
     monkeypatch.setenv(LAUNCHER_SUPERVISED_ENV, LAUNCHER_SUPERVISED_VALUE)
     profile = EnvironmentProfile.for_testing(
@@ -1368,7 +1368,7 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     before_wsfex_id = id(app.state.service.wsfex)
     before_conn_id = id(app.state.service.conn)
 
-    r = client.post("/ui/cambiar-ambiente")
+    r = client.post("/ui/cambiar-ambiente", data=with_csrf(client))
     assert r.status_code == 200
     assert "no se tocan" in r.text.lower() or "no cambia en caliente" in r.text.lower()
 

@@ -45,6 +45,7 @@ finishing.
 |-----------|--------------|---------------------|
 | REST API / invoice service | `facturador/api/`, `facturador/service.py`, `facturador/schemas.py` | `uv run pytest tests/test_api.py tests/test_authorize.py` |
 | Localhost Host/Origin policy | `facturador/api/localhost_policy.py`, `facturador/api/app.py` | `uv run pytest tests/test_localhost_policy.py` |
+| CSRF browser forms | `facturador/api/csrf.py`, `facturador/web/` | `uv run pytest tests/test_csrf.py tests/test_web.py` |
 | ARCA clients (WSAA / WSFEX) | `facturador/arca/` | `uv run pytest tests/test_wsaa.py tests/test_wsfex.py` |
 | HTMX / HTML UI | `facturador/web/` | `uv run pytest tests/test_web.py` |
 | PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (needs WeasyPrint system libs; CI installs them) |

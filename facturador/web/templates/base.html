@@ -250,6 +250,7 @@
     </span>
     {% if launcher_supervised %}
     <form class="cambiar-ambiente" method="post" action="/ui/cambiar-ambiente">
+      {% include "_csrf_field.html" %}
       <button type="submit" title="Cierra esta sesión y abre el selector de ambiente">
         Cambiar ambiente
       </button>
