@@ -267,6 +267,60 @@ def test_store_preserva_par_previo_si_falla_el_replace(
     assert leftovers == []
 
 
+def test_store_usa_temps_unicos_por_llamada(
+    profile: EnvironmentProfile, monkeypatch: pytest.MonkeyPatch
+):
+    """Review: temps fijos (.cert.crt.tmp) colisionan entre stores concurrentes."""
+    cert_pem, key_pem, _ = _build_pair()
+    seen: list[str] = []
+    real_mkstemp = __import__("tempfile").mkstemp
+
+    def tracking_mkstemp(*args, **kwargs):
+        fd, name = real_mkstemp(*args, **kwargs)
+        seen.append(name)
+        return fd, name
+
+    monkeypatch.setattr("facturador.certs.tempfile.mkstemp", tracking_mkstemp)
+    store_certificate_pair(profile, cert_pem, key_pem)
+    store_certificate_pair(profile, cert_pem, key_pem)
+
+    assert len(seen) == 4  # 2 temps × 2 stores
+    assert len(set(seen)) == 4
+    assert not any(name.endswith(".cert.crt.tmp") for name in seen)
+    assert not any(name.endswith(".cert.key.tmp") for name in seen)
+
+
+def test_stores_concurrentes_dejan_par_consistente(profile: EnvironmentProfile):
+    """Lock + temps únicos: el par vivo nunca queda cert A + key B."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    pairs = [
+        _build_pair(cuit=VALID_CUIT),
+        _build_pair(cuit=OTHER_CUIT),
+        _build_pair(cuit=VALID_CUIT),
+        _build_pair(cuit=OTHER_CUIT),
+    ]
+
+    def _store(pair: tuple[bytes, bytes, object]) -> CertificateMetadata:
+        cert_pem, key_pem, _ = pair
+        return store_certificate_pair(profile, cert_pem, key_pem)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_store, pair) for pair in pairs]
+        for fut in as_completed(futures):
+            fut.result()
+
+    live_cert = profile.paths.cert.read_bytes()
+    live_key = profile.paths.key.read_bytes()
+    # Debe ser exactamente uno de los pares enviados (no un cruce).
+    assert (live_cert, live_key) in {(c, k) for c, k, _ in pairs}
+    validate_certificate_pair(
+        live_cert, live_key, environment=profile.environment
+    )
+    leftovers = list(profile.paths.secrets_dir.glob(".*"))
+    assert leftovers == []
+
+
 def test_store_en_perfil_prod_marca_ambiente_prod(tmp_path: Path):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.PROD, tmp_path / "prod")
     cert_pem, key_pem, _ = _build_pair()
