@@ -378,6 +378,20 @@ flowchart TB
   from another machine
 - Cert/key pairs in the repo, CI, or logs
 - In-process hot switching of `ARCA_ENV`, certificates, or database
+- Permissive CORS / `Access-Control-Allow-Origin: *`
+- Accepting non-loopback `Host` or cross-origin `Origin`/`Referer` on
+  state-changing requests (see `facturador/api/localhost_policy.py`, FAC-41)
+
+**Allowed loopback forms** (port = launcher / `FACTURADOR_PORT`):
+
+| Header | Allowed values |
+|--------|----------------|
+| `Host` | `127.0.0.1:<port>`, `localhost:<port>`, `[::1]:<port>` |
+| `Origin` (unsafe methods) | `http://127.0.0.1:<port>`, `http://localhost:<port>`, `http://[::1]:<port>` |
+
+Unexpected `Host` → 400. Unexpected `Origin`/`Referer` on POST/PUT/PATCH/DELETE → 403.
+Missing Origin/Referer on unsafe methods remains allowed for non-browser clients
+until FAC-42 (CSRF tokens).
 
 **Future multi-machine use** (documented in `docs/design.md` §2.5): restore
 encrypted backup on a secondary machine; still localhost-only on that machine.

@@ -22,6 +22,7 @@ from ..service import (
     NotFoundError,
 )
 from . import clients, health, invoices, params
+from .localhost_policy import LocalhostPolicyMiddleware, resolve_listen_port
 
 _ERROR_STATUS = {
     NotFoundError: 404,
@@ -36,6 +37,8 @@ def create_app(
     config: Config | None = None,
     conn: sqlite3.Connection | None = None,
     wsfex: WsfexClient | None = None,
+    *,
+    port: int | None = None,
 ) -> FastAPI:
     """Construye la app contra UN perfil de ambiente explícito e inmutable.
 
@@ -43,6 +46,9 @@ def create_app(
     y los clientes ARCA, y no existe forma de cambiarlo después (perfil y
     Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
     y paths derivan todos del perfil vía Config/ProfilePaths (FAC-25).
+
+    FAC-41: ``port`` (o ``FACTURADOR_PORT``) fija la allowlist de Host/Origin
+    del middleware localhost; el launcher pasa el mismo puerto al backend.
     """
     if config is None:
         config = load_config(profile)
@@ -58,10 +64,16 @@ def create_app(
         )
     conn = conn or db.connect(config.paths.db)
     wsfex = wsfex or WsfexClient(config)
+    listen_port = resolve_listen_port(port)
 
     app = FastAPI(title="facturador", version="0.1.0")
     app.state.profile = profile
     app.state.service = InvoiceService(config, conn, wsfex)
+    app.state.listen_port = listen_port
+
+    # Host/Origin estrictos (FAC-41). add_middleware envuelve por fuera:
+    # corre antes que routers y static.
+    app.add_middleware(LocalhostPolicyMiddleware, port=listen_port)
 
     def _handler_for(status: int):
         async def handler(request: Request, exc: Exception):

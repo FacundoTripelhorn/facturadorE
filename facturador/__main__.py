@@ -55,7 +55,12 @@ def main() -> None:
     )
     port = int(os.environ.get("FACTURADOR_PORT", str(DEFAULT_PORT)))
     host = "0.0.0.0" if os.environ.get("FACTURADOR_IN_DOCKER") else "127.0.0.1"
-    uvicorn.run(create_app(profile, config=config), host=host, port=port)
+    # Mismo puerto en bind uvicorn y allowlist Host/Origin (FAC-41).
+    uvicorn.run(
+        create_app(profile, config=config, port=port),
+        host=host,
+        port=port,
+    )
 
 
 if __name__ == "__main__":

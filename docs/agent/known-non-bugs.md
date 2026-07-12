@@ -36,6 +36,10 @@ running in Docker. Design rationale: [`docs/design.md`](../design.md) §2.5.
 **Legitimate follow-ups** (only when explicitly scoped): better error messages
 when the user opens the wrong URL, or documentation — not widening the bind.
 
+Opening the app via a non-loopback hostname (or a DNS-rebinding hostname that
+resolves to 127.0.0.1) yields **400 Host no permitido** (FAC-41). That is
+intentional middleware, not a routing bug.
+
 ---
 
 ## Docker: internal `0.0.0.0` bind, localhost-only publish

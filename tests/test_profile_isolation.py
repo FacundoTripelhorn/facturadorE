@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from facturador import db, repo
 from facturador.api import create_app
+from facturador.api.localhost_policy import test_client_base_url
 from facturador.arca.wsaa import Ticket, TicketCache
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
@@ -88,7 +89,7 @@ def _build_world(
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
     app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
-    client = TestClient(app)
+    client = TestClient(app, base_url=test_client_base_url())
     client.conn = conn
     return ProfileWorld(
         environment=environment,
