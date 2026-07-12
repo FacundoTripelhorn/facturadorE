@@ -1324,6 +1324,7 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
 
     from facturador import db
     from facturador.api import create_app
+    from facturador.api.localhost_policy import test_client_base_url
     from facturador.arca.wsfex import WsfexClient
     from facturador.config import Config
     from facturador.launcher.switch import (
@@ -1354,7 +1355,7 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
     app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
-    client = TestClient(app)
+    client = TestClient(app, base_url=test_client_base_url())
 
     # Config frozen: no hay setter de ambiente.
     from dataclasses import FrozenInstanceError

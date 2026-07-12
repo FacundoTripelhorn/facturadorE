@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from facturador import db
 from facturador.api import create_app
+from facturador.api.localhost_policy import test_client_base_url
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import ArcaEnvironment
@@ -86,7 +87,8 @@ def api(test_config, test_profile, arca):
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
     app = create_app(test_profile, config=test_config, conn=conn, wsfex=wsfex)
-    client = TestClient(app)
+    # Host válido (FAC-41): TestClient default "testserver" sería rechazado.
+    client = TestClient(app, base_url=test_client_base_url())
     client.conn = conn  # para asserts directos sobre la DB
     return client
 

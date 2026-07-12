@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from facturador import db
 from facturador.api import create_app
+from facturador.api.localhost_policy import test_client_base_url
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import WSAA_URLS, WSFEX_URLS, ArcaEnvironment
@@ -42,7 +43,7 @@ def test_apps_de_homo_y_prod_con_perfiles_temporales(environment, tmp_path):
 
     assert app.state.profile is profile
     assert app.state.profile.environment is environment
-    respuesta = TestClient(app).get("/health")
+    respuesta = TestClient(app, base_url=test_client_base_url()).get("/health")
     assert respuesta.status_code == 200
     assert respuesta.json()["environment"] == environment.value
 

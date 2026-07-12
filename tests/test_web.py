@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from facturador import db
 from facturador.api import create_app
+from facturador.api.localhost_policy import test_client_base_url
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import ArcaEnvironment
@@ -559,7 +560,7 @@ def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
     app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
-    return TestClient(app), profile
+    return TestClient(app, base_url=test_client_base_url()), profile
 
 
 @pytest.mark.parametrize(
