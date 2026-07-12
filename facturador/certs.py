@@ -14,6 +14,8 @@ import os
 import re
 import stat
 import sys
+import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +33,10 @@ _CUIT_IN_SUBJECT = re.compile(r"CUIT\s+(\d{11})", re.IGNORECASE)
 _CERT_MODE = 0o644
 _KEY_MODE = 0o400
 _SECRETS_DIR_MODE = 0o700
+
+# Serializa validate→write→replace del par vivo: temps únicos no bastan
+# solos (dos stores concurrentes podrían cruzar cert de A con key de B).
+_STORE_LOCK = threading.Lock()
 
 
 class CertificateError(ValueError):
@@ -97,7 +103,8 @@ def store_certificate_pair(
     """Valida y persiste el par en el perfil de forma atómica.
 
     Si la validación falla, no toca los archivos vivos. Si la escritura falla
-    a mitad de camino, restaura el par anterior (si existía).
+    a mitad de camino, restaura el par anterior (si existía). Temps por
+    llamada + lock evitan cruces ante stores concurrentes.
     """
     cert_bytes = _as_pem_bytes(cert_pem, label="certificado")
     key_bytes = _as_pem_bytes(key_pem, label="clave privada")
@@ -108,6 +115,17 @@ def store_certificate_pair(
         now=now,
     )
 
+    with _STORE_LOCK:
+        _persist_validated_pair(profile, cert_bytes, key_bytes)
+    return metadata
+
+
+def _persist_validated_pair(
+    profile: EnvironmentProfile,
+    cert_bytes: bytes,
+    key_bytes: bytes,
+) -> None:
+    """Escribe el par ya validado. Caller debe sostener ``_STORE_LOCK``."""
     paths = profile.paths
     paths.ensure_layout()
     _restrict_secrets_dir(paths.secrets_dir)
@@ -117,8 +135,8 @@ def store_certificate_pair(
     previous_cert_mode = _mode_if_file(paths.cert)
     previous_key_mode = _mode_if_file(paths.key)
 
-    cert_tmp = paths.secrets_dir / f".{CERT_FILENAME}.tmp"
-    key_tmp = paths.secrets_dir / f".{KEY_FILENAME}.tmp"
+    cert_tmp = _make_private_temp(paths.secrets_dir, CERT_FILENAME)
+    key_tmp = _make_private_temp(paths.secrets_dir, KEY_FILENAME)
     cert_replaced = False
 
     try:
@@ -151,7 +169,17 @@ def store_certificate_pair(
     # Reforzar permisos finales (replace puede heredar umask del FS).
     _chmod_if_posix(paths.cert, _CERT_MODE)
     _chmod_if_posix(paths.key, _KEY_MODE)
-    return metadata
+
+
+def _make_private_temp(secrets_dir: Path, final_name: str) -> Path:
+    """Temp único en ``secrets_dir`` (evita colisiones entre llamadas)."""
+    fd, name = tempfile.mkstemp(
+        prefix=f".{final_name}.",
+        suffix=".tmp",
+        dir=secrets_dir,
+    )
+    os.close(fd)
+    return Path(name)
 
 
 def load_certificate_metadata(
