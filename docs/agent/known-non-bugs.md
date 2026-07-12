@@ -59,13 +59,18 @@ which publishes **only** `127.0.0.1:${FACTURADOR_PORT:-8399}:8399` — never
 | Host port publish | `127.0.0.1:PORT` only | Network isolation |
 
 `FACTURADOR_IN_DOCKER` is set only in the `Dockerfile`; the host bind address
-is not configurable by design (`facturador/__main__.py`).
+is not configurable by design (`facturador/__main__.py`). Compose injects
+`FACTURADOR_PUBLIC_PORT` from the host-side `FACTURADOR_PORT` so the FAC-41
+Host/Origin allowlist accepts browser requests on a custom published port
+while the container keeps listening on 8399.
 
 **Do not:**
 
 - Remove `FACTURADOR_IN_DOCKER` handling and force `127.0.0.1` inside the
   container (breaks Docker healthcheck and port forward).
 - Change compose to publish `0.0.0.0:PORT` on the host.
+- Drop `FACTURADOR_PUBLIC_PORT` without another way to allowlist the Docker
+  host publish port (browser Host would 400 on non-default mappings).
 
 ---
 

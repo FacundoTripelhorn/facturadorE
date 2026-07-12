@@ -93,7 +93,8 @@ antes de levantar compose (compose interpola esa variable; no se lee del
 `.env` montado). El puerto publicado en el host se cambia igual:
 `export FACTURADOR_PORT=8400` antes de `compose up` / `launch.*` — no pongas
 `FACTURADOR_PORT` en `~/facturador/.env` (adentro del contenedor el puerto
-queda fijo en 8399).
+queda fijo en 8399). Compose propaga ese valor como `FACTURADOR_PUBLIC_PORT`
+para que la política Host/Origin acepte `http://localhost:8400`.
 
 El puerto se publica **solo en `127.0.0.1`**: la app no es accesible desde la
 red. Dentro del contenedor, el entrypoint copia los secretos a un directorio

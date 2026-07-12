@@ -22,7 +22,11 @@ from ..service import (
     NotFoundError,
 )
 from . import clients, health, invoices, params
-from .localhost_policy import LocalhostPolicyMiddleware, resolve_listen_port
+from .localhost_policy import (
+    LocalhostPolicyMiddleware,
+    resolve_listen_port,
+    resolve_policy_ports,
+)
 
 _ERROR_STATUS = {
     NotFoundError: 404,
@@ -39,6 +43,7 @@ def create_app(
     wsfex: WsfexClient | None = None,
     *,
     port: int | None = None,
+    public_port: int | None = None,
 ) -> FastAPI:
     """Construye la app contra UN perfil de ambiente explícito e inmutable.
 
@@ -47,8 +52,10 @@ def create_app(
     Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
     y paths derivan todos del perfil vía Config/ProfilePaths (FAC-25).
 
-    FAC-41: ``port`` (o ``FACTURADOR_PORT``) fija la allowlist de Host/Origin
-    del middleware localhost; el launcher pasa el mismo puerto al backend.
+    FAC-41: ``port`` (o ``FACTURADOR_PORT``) es el bind; la allowlist de
+    Host/Origin usa ese puerto y, si aplica, ``public_port`` /
+    ``FACTURADOR_PUBLIC_PORT`` (publish del host en Docker cuando difiere
+    del 8399 interno).
     """
     if config is None:
         config = load_config(profile)
@@ -65,15 +72,17 @@ def create_app(
     conn = conn or db.connect(config.paths.db)
     wsfex = wsfex or WsfexClient(config)
     listen_port = resolve_listen_port(port)
+    policy_ports = resolve_policy_ports(listen_port, public_port)
 
     app = FastAPI(title="facturador", version="0.1.0")
     app.state.profile = profile
     app.state.service = InvoiceService(config, conn, wsfex)
     app.state.listen_port = listen_port
+    app.state.policy_ports = policy_ports
 
     # Host/Origin estrictos (FAC-41). add_middleware envuelve por fuera:
     # corre antes que routers y static.
-    app.add_middleware(LocalhostPolicyMiddleware, port=listen_port)
+    app.add_middleware(LocalhostPolicyMiddleware, ports=policy_ports)
 
     def _handler_for(status: int):
         async def handler(request: Request, exc: Exception):

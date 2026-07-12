@@ -149,6 +149,65 @@ def test_resolve_listen_port_desde_env(monkeypatch):
     assert resolve_listen_port(8411) == 8411  # explícito gana
 
 
+def test_docker_public_port_en_allowlist_junto_al_listen(monkeypatch):
+    """Compose: bind 8399 adentro, browser en FACTURADOR_PUBLIC_PORT del host."""
+    from facturador.api.localhost_policy import resolve_policy_ports
+
+    monkeypatch.delenv("FACTURADOR_PUBLIC_PORT", raising=False)
+    assert resolve_policy_ports(DEFAULT_PORT) == frozenset({DEFAULT_PORT})
+
+    monkeypatch.setenv("FACTURADOR_PUBLIC_PORT", "8400")
+    ports = resolve_policy_ports(DEFAULT_PORT)
+    assert ports == frozenset({DEFAULT_PORT, 8400})
+    assert check_host_header("localhost:8400", ports) is None
+    assert check_host_header(f"127.0.0.1:{DEFAULT_PORT}", ports) is None
+    assert check_origin_headers(
+        "POST", "http://localhost:8400", None, ports
+    ) is None
+    assert check_host_header("localhost:8411", ports) is not None
+
+
+def test_middleware_acepta_host_del_publish_docker(
+    test_profile, test_config, arca
+):
+    """Browser en puerto host distinto del bind interno (Docker mapping)."""
+    listen = DEFAULT_PORT
+    public = 8400
+    conn = db.connect(test_profile.paths.db)
+    seed_params(conn)
+    seed_settings(conn)
+    wsfex = WsfexClient(
+        test_config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(
+        test_profile,
+        config=test_config,
+        conn=conn,
+        wsfex=wsfex,
+        port=listen,
+        public_port=public,
+    )
+    # TestClient base_url usa el puerto público (lo que ve el browser).
+    client = TestClient(app, base_url=loopback_base_url(public))
+
+    assert client.get("/health").status_code == 200
+    # Healthcheck interno del contenedor sigue válido en el listen port.
+    assert (
+        client.get("/health", headers={"Host": f"localhost:{listen}"}).status_code
+        == 200
+    )
+    r = client.post(
+        "/clients",
+        json={**_CLIENTE, "razon_social": "DOCKER PUBLIC", "id_impositivo": "RUT 3"},
+        headers={"Origin": f"http://127.0.0.1:{public}"},
+    )
+    assert r.status_code == 201, r.text
+    bad = client.get("/health", headers={"Host": "localhost:8411"})
+    assert bad.status_code == 400
+
+
 def test_middleware_rechaza_host_inesperado(api):
     # Host hostil con el mismo puerto que escucha la app.
     r = api.get("/health", headers={"Host": f"evil.example:{DEFAULT_PORT}"})
