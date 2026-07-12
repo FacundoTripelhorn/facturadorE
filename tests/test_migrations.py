@@ -148,35 +148,19 @@ def test_failed_migration_leaves_db_unchanged(tmp_path: Path) -> None:
         conn.close()
 
 
-def test_failed_migration_blocks_connect(tmp_path: Path) -> None:
+def test_failed_migration_blocks_connect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Si migrate falla dentro de connect, no se devuelve una conexión usable."""
     path = tmp_path / "blocked.db"
-    # Pre-crear DB migrada a v1 para poder inyectar fallo en un 2do paso
-    # vía monkeypatch del registry no es necesario: connect usa MIGRATIONS
-    # globales. Acá verificamos el mensaje de legacy y el de fallo genérico
-    # vía migrate; connect cierra la conexión ante MigrationError.
-    conn = sqlite3.connect(path)
-    conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    conn.commit()
-    conn.close()
 
-    with pytest.raises(MigrationError, match="anterior al sistema de migraciones"):
+    def boom(_conn: sqlite3.Connection, migrations=None) -> int:
+        raise MigrationError("simulated migration failure")
+
+    monkeypatch.setattr(db, "migrate", boom)
+    with pytest.raises(MigrationError, match="simulated migration failure"):
         db.connect(path)
-    # El archivo sigue existiendo; no hubo wipe silencioso.
     assert path.exists()
-
-
-def test_legacy_database_requires_reset(tmp_path: Path) -> None:
-    path = tmp_path / "legacy.db"
-    conn = sqlite3.connect(path)
-    conn.executescript(
-        "CREATE TABLE clients (id TEXT PRIMARY KEY);"
-        "CREATE TABLE invoices (id TEXT PRIMARY KEY);"
-    )
-    conn.close()
-
-    with pytest.raises(MigrationError, match="Reseteá el perfil"):
-        db.connect(path)
 
 
 def test_foreign_keys_enabled_on_every_connection(tmp_path: Path) -> None:

@@ -8,9 +8,9 @@ El ciclo de vida es:
 3. Si alguna falla, se hace ``ROLLBACK`` y el arranque queda bloqueado
    con un ``MigrationError`` claro — la DB no queda a medias.
 
-La baseline (versión 1) es el esquema de perfiles aislados vigente. Las
-bases experimentales anteriores a este mecanismo no se migran in-place:
-hay que resetear el perfil (borrar la DB) y arrancar de nuevo.
+La baseline (versión 1) es el esquema de perfiles aislados vigente. Toda
+DB vive bajo un perfil; no hay camino de compatibilidad para esquemas
+anteriores a este mecanismo.
 """
 
 from __future__ import annotations
@@ -20,19 +20,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-
-# Tablas de dominio del esquema de perfiles (baseline). Si existen sin
-# ``schema_migrations``, la DB es experimental pre-FAC-43.
-_APP_TABLES = frozenset(
-    {
-        "settings",
-        "emisores",
-        "arca_params",
-        "clients",
-        "invoices",
-        "invoice_items",
-    }
-)
 
 _SCHEMA_MIGRATIONS_DDL = """
 CREATE TABLE schema_migrations (
@@ -127,20 +114,6 @@ def _table_names(conn: sqlite3.Connection) -> set[str]:
     return {str(r[0]) for r in rows}
 
 
-def _reject_legacy_database(conn: sqlite3.Connection) -> None:
-    tables = _table_names(conn)
-    if "schema_migrations" in tables:
-        return
-    leftover = sorted(tables & _APP_TABLES)
-    if leftover:
-        raise MigrationError(
-            "Esta base de datos es anterior al sistema de migraciones "
-            "(FAC-43) y no se actualiza in-place. Reseteá el perfil "
-            f"(borrá la DB) y volvé a arrancar. Tablas encontradas: "
-            f"{', '.join(leftover)}."
-        )
-
-
 def _validate_migrations(migrations: Sequence[Migration]) -> list[Migration]:
     ordered = sorted(migrations, key=lambda m: m.version)
     seen: set[int] = set()
@@ -169,7 +142,6 @@ def migrate(
     Toda la corrida (crear ``schema_migrations`` + DDL + registros) ocurre
     en una sola transacción. Ante error: rollback y ``MigrationError``.
     """
-    _reject_legacy_database(conn)
     ordered = _validate_migrations(
         migrations if migrations is not None else MIGRATIONS
     )
