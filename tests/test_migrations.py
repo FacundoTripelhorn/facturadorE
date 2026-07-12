@@ -17,7 +17,6 @@ from facturador.migrations import (
     migrate,
 )
 
-
 BASELINE_TABLES = {
     "schema_migrations",
     "settings",
