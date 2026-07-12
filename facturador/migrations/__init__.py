@@ -81,8 +81,28 @@ def _load_baseline_sql() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _add_invoices_cuit_emisor(conn: sqlite3.Connection) -> None:
+    """FAC-39: snapshot del CUIT fiscal del perfil en cada factura.
+
+    Condicional: el baseline (v1) ya puede incluir la columna si
+    ``schema.sql`` se actualizó; en DBs que corrieron el baseline viejo
+    hay que agregarla.
+    """
+    cols = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(invoices)").fetchall()
+    }
+    if "cuit_emisor" not in cols:
+        conn.execute("ALTER TABLE invoices ADD COLUMN cuit_emisor TEXT")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="baseline", sql=_load_baseline_sql()),
+    Migration(
+        version=2,
+        name="invoices_cuit_emisor",
+        apply_fn=_add_invoices_cuit_emisor,
+    ),
 )
 
 

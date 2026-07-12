@@ -53,7 +53,11 @@ Reglas que componen el contrato:
 6. Cada perfil es dueño exclusivo de: su base SQLite, sus certificados, su
    cache de PDFs, su cache de TA del WSAA, su cache de parámetros de ARCA,
    sus logs, su estado de onboarding y sus backups.
-7. **Un CUIT fiscal por perfil** (el del certificado del perfil).
+7. **Un CUIT fiscal por perfil** (el del certificado del perfil). Implementado
+   en [FAC-39](https://linear.app/ftripelhorn/issue/FAC-39/enforce-one-fiscal-cuit-per-environment-profile):
+   sello en `settings.fiscal_cuit`, snapshot en `invoices.cuit_emisor`,
+   rechazo de certificados o configuración de emisor que introduzcan otro
+   CUIT (cambiar de contribuyente = perfil nuevo o reset).
 8. El ambiente activo queda **siempre visible** en la app (badge persistente,
    título, health/diagnóstico).
 

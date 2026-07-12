@@ -31,12 +31,14 @@ from .constants import (
     UMED_UNIDADES,
     InvoiceStatus,
 )
+from .fiscal_identity import FiscalIdentityError, resolve_profile_fiscal_cuit
 from .mappers import (
     dec,
     raw_to_wsfex_invoice,
     row_to_wsfex_invoice,
     wsfex_invoice_to_raw,
 )
+from .profile import EnvironmentProfile
 from .schemas import (
     BackupSettingsIn,
     ClientIn,
@@ -347,6 +349,16 @@ class InvoiceService:
                 "No hay emisor activo para emitir; elegir uno en Configuración."
             )
 
+        try:
+            cuit_emisor = resolve_profile_fiscal_cuit(
+                self.conn,
+                EnvironmentProfile(
+                    environment=self.config.env, paths=self.config.paths
+                ),
+            )
+        except FiscalIdentityError as exc:
+            raise ConflictError(str(exc)) from exc
+
         data = {
             "emisor_id": settings.emisor.id,
             "client_id": client["id"],
@@ -371,6 +383,9 @@ class InvoiceService:
             "idioma_cbte": client["idioma_default"],
             "imp_total": dec(payload.imp_total),
             "obs": payload.obs,
+            # Identidad fiscal del perfil (FAC-39): CUIT del certificado,
+            # no editable vía emisor. Snapshot inmutable en el comprobante.
+            "cuit_emisor": cuit_emisor,
             # Auditoría inmutable (ADR 0001 / FAC-26): el ambiente del
             # comprobante sale SIEMPRE del perfil corriente, nunca del
             # request, y después se valida en cada acceso por id.

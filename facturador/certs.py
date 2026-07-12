@@ -101,6 +101,7 @@ def store_certificate_pair(
     key_pem: bytes | str,
     *,
     now: dt.datetime | None = None,
+    sealed_cuit: str | None = None,
 ) -> CertificateMetadata:
     """Valida y persiste el par en el perfil de forma atómica.
 
@@ -109,10 +110,13 @@ def store_certificate_pair(
     llamada + lock evitan cruces ante stores concurrentes. Tras un replace
     exitoso se invalida el cache de TA de WSAA del perfil.
 
-    Identidad fiscal (rechazar un CUIT distinto al ya instalado / sellar el
-    perfil a un solo contribuyente) es FAC-39 — fuera del alcance de este
-    servicio de validación/persistencia.
+    Identidad fiscal (FAC-39): un CUIT distinto al certificado vivo o al
+    sello ``sealed_cuit`` se rechaza sin mutar el perfil. Renovar el par
+    con el mismo CUIT está permitido.
     """
+    # Import diferido: fiscal_identity importa load_certificate_metadata de acá.
+    from .fiscal_identity import assert_certificate_matches_profile
+
     cert_bytes = _as_pem_bytes(cert_pem, label="certificado")
     key_bytes = _as_pem_bytes(key_pem, label="clave privada")
     metadata = validate_certificate_pair(
@@ -121,8 +125,16 @@ def store_certificate_pair(
         environment=profile.environment,
         now=now,
     )
+    assert_certificate_matches_profile(
+        profile, metadata.cuit, sealed_cuit=sealed_cuit
+    )
 
     with _STORE_LOCK:
+        # Releer bajo lock: otro hilo pudo instalar un CUIT distinto entre
+        # la validación y el replace.
+        assert_certificate_matches_profile(
+            profile, metadata.cuit, sealed_cuit=sealed_cuit
+        )
         _persist_validated_pair(profile, cert_bytes, key_bytes)
         # El TA cacheado fue firmado/emitido para el cert anterior; WSFEX
         # arma Auth con el CUIT del cert actual → hay que descartarlo.

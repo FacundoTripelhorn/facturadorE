@@ -10,10 +10,11 @@ En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
 El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001 /
 FAC-26): la DB entera pertenece a un solo ambiente, así que acá no se
 selecciona ni filtra por ambiente. Un perfil puede tener varios emisores
-(una sola identidad fiscal: el CUIT del certificado del perfil) y la app
-opera con el activo explícito (``active_emisor_id`` en settings, una única
-clave); sin selección no hay emisor operativo. La config de backups es
-global al perfil.
+(una sola identidad fiscal: el CUIT del certificado del perfil, sellado
+en ``settings.fiscal_cuit`` — FAC-39) y la app opera con el activo
+explícito (``active_emisor_id`` en settings, una única clave); sin
+selección no hay emisor operativo. La config de backups es global al
+perfil. El emisor no lleva CUIT ni puede sobrescribir la identidad fiscal.
 """
 
 from __future__ import annotations

@@ -283,7 +283,8 @@ def test_store_preserva_par_previo_si_falla_el_replace(
     good_cert, good_key, _ = _build_pair(cuit=VALID_CUIT)
     store_certificate_pair(profile, good_cert, good_key)
 
-    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    # Mismo CUIT, par distinto: la identidad fiscal lo permite; el replace falla.
+    new_cert, new_key, _ = _build_pair(cuit=VALID_CUIT)
     import os as os_module
 
     real_replace = os_module.replace
@@ -331,14 +332,17 @@ def test_store_usa_temps_unicos_por_llamada(
 
 
 def test_stores_concurrentes_dejan_par_consistente(profile: EnvironmentProfile):
-    """Lock + temps únicos: el par vivo nunca queda cert A + key B."""
+    """Lock + temps únicos: el par vivo nunca queda cert A + key B.
+
+    FAC-39: todos los pares comparten el mismo CUIT (renovación permitida).
+    """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     pairs = [
         _build_pair(cuit=VALID_CUIT),
-        _build_pair(cuit=OTHER_CUIT),
         _build_pair(cuit=VALID_CUIT),
-        _build_pair(cuit=OTHER_CUIT),
+        _build_pair(cuit=VALID_CUIT),
+        _build_pair(cuit=VALID_CUIT),
     ]
 
     def _store(pair: tuple[bytes, bytes, object]) -> CertificateMetadata:
@@ -389,7 +393,7 @@ def test_store_fallido_no_borra_cache_de_ta(
     cache = profile.paths.wsaa_ta_cache
     cache.write_text("{}", encoding="utf-8")
 
-    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    new_cert, new_key, _ = _build_pair(cuit=VALID_CUIT)
     import os as os_module
 
     real_replace = os_module.replace
@@ -415,7 +419,7 @@ def test_reader_espera_par_completo_bajo_lock(
 
     old_cert, old_key, _ = _build_pair(cuit=VALID_CUIT)
     store_certificate_pair(profile, old_cert, old_key)
-    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    new_cert, new_key, _ = _build_pair(cuit=VALID_CUIT)
 
     holding = threading.Event()
     release = threading.Event()
@@ -471,6 +475,43 @@ def test_reader_espera_par_completo_bajo_lock(
     assert seen == [(new_cert, new_key)]
     assert (new_cert, old_key) not in seen
     assert (old_cert, new_key) not in seen
+
+
+def test_store_rechaza_certificado_con_otro_cuit(profile: EnvironmentProfile):
+    """FAC-39: renovar con otro CUIT no muta el perfil."""
+    good_cert, good_key, _ = _build_pair(cuit=VALID_CUIT)
+    store_certificate_pair(profile, good_cert, good_key)
+    before_cert = profile.paths.cert.read_bytes()
+    before_key = profile.paths.key.read_bytes()
+
+    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    with pytest.raises(CertificateError, match="perfil nuevo|resetear"):
+        store_certificate_pair(profile, new_cert, new_key)
+
+    assert profile.paths.cert.read_bytes() == before_cert
+    assert profile.paths.key.read_bytes() == before_key
+
+
+def test_store_permite_renovar_mismo_cuit(profile: EnvironmentProfile):
+    """FAC-39: rotación de par con el mismo CUIT está permitida."""
+    old_cert, old_key, _ = _build_pair(cuit=VALID_CUIT)
+    store_certificate_pair(profile, old_cert, old_key)
+    new_cert, new_key, _ = _build_pair(cuit=VALID_CUIT)
+    meta = store_certificate_pair(profile, new_cert, new_key)
+    assert meta.cuit == VALID_CUIT
+    assert profile.paths.cert.read_bytes() == new_cert
+    assert profile.paths.key.read_bytes() == new_key
+
+
+def test_store_rechaza_cuit_distinto_del_sello(profile: EnvironmentProfile):
+    """FAC-39: el sello en settings también bloquea otro CUIT (sin cert vivo)."""
+    new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
+    with pytest.raises(CertificateError, match="sellado al CUIT"):
+        store_certificate_pair(
+            profile, new_cert, new_key, sealed_cuit=VALID_CUIT
+        )
+    assert not profile.paths.cert.exists()
+    assert not profile.paths.key.exists()
 
 
 def test_store_en_perfil_prod_marca_ambiente_prod(tmp_path: Path):

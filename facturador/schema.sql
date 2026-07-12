@@ -12,7 +12,8 @@ CREATE TABLE settings (
 
 -- Emisores (la app es dueña de su configuración): la entidad es el emisor,
 -- LOCAL al perfil (ADR 0001 / FAC-26) — la DB entera pertenece a un solo
--- ambiente. Un perfil puede tener varios emisores (una identidad fiscal);
+-- ambiente. Un perfil puede tener varios emisores (una identidad fiscal:
+-- el CUIT del certificado, sellado en settings.fiscal_cuit — FAC-39);
 -- la app opera con el activo explícito (clave única active_emisor_id en
 -- settings). La columna ambiente es el sello del perfil al crear, no una
 -- elección del usuario.
@@ -88,6 +89,9 @@ CREATE TABLE invoices (
     raw_request        TEXT,
     raw_response       TEXT,
     last_error         TEXT,
+    -- Identidad fiscal del perfil al crear (FAC-39): CUIT del certificado,
+    -- inmutable; el PDF y la auditoría no releen el cert vivo.
+    cuit_emisor        TEXT,
     -- Auditoría inmutable (ADR 0001 / FAC-26): sello del perfil al crear,
     -- validado contra el perfil corriente en cada acceso por id.
     environment        TEXT NOT NULL,
