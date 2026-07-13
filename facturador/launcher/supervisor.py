@@ -279,7 +279,7 @@ class ProcessSupervisor:
         }
         if sys.platform == "win32":
             # CREATE_NEW_PROCESS_GROUP permite señalizar sin matar al launcher.
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             kwargs["start_new_session"] = True
         try:

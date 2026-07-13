@@ -4,6 +4,7 @@ saliendo SOLO del perfil (FAC-25) y resolución única del home de bootstrap
 (sin fallback al CWD)."""
 
 import os
+import sys
 
 import pytest
 
@@ -132,13 +133,29 @@ def test_primer_arranque_sin_eleccion_explicita_falla(monkeypatch, tmp_path):
         resolve_boot_environment()
 
 
-def test_arranque_rechazado_sin_certificados(tmp_path):
+def test_arranque_sin_certificados_queda_en_setup(tmp_path):
+    """FAC-35: sin par cert/key el backend arranca; el setup pide certificado."""
+    from facturador import db
+    from facturador.setup import SetupState, reconcile_setup_state
+
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
-    with pytest.raises(ConfigError, match="cert.crt"):
+    config = load_config(profile)
+    assert not config.paths.cert.is_file()
+    conn = db.connect(config.paths.db)
+    assert reconcile_setup_state(profile, conn) is SetupState.CERTIFICATE_REQUIRED
+
+
+def test_arranque_rechazado_con_par_incompleto(tmp_path):
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
+    profile.paths.ensure_layout()
+    profile.paths.cert.write_text("CERT")
+    with pytest.raises(ConfigError, match="Par incompleto"):
         load_config(profile)
 
 
 def test_arranque_rechazado_con_permisos_laxos_en_la_key(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("El chequeo de modo 400/600 es POSIX (Docker/Linux)")
     profile = _perfil_con_certs(ArcaEnvironment.HOMO, tmp_path / "h")
     profile.paths.key.chmod(0o644)
     with pytest.raises(ConfigError, match="Permisos laxos"):

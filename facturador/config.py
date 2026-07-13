@@ -26,8 +26,9 @@ Resolución de configuración (única, sin fallbacks al directorio de trabajo):
    (ver settings.py).
 
 Los certificados son archivos en ``<perfil>/secrets/cert.{crt,key}``
-colocados a mano (sin sufijo de ambiente: el perfil YA es el ambiente); los
-chequeos de arranque (permisos 400/600, par presente) se mantienen intactos.
+(nombres genéricos: el perfil YA es el ambiente). FAC-35: el arranque
+tolera el par ausente (estado ``certificate_required`` + guardia); si la
+clave existe, sus permisos deben ser 400/600.
 """
 
 from __future__ import annotations
@@ -151,15 +152,24 @@ def load_config(profile: EnvironmentProfile) -> Config:
 
 
 def validate_config(config: Config) -> None:
-    """La app se niega a arrancar con secretos ausentes o permisos laxos."""
-    for path in (config.paths.cert, config.paths.key):
-        if not path.is_file():
-            raise ConfigError(
-                f"Falta {path.name} para el perfil de {config.env}: {path}. "
-                "Colocar el par cert/key en el secrets/ del perfil con los "
-                "nombres cert.crt / cert.key."
-            )
-    _check_key_permissions(config.paths.key)
+    """Valida secretos presentes; permite arrancar sin par (FAC-35).
+
+    Sin ``cert.crt``/``cert.key`` el backend igual arranca: el estado de
+    setup queda en ``certificate_required`` y la guardia bloquea factura/
+    ARCA hasta completar el onboarding. Si la clave existe, sus permisos
+    deben ser 400/600 (design.md §2.5).
+    """
+    cert_ok = config.paths.cert.is_file()
+    key_ok = config.paths.key.is_file()
+    if cert_ok != key_ok:
+        missing = "cert.key" if cert_ok else "cert.crt"
+        present = "cert.crt" if cert_ok else "cert.key"
+        raise ConfigError(
+            f"Par incompleto en el perfil de {config.env}: está {present} "
+            f"pero falta {missing} ({config.paths.secrets_dir})."
+        )
+    if key_ok:
+        _check_key_permissions(config.paths.key)
 
 
 def _check_key_permissions(key_path: Path) -> None:

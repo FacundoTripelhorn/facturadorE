@@ -121,14 +121,16 @@ def test_sin_cliente_default_ni_client_id_es_conflicto(api):
 
 
 def test_sin_datos_de_emisor_no_se_emite(api):
-    """Primer arranque sin configurar: los datos del emisor van al PDF y la
-    app exige completarlos (en Configuración) antes de emitir."""
+    """Sin emisor completo el perfil no está ready (FAC-35): la guardia
+    bloquea la emisión antes del chequeo de dominio del service."""
     with api.conn:
         api.conn.execute("DELETE FROM emisores")
     _crear_cliente(api)
     r = api.post("/invoices", json={"imp_total": "100.00"})
-    assert r.status_code == 409
-    assert "emisor" in r.json()["detail"]
+    assert r.status_code == 503
+    body = r.json()
+    assert body["setup_state"] == "emisor_required"
+    assert "setup" in body["detail"]
 
 
 def test_imp_total_distinto_de_items_es_error_de_dominio(api):

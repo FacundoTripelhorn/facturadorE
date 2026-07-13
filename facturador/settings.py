@@ -81,12 +81,12 @@ def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
         valores = json.loads(raw_value)
     except ValueError:
         return (1,)
-    if (
-        isinstance(valores, list)
-        and valores
-        and all(isinstance(v, int) and v >= 1 for v in valores)
-    ):
-        return tuple(valores)
+    if isinstance(valores, list):
+        # Lista vacía = aún sin PV (FAC-35/38: point_of_sale_required).
+        if not valores:
+            return ()
+        if all(isinstance(v, int) and v >= 1 for v in valores):
+            return tuple(valores)
     return (1,)
 
 

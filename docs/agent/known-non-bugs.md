@@ -77,8 +77,10 @@ while the container keeps listening on 8399.
 ## Missing real ARCA homologación credentials
 
 **Symptom:** ARCA-backed endpoints return 5xx (`WsaaError`, SOAP faults, health
-check failures). `GET /` may return 500 when a default client exists and WSAA
-cannot obtain a TA.
+check failures) once the profile is ``ready``. `GET /` may return 500 when a
+default client exists and WSAA cannot obtain a TA. If setup is incomplete,
+invoice/ARCA routes (including `GET /`) return **503** with `setup_state`
+(FAC-35) — that is the onboarding guard, not a credential bug.
 
 **Expected** in environments without a registered homologación certificate
 (CI, fresh clones, agent VMs, offline dev).
@@ -106,6 +108,24 @@ homologación are local-only (`.github/workflows/ci.yml`).
 **Fix:** Follow [`docs/setup-homologacion.md`](../setup-homologacion.md) — place
 `secrets/cert.crt` and `secrets/cert.key` on the Homologación profile, register
 in WSASS, authorize service `wsfex`.
+
+---
+
+## Incomplete profile setup returns 503 (FAC-35)
+
+**Symptom:** `POST /invoices`, `POST …/authorize`, `GET /`, `/params/…`, or
+`GET /health/arca` return **503** with `setup_state` such as
+`certificate_required` or `emisor_required`.
+
+**Expected.** Each profile stores setup progress in `data/onboarding.json`.
+Until the state is `ready` (valid cert pair + active complete emisor with at
+least one point of sale), the guard blocks invoice and ARCA operations.
+`GET /health` and `GET /setup` stay available; `/configuracion` remains open
+so emisor/PV can be completed (FAC-38).
+
+**Do not** treat this as a broken health check or a missing exception handler.
+Inspect `GET /setup` and finish the pending step (FAC-37/38 UI, or manual
+certs + Configuración).
 
 ---
 
