@@ -391,7 +391,6 @@ def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
     """FAC-35: sin emisor el perfil no está ready; factura/ARCA → 503.
     Configuración sigue disponible para completar el setup (FAC-38)."""
     _sin_settings(api)
-    _crear_cliente_por_form(api)
 
     home = api.get("/")
     assert home.status_code == 503
@@ -405,6 +404,7 @@ def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
     assert r.status_code == 503
     assert r.json()["setup_state"] == "emisor_required"
 
+    assert api.get("/clientes").status_code == 503
     assert api.get("/configuracion").status_code == 200
 
 

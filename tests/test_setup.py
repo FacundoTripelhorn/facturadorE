@@ -165,6 +165,7 @@ def test_factura_y_arca_bloqueados_hasta_ready(tmp_path):
     assert client.get("/").status_code == 503
     assert client.get("/health/arca").status_code == 503
     assert client.get("/params/moneda").status_code == 503
+    assert client.get("/clientes").status_code == 503
 
 
 def test_factura_permitida_cuando_ready(api):
@@ -190,7 +191,9 @@ def test_factura_permitida_cuando_ready(api):
         ("GET", "/invoices", True),
         ("GET", "/health/arca", True),
         ("GET", "/params/moneda", True),
-        ("GET", "/clientes", False),
+        ("GET", "/clientes", True),
+        ("GET", "/clients", True),
+        ("POST", "/ui/clientes", True),
     ],
 )
 def test_requires_ready_matrix(method, path, blocked):
@@ -204,6 +207,36 @@ def test_detalle_html_bloqueado_hasta_ready(tmp_path):
     r = client.get("/facturas/any-id")
     assert r.status_code == 503
     assert r.json()["setup_state"] == SetupState.CERTIFICATE_REQUIRED.value
+
+
+def test_clientes_bloqueados_hasta_ready(tmp_path):
+    """Codex review: /clientes llama get_params y puede tocar ARCA sin cache."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    assert client.get("/clientes").status_code == 503
+    assert client.get("/clients").status_code == 503
+
+
+def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):
+    """Codex review: mid-process con key 644 sigue en certificate_required."""
+    import sys
+
+    if sys.platform == "win32":
+        pytest.skip("Chequeo de modo 400/600 es POSIX")
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    profile.paths.cert.write_bytes(cert_pem)
+    profile.paths.key.write_bytes(key_pem)
+    profile.paths.key.chmod(0o644)
+    conn = db.connect(profile.paths.db)
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo")))
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
+
+    assert evaluate_setup_state(profile, conn) is SetupState.CERTIFICATE_REQUIRED
+    profile.paths.key.chmod(0o400)
+    assert evaluate_setup_state(profile, conn) is SetupState.READY
 
 
 def test_config_sin_certs_carga_ok(tmp_path):

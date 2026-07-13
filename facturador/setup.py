@@ -15,6 +15,7 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Any
 
+from .config import key_permissions_ok
 from .profile import EnvironmentProfile, ProfilePaths
 from .settings import get_active_emisor_id, load_settings
 
@@ -44,8 +45,15 @@ def is_ready(state: SetupState) -> bool:
 
 
 def has_certificate_pair(paths: ProfilePaths) -> bool:
-    """Par cert/key presente en el secrets/ del perfil (sin validar PEM)."""
-    return paths.cert.is_file() and paths.key.is_file()
+    """Par cert/key usable: ambos archivos y key con permisos 400/600.
+
+    Si el par aparece mid-process (FAC-35) con permisos laxos, el setup
+    permanece en ``certificate_required`` hasta corregirlos — no se marca
+    ``ready`` solo por existencia de archivos.
+    """
+    if not paths.cert.is_file() or not paths.key.is_file():
+        return False
+    return key_permissions_ok(paths.key)
 
 
 def load_setup_state(paths: ProfilePaths) -> SetupState:

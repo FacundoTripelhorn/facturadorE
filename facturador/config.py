@@ -172,13 +172,24 @@ def validate_config(config: Config) -> None:
         _check_key_permissions(config.paths.key)
 
 
+def key_permissions_ok(key_path: Path) -> bool:
+    """True si la key no existe (caller decide) o sus permisos son 400/600.
+
+    En Windows los bits de modo no aplican; el layout definitivo es Docker.
+    """
+    if sys.platform == "win32":
+        return True
+    if not key_path.is_file():
+        return True
+    mode = stat.S_IMODE(key_path.stat().st_mode)
+    return not bool(mode & 0o077)
+
+
 def _check_key_permissions(key_path: Path) -> None:
     # Chequeo POSIX (dentro del contenedor Linux, design.md §2.5). En Windows
     # los bits de modo no aplican; el layout definitivo corre en Docker.
-    if sys.platform == "win32":
-        return
-    mode = stat.S_IMODE(key_path.stat().st_mode)
-    if mode & 0o077:
+    if not key_permissions_ok(key_path):
+        mode = stat.S_IMODE(key_path.stat().st_mode)
         raise ConfigError(
             f"Permisos laxos en {key_path} ({oct(mode)}): la clave privada "
             "debe ser 400/600. Corregir con: chmod 400 " + str(key_path)
