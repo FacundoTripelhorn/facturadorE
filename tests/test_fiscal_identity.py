@@ -209,6 +209,79 @@ def test_authorize_rechaza_si_identidad_diverge_del_snapshot(
     assert reloaded["raw_request"] is None
 
 
+def test_create_invoice_no_llama_arca_si_identidad_diverge(
+    profile: EnvironmentProfile, conn, monkeypatch: pytest.MonkeyPatch
+):
+    """Identidad se resuelve antes de get_param/get_ctz (Auth con CUIT)."""
+    seal_fiscal_cuit(conn, OTHER_CUIT)
+    cert_pem, key_pem, _ = _build_pair(cuit=VALID_CUIT)
+    profile.paths.ensure_layout()
+    profile.paths.cert.write_bytes(cert_pem)
+    profile.paths.key.write_bytes(key_pem)
+    seed_params(conn)
+    seed_settings(conn)
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(FakeArca().handler)),
+    )
+    service = InvoiceService(config, conn, wsfex)
+    repo.create_client(conn, CLIENTE)
+
+    def boom(*_a, **_k):
+        raise AssertionError("WSFEX no debe llamarse con identidad divergente")
+
+    monkeypatch.setattr(service.wsfex, "get_ctz", boom)
+    monkeypatch.setattr(service.wsfex, "get_param", boom)
+
+    with pytest.raises(ConflictError, match="sellado al CUIT"):
+        service.create_invoice(InvoiceCreate(imp_total=Decimal("10.00")))
+
+
+def test_reconcile_rechaza_si_identidad_diverge(profile: EnvironmentProfile, conn):
+    """Lazy FEXGetCMP también exige coincidencia snapshot/perfil."""
+    from facturador.constants import InvoiceStatus
+
+    service = _service(profile, conn)
+    client = repo.create_client(conn, CLIENTE)
+    inv = service.create_invoice(
+        InvoiceCreate(imp_total=Decimal("90.00"), client_id=client["id"])
+    )
+    # Simular unknown con request persistido (como post-timeout).
+    repo.update_invoice(
+        conn,
+        inv["id"],
+        status=InvoiceStatus.UNKNOWN,
+        arca_id=1,
+        cbte_nro=1,
+        raw_request=(
+            '{"arca_id":1,"cbte_tipo":19,"punto_venta":1,"cbte_nro":1,'
+            '"fecha_cbte":"20260101","fecha_pago":"20260101","tipo_expo":2,'
+            '"permiso_existente":"","dst_cmp":225,"cliente":"X",'
+            '"cuit_pais_cliente":55000002002,"domicilio_cliente":"",'
+            '"id_impositivo":"","moneda_id":"DOL","moneda_ctz":"1000",'
+            '"incoterms":"","incoterms_ds":"","forma_pago":"WIRE",'
+            '"idioma_cbte":1,"imp_total":"90.00","obs":"","items":[]}'
+        ),
+    )
+
+    other_cert, other_key, _ = _build_pair(cuit=OTHER_CUIT)
+    profile.paths.cert.write_bytes(other_cert)
+    profile.paths.key.chmod(0o600)
+    profile.paths.key.write_bytes(other_key)
+    profile.paths.key.chmod(0o400)
+    service.wsfex._cuit = None  # noqa: SLF001
+
+    with pytest.raises(ConflictError, match="sellado al CUIT|CUIT"):
+        service.get_invoice(inv["id"], reconcile=True)
+
+    reloaded = repo.get_invoice(conn, inv["id"])
+    assert reloaded is not None
+    assert reloaded["status"] == InvoiceStatus.UNKNOWN
+    assert reloaded["cae"] is None
+
+
 def test_baseline_incluye_cuit_emisor(tmp_path: Path):
     """Sin migración de upgrade: la columna vive en el baseline (no hay DBs viejas)."""
     conn = db.connect(tmp_path / "fresh.db")
