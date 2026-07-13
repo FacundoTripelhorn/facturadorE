@@ -1344,16 +1344,19 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     )
     from facturador.profile import EnvironmentProfile
     from tests.arca_fake import FakeArca, FakeWsaa
-    from tests.conftest import seed_params, seed_settings, with_csrf
+    from tests.conftest import (
+        install_test_cert_pair,
+        seed_params,
+        seed_settings,
+        with_csrf,
+    )
 
     monkeypatch.setenv(LAUNCHER_SUPERVISED_ENV, LAUNCHER_SUPERVISED_VALUE)
     profile = EnvironmentProfile.for_testing(
         ArcaEnvironment.HOMO, tmp_path / "profile-homo"
     )
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.ensure_layout()
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
     config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
     conn = db.connect(profile.paths.db)
     seed_params(conn)

@@ -125,7 +125,6 @@ def test_sin_datos_de_emisor_no_se_emite(api):
     bloquea la emisión antes del chequeo de dominio del service."""
     with api.conn:
         api.conn.execute("DELETE FROM emisores")
-    _crear_cliente(api)
     r = api.post("/invoices", json={"imp_total": "100.00"})
     assert r.status_code == 503
     body = r.json()

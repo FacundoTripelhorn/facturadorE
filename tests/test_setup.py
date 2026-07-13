@@ -24,7 +24,12 @@ from facturador.setup import (
     save_setup_state,
 )
 from tests.arca_fake import FakeArca, FakeWsaa
-from tests.conftest import EMISOR_PRUEBA, seed_params, seed_settings
+from tests.conftest import (
+    EMISOR_PRUEBA,
+    install_test_cert_pair,
+    seed_params,
+    seed_settings,
+)
 
 
 def _client_for_profile(
@@ -59,8 +64,7 @@ def test_make_setup_state_provider_refleja_hechos_sin_reinicio(
     assert get_state() is SetupState.CERTIFICATE_REQUIRED
 
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
     assert get_state() is SetupState.EMISOR_REQUIRED
     assert load_setup_state(profile.paths) is SetupState.EMISOR_REQUIRED
 
@@ -84,8 +88,7 @@ def test_reconcile_persiste_y_reinicio_retoma_paso(tmp_path, test_cert_and_key):
     assert load_setup_state(profile.paths) is SetupState.CERTIFICATE_REQUIRED
 
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
     assert reconcile_setup_state(profile, conn) is SetupState.EMISOR_REQUIRED
 
     save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo")))
@@ -101,8 +104,7 @@ def test_point_of_sale_required_sin_puntos_venta(tmp_path, test_cert_and_key):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     profile.paths.ensure_layout()
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
     conn = db.connect(profile.paths.db)
     save_settings(
         conn,
@@ -227,9 +229,7 @@ def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     profile.paths.ensure_layout()
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
-    profile.paths.key.chmod(0o644)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem, key_mode=0o644)
     conn = db.connect(profile.paths.db)
     save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo")))
     set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
