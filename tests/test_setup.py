@@ -13,6 +13,7 @@ from facturador.api.setup_guard import is_setup_exempt, requires_ready_profile
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config, load_config
 from facturador.constants import ArcaEnvironment
+from facturador.fiscal_identity import seal_fiscal_cuit
 from facturador.profile import EnvironmentProfile
 from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 from facturador.setup import (
@@ -30,7 +31,22 @@ from tests.conftest import (
     install_test_cert_pair,
     seed_params,
     seed_settings,
+    with_csrf,
 )
+from tests.test_certs import OTHER_CUIT, VALID_CUIT, _build_pair
+
+_CLIENTE_FORM = {
+    "razon_social": "CLIENTE URUGUAY S.A.",
+    "domicilio": "Av. Siempreviva 123, Montevideo",
+    "pais_dst": "225",
+    "cuit_pais": "55000002002",
+    "id_impositivo": "RUT 219999830019",
+    "moneda_default": "DOL",
+    "idioma_default": "1",
+    "forma_pago_default": "WIRE TRANSFER",
+    "descripcion_default": "Servicios de desarrollo de software",
+    "is_default": "true",
+}
 
 
 def _client_for_profile(
@@ -261,10 +277,36 @@ def test_clientes_sin_params_ni_certs_muestra_error_no_500(tmp_path):
     assert 'class="panel error"' in r.text
 
 
+def test_post_clientes_sin_params_ni_certs_muestra_error_no_500(tmp_path):
+    """POST /ui/clientes sin cache/certs: 422 con error, no 500."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    r = client.post(
+        "/ui/clientes",
+        data=with_csrf(client, _CLIENTE_FORM),
+    )
+    assert r.status_code == 422
+    assert 'class="panel error"' in r.text
+
+
 def test_clientes_y_ui_clientes_son_setup_exempt():
     assert is_setup_exempt("GET", "/clientes") is True
     assert is_setup_exempt("POST", "/ui/clientes") is True
     assert is_setup_exempt("GET", "/invoices") is False
+
+
+def test_cert_distinto_del_sello_fiscal_queda_en_certificate_required(tmp_path):
+    """FAC-39: sello CUIT A + cert CUIT B no llega a ready."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    profile.paths.ensure_layout()
+    conn = db.connect(profile.paths.db)
+    seal_fiscal_cuit(conn, OTHER_CUIT)
+    cert_pem, key_pem, _ = _build_pair(cuit=VALID_CUIT)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo")))
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
+
+    assert evaluate_setup_state(profile, conn) is SetupState.CERTIFICATE_REQUIRED
 
 
 def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):
