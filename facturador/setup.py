@@ -10,6 +10,7 @@ flujo de UI; este módulo solo modela el estado y la readiness.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import tempfile
@@ -26,6 +27,8 @@ from .certs import (
 from .config import key_permissions_ok
 from .profile import EnvironmentProfile, ProfilePaths
 from .settings import get_active_emisor_id, load_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SetupState(StrEnum):
@@ -153,7 +156,18 @@ def reconcile_setup_state(
     Un reinicio vuelve a reconciliar y retoma el mismo paso mientras los
     hechos no cambien. Perfiles ya configurados a mano (certs + emisor)
     quedan en ``ready`` sin pasar por la UI de onboarding.
+
+    Si ``onboarding.json`` está corrupto, se ignora y se re-deriva el
+    estado desde hechos (nunca 500 por el archivo de estado).
     """
+    try:
+        load_setup_state(profile.paths)
+    except SetupError:
+        logger.warning(
+            "onboarding.json corrupto en %s; se re-deriva el estado",
+            profile.paths.onboarding,
+            exc_info=True,
+        )
     state = evaluate_setup_state(profile, conn)
     save_setup_state(profile.paths, state)
     return state
