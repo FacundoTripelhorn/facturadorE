@@ -18,6 +18,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .certs import (
+    CertificateError,
+    read_live_certificate_pair,
+    validate_certificate_pair,
+)
 from .config import key_permissions_ok
 from .profile import EnvironmentProfile, ProfilePaths
 from .settings import get_active_emisor_id, load_settings
@@ -48,15 +53,27 @@ def is_ready(state: SetupState) -> bool:
 
 
 def has_certificate_pair(paths: ProfilePaths) -> bool:
-    """Par cert/key usable: ambos archivos y key con permisos 400/600.
-
-    Si el par aparece mid-process (FAC-35) con permisos laxos, el setup
-    permanece en ``certificate_required`` hasta corregirlos — no se marca
-    ``ready`` solo por existencia de archivos.
-    """
+    """Par cert/key presente con permisos de key 400/600 (sin validar PEM)."""
     if not paths.cert.is_file() or not paths.key.is_file():
         return False
     return key_permissions_ok(paths.key)
+
+
+def certificate_pair_is_usable(profile: EnvironmentProfile) -> bool:
+    """True si el par del perfil valida (parseable, match, CUIT, vigencia).
+
+    Archivos a mano inválidos o desparejados no desbloquean ``ready``.
+    """
+    if not has_certificate_pair(profile.paths):
+        return False
+    try:
+        cert_pem, key_pem = read_live_certificate_pair(profile.paths)
+        validate_certificate_pair(
+            cert_pem, key_pem, environment=profile.environment
+        )
+    except CertificateError:
+        return False
+    return True
 
 
 def load_setup_state(paths: ProfilePaths) -> SetupState:
@@ -111,12 +128,16 @@ def evaluate_setup_state(
     conn: sqlite3.Connection,
 ) -> SetupState:
     """Deriva el paso requerido desde hechos del perfil (sin escribir)."""
-    if not has_certificate_pair(profile.paths):
+    if not certificate_pair_is_usable(profile):
         return SetupState.CERTIFICATE_REQUIRED
 
     active_id = get_active_emisor_id(conn)
     emisor = load_settings(conn).emisor
-    if active_id is None or not emisor.completo:
+    if (
+        active_id is None
+        or not emisor.completo
+        or emisor.ambiente != profile.environment.value
+    ):
         return SetupState.EMISOR_REQUIRED
     if not emisor.puntos_venta:
         return SetupState.POINT_OF_SALE_REQUIRED
