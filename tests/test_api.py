@@ -463,17 +463,15 @@ def test_acceso_a_factura_de_otro_perfil_rechazado(api, arca):
 
 
 def test_emisor_activo_de_otro_perfil_rechazado(api, arca):
-    """FAC-26: si active_emisor_id apunta a un emisor sellado con OTRO
-    ambiente (DB ajena restaurada en el perfil equivocado), no se emite
-    con él: el 409 dice que la DB es de otro perfil, no un error genérico
-    de datos incompletos."""
+    """FAC-26 + FAC-35: emisor sellado con otro ambiente no deja el setup
+    en ``ready``; la guardia responde 503 antes de llegar al 409 de dominio."""
     _crear_cliente(api)
     with api.conn:
         api.conn.execute("UPDATE emisores SET ambiente = 'prod'")
 
     r = api.post("/invoices", json={"imp_total": "1500.00"})
-    assert r.status_code == 409
-    assert "perfil" in r.json()["detail"]
+    assert r.status_code == 503
+    assert r.json()["setup_state"] == "emisor_required"
     assert api.conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 0
 
 
