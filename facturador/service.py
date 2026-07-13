@@ -260,6 +260,14 @@ class InvoiceService:
                 "Faltan los datos del emisor (razón social y domicilio): "
                 "completarlos en Configuración antes de emitir."
             )
+        if settings.emisor.id is None:
+            raise ConflictError(
+                "No hay emisor activo para emitir; elegir uno en Configuración."
+            )
+        # Identidad fiscal ANTES de cualquier WSFEX (FAC-39): get_param /
+        # get_ctz también llevan Auth{Token,Sign,Cuit} del cert vivo.
+        cuit_emisor = self._resolve_fiscal_cuit()
+
         if payload.client_id is not None:
             client = repo.get_client(self.conn, payload.client_id)
             if client is None:
@@ -344,16 +352,6 @@ class InvoiceService:
                 f" ({', '.join(str(p) for p in pvs)})"
             )
 
-        if settings.emisor.id is None:
-            raise ConflictError(
-                "No hay emisor activo para emitir; elegir uno en Configuración."
-            )
-
-        try:
-            cuit_emisor = resolve_profile_fiscal_cuit(self.conn, self._profile())
-        except FiscalIdentityError as exc:
-            raise ConflictError(str(exc)) from exc
-
         data = {
             "emisor_id": settings.emisor.id,
             "client_id": client["id"],
@@ -408,17 +406,21 @@ class InvoiceService:
             environment=self.config.env, paths=self.config.paths
         )
 
+    def _resolve_fiscal_cuit(self) -> str:
+        """CUIT sellado del perfil; ConflictError si la identidad no cierra."""
+        try:
+            return resolve_profile_fiscal_cuit(self.conn, self._profile())
+        except FiscalIdentityError as exc:
+            raise ConflictError(str(exc)) from exc
+
     def _check_invoice_fiscal_identity(self, inv: sqlite3.Row) -> None:
         """FAC-39: el snapshot de la factura debe coincidir con el perfil.
 
-        Se revalida al autorizar (antes de cualquier llamada WSFEX) para que
-        un swap manual del certificado o del sello no autorice bajo un CUIT
+        Se revalida antes de cualquier WSFEX (authorize y reconcile) para que
+        un swap manual del certificado o del sello no opere bajo un CUIT
         distinto al del comprobante.
         """
-        try:
-            profile_cuit = resolve_profile_fiscal_cuit(self.conn, self._profile())
-        except FiscalIdentityError as exc:
-            raise ConflictError(str(exc)) from exc
+        profile_cuit = self._resolve_fiscal_cuit()
         snap = inv["cuit_emisor"]
         if snap is None:
             raise ConflictError(
@@ -639,6 +641,8 @@ class InvoiceService:
         """FEXGetCMP para una factura submitting/unknown. Devuelve la fila
         actualizada si se resolvió, None si ARCA no registra el comprobante
         (=> es seguro reintentar/reprocesar)."""
+        # FEXGetCMP autentica con Auth.Cuit del cert vivo (FAC-39).
+        self._check_invoice_fiscal_identity(inv)
         try:
             registrado = self.wsfex.get_cmp(
                 inv["cbte_tipo"], inv["punto_venta"], inv["cbte_nro"]
