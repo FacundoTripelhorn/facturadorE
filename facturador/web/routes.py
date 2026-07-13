@@ -31,6 +31,7 @@ from .. import repo
 from ..api.csrf import csrf_token_for_request, enforce_csrf
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
+from ..certs import CertificateError
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
 from ..launcher.switch import (
     is_launcher_supervised,
@@ -385,7 +386,12 @@ def _pagina_clientes(
     try:
         for kind in ("pais", "cuit_pais", "moneda", "idioma"):
             params[kind] = service.get_params(kind)
-    except ServiceError as exc:
+    except (ServiceError, CertificateError, OSError) as exc:
+        # Sin certs / par inválido el refresh de params no debe 500:
+        # el template muestra el mensaje y el CRUD offline sigue usable
+        # cuando el cache ya está sembrado. OSError cubre cert ausente
+        # (FileNotFoundError al leer el PEM); CertificateError el par
+        # inválido si el refresh pasa por validación FAC-36.
         error = error or str(exc)
     return templates.TemplateResponse(
         request,

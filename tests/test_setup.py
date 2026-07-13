@@ -9,13 +9,14 @@ from fastapi.testclient import TestClient
 from facturador import db, repo
 from facturador.api import create_app
 from facturador.api.localhost_policy import loopback_base_url
-from facturador.api.setup_guard import requires_ready_profile
+from facturador.api.setup_guard import is_setup_exempt, requires_ready_profile
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config, load_config
 from facturador.constants import ArcaEnvironment
 from facturador.profile import EnvironmentProfile
 from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 from facturador.setup import (
+    SetupError,
     SetupState,
     evaluate_setup_state,
     load_setup_state,
@@ -77,6 +78,38 @@ def test_load_setup_state_sin_archivo_es_uninitialized(tmp_path):
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     profile.paths.ensure_layout()
     assert load_setup_state(profile.paths) is SetupState.UNINITIALIZED
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        ("{not-json", "No se pudo leer"),
+        ("42", "objeto JSON"),
+        ('{"state": 1}', "inválido"),
+        ('{"state": true}', "inválido"),
+        ('{"state": {"nested": true}}', "inválido"),
+        ('{"state": "bad_state"}', "inválido"),
+    ],
+)
+def test_load_setup_state_malformed_json(tmp_path, payload, match):
+    """Edge case: onboarding.json corrupto debe fallar con SetupError claro."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    profile.paths.ensure_layout()
+    profile.paths.onboarding.write_text(payload, encoding="utf-8")
+    with pytest.raises(SetupError, match=match):
+        load_setup_state(profile.paths)
+
+
+def test_reconcile_recupera_onboarding_corrupto(tmp_path):
+    """Edge case: reconcile no 500; re-deriva hechos y reescribe el archivo."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    profile.paths.ensure_layout()
+    profile.paths.onboarding.write_text("{not-json", encoding="utf-8")
+    conn = db.connect(profile.paths.db)
+
+    state = reconcile_setup_state(profile, conn)
+    assert state is SetupState.CERTIFICATE_REQUIRED
+    assert load_setup_state(profile.paths) is SetupState.CERTIFICATE_REQUIRED
 
 
 def test_reconcile_persiste_y_reinicio_retoma_paso(tmp_path, test_cert_and_key):
@@ -217,6 +250,21 @@ def test_clientes_disponibles_con_params_cacheados_sin_ready(tmp_path):
     seed_params(client.conn)
     assert client.get("/clients").status_code == 200
     assert client.get("/clientes").status_code == 200
+
+
+def test_clientes_sin_params_ni_certs_muestra_error_no_500(tmp_path):
+    """Sin cache de params ni certs: página con error, no 500."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    r = client.get("/clientes")
+    assert r.status_code == 200
+    assert 'class="panel error"' in r.text
+
+
+def test_clientes_y_ui_clientes_son_setup_exempt():
+    assert is_setup_exempt("GET", "/clientes") is True
+    assert is_setup_exempt("POST", "/ui/clientes") is True
+    assert is_setup_exempt("GET", "/invoices") is False
 
 
 def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):

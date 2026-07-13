@@ -2,9 +2,8 @@
 
 FAC-35: mientras el estado del perfil no sea ``ready``, las operaciones de
 factura y las que tocan ARCA responden 503. Quedan libres el liveness
-(``GET /health``), las rutas de setup (``/setup``) y los estáticos; la
-configuración de emisor sigue accesible para completar el onboarding
-(FAC-38) sin circular dependency.
+(``GET /health``), las rutas de setup (``/setup``), estáticos, configuración
+de emisor (FAC-38) y clientes (CRUD offline con params cacheados).
 """
 
 from __future__ import annotations
@@ -32,6 +31,11 @@ def is_setup_exempt(method: str, path: str) -> bool:
     if path.startswith("/ui/emisores") or path.startswith("/ui/configuracion"):
         return True
     if path == "/ui/cambiar-ambiente":
+        return True
+    # Clientes: CRUD offline con arca_params cacheados (AGENTS.md).
+    if path == "/clientes" or path.startswith("/clientes/"):
+        return True
+    if path.startswith("/ui/clientes"):
         return True
     return False
 
