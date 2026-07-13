@@ -10,9 +10,12 @@ flujo de UI; este módulo solo modela el estado y la readiness.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import tempfile
 from collections.abc import Callable
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from .config import key_permissions_ok
@@ -80,15 +83,27 @@ def load_setup_state(paths: ProfilePaths) -> SetupState:
 
 
 def save_setup_state(paths: ProfilePaths, state: SetupState) -> None:
-    """Persiste el paso actual en ``onboarding.json`` del perfil."""
+    """Persiste el paso actual en ``onboarding.json`` del perfil.
+
+    Temp único por llamada (mkstemp): dos reconciles concurrentes no se
+    pisan el mismo ``.tmp`` antes del ``replace``.
+    """
     paths.data_dir.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {_STATE_KEY: state.value}
-    tmp = paths.onboarding.with_suffix(".json.tmp")
-    tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    fd, name = tempfile.mkstemp(
+        prefix=".onboarding.",
+        suffix=".json.tmp",
+        dir=paths.data_dir,
     )
-    tmp.replace(paths.onboarding)
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        tmp.replace(paths.onboarding)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def evaluate_setup_state(
