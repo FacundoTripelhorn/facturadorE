@@ -25,6 +25,11 @@ from .certs import (
     validate_certificate_pair,
 )
 from .config import key_permissions_ok
+from .fiscal_identity import (
+    FiscalIdentityError,
+    get_sealed_fiscal_cuit,
+    resolve_profile_fiscal_cuit,
+)
 from .profile import EnvironmentProfile, ProfilePaths
 from .settings import get_active_emisor_id, load_settings
 
@@ -133,6 +138,13 @@ def evaluate_setup_state(
     """Deriva el paso requerido desde hechos del perfil (sin escribir)."""
     if not certificate_pair_is_usable(profile):
         return SetupState.CERTIFICATE_REQUIRED
+
+    # FAC-39: si hay sello, el cert vivo debe coincidir (sin sellar acá).
+    if get_sealed_fiscal_cuit(conn) is not None:
+        try:
+            resolve_profile_fiscal_cuit(conn, profile)
+        except FiscalIdentityError:
+            return SetupState.CERTIFICATE_REQUIRED
 
     active_id = get_active_emisor_id(conn)
     emisor = load_settings(conn).emisor

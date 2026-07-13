@@ -445,7 +445,8 @@ def guardar_cliente(
             service.update_client(client_id, payload)
         else:
             service.create_client(payload)
-    except (ValidationError, ServiceError) as exc:
+    except (ValidationError, ServiceError, CertificateError, OSError) as exc:
+        # Mismo caso que GET /clientes: sin certs/params cache no debe 500.
         return _pagina_clientes(request, service, error=str(exc), status_code=422)
     return RedirectResponse("/clientes", status_code=303)
 
