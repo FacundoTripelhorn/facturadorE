@@ -45,11 +45,6 @@ def requires_ready_profile(method: str, path: str) -> bool:
     # HTML de facturas: el detalle reconcilia UNKNOWN vía FEXGetCMP (ARCA).
     if path.startswith("/facturas") or path.startswith("/ui/facturas"):
         return True
-    # Clientes: el form valida códigos ARCA vía get_params (puede refrescar).
-    if path.startswith("/clients") or path.startswith("/clientes"):
-        return True
-    if path.startswith("/ui/clientes"):
-        return True
     if path.startswith("/params"):
         return True
     if path == "/health/arca" or path.startswith("/health/arca/"):

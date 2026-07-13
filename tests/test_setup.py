@@ -167,7 +167,6 @@ def test_factura_y_arca_bloqueados_hasta_ready(tmp_path):
     assert client.get("/").status_code == 503
     assert client.get("/health/arca").status_code == 503
     assert client.get("/params/moneda").status_code == 503
-    assert client.get("/clientes").status_code == 503
 
 
 def test_factura_permitida_cuando_ready(api):
@@ -193,9 +192,9 @@ def test_factura_permitida_cuando_ready(api):
         ("GET", "/invoices", True),
         ("GET", "/health/arca", True),
         ("GET", "/params/moneda", True),
-        ("GET", "/clientes", True),
-        ("GET", "/clients", True),
-        ("POST", "/ui/clientes", True),
+        ("GET", "/clientes", False),
+        ("GET", "/clients", False),
+        ("POST", "/ui/clientes", False),
     ],
 )
 def test_requires_ready_matrix(method, path, blocked):
@@ -211,12 +210,13 @@ def test_detalle_html_bloqueado_hasta_ready(tmp_path):
     assert r.json()["setup_state"] == SetupState.CERTIFICATE_REQUIRED.value
 
 
-def test_clientes_bloqueados_hasta_ready(tmp_path):
-    """Codex review: /clientes llama get_params y puede tocar ARCA sin cache."""
+def test_clientes_disponibles_con_params_cacheados_sin_ready(tmp_path):
+    """Codex: clientes offline con arca_params sembrados, sin exigir ready."""
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     client = _client_for_profile(profile, seed=False)
-    assert client.get("/clientes").status_code == 503
-    assert client.get("/clients").status_code == 503
+    seed_params(client.conn)
+    assert client.get("/clients").status_code == 200
+    assert client.get("/clientes").status_code == 200
 
 
 def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):
@@ -237,6 +237,30 @@ def test_key_con_permisos_laxos_no_avanza_setup(tmp_path, test_cert_and_key):
     assert evaluate_setup_state(profile, conn) is SetupState.CERTIFICATE_REQUIRED
     profile.paths.key.chmod(0o400)
     assert evaluate_setup_state(profile, conn) is SetupState.READY
+
+
+def test_par_cert_invalido_no_avanza_setup(tmp_path):
+    """Codex: PEM basura / desparejado no desbloquea ready."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    profile.paths.ensure_layout()
+    profile.paths.cert.write_text("NOT-A-CERT", encoding="utf-8")
+    profile.paths.key.write_text("NOT-A-KEY", encoding="utf-8")
+    profile.paths.key.chmod(0o400)
+    conn = db.connect(profile.paths.db)
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo")))
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
+    assert evaluate_setup_state(profile, conn) is SetupState.CERTIFICATE_REQUIRED
+
+
+def test_emisor_de_otro_ambiente_no_es_ready(tmp_path, test_cert_and_key):
+    """Codex: emisor sellado con otro ambiente no completa el setup."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+    conn = db.connect(profile.paths.db)
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="prod")))
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
+    assert evaluate_setup_state(profile, conn) is SetupState.EMISOR_REQUIRED
 
 
 def test_config_sin_certs_carga_ok(tmp_path):

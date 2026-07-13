@@ -404,7 +404,6 @@ def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
     assert r.status_code == 503
     assert r.json()["setup_state"] == "emisor_required"
 
-    assert api.get("/clientes").status_code == 503
     assert api.get("/configuracion").status_code == 200
 
 
