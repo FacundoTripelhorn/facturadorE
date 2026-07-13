@@ -18,7 +18,7 @@ from facturador.config import Config
 from facturador.constants import ArcaEnvironment
 from facturador.profile import EnvironmentProfile
 from tests.arca_fake import FakeWsaa
-from tests.conftest import seed_params, seed_settings, with_csrf
+from tests.conftest import install_test_cert_pair, seed_params, seed_settings, with_csrf
 
 CLIENTE_FORM = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -599,9 +599,7 @@ def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
         environment, tmp_path / f"profile-{environment.value}"
     )
     cert_pem, key_pem = test_cert_and_key
-    profile.paths.ensure_layout()
-    profile.paths.cert.write_bytes(cert_pem)
-    profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
     config = Config(env=environment, paths=profile.paths)
     conn = db.connect(profile.paths.db)
     seed_params(conn)

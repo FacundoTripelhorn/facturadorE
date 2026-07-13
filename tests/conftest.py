@@ -62,13 +62,21 @@ def test_profile(tmp_path) -> EnvironmentProfile:
     return EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "profile")
 
 
+def install_test_cert_pair(
+    paths, cert_pem: bytes, key_pem: bytes, *, key_mode: int = 0o400
+) -> None:
+    """Escribe el par de prueba con permisos de key listos para setup ready."""
+    paths.ensure_layout()
+    paths.cert.write_bytes(cert_pem)
+    paths.key.write_bytes(key_pem)
+    paths.key.chmod(key_mode)
+
+
 @pytest.fixture
 def test_config(test_profile, test_cert_and_key) -> Config:
     """Config con TODOS los paths saliendo del perfil de test (FAC-25)."""
     cert_pem, key_pem = test_cert_and_key
-    test_profile.paths.ensure_layout()
-    test_profile.paths.cert.write_bytes(cert_pem)
-    test_profile.paths.key.write_bytes(key_pem)
+    install_test_cert_pair(test_profile.paths, cert_pem, key_pem)
     return Config(env=ArcaEnvironment.HOMO, paths=test_profile.paths)
 
 

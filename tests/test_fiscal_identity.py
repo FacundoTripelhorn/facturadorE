@@ -90,6 +90,7 @@ def test_resolve_detecta_cert_distinto_del_sello(profile: EnvironmentProfile, co
     profile.paths.ensure_layout()
     profile.paths.cert.write_bytes(cert_pem)
     profile.paths.key.write_bytes(key_pem)
+    profile.paths.key.chmod(0o400)
     with pytest.raises(FiscalIdentityError, match="sellado al CUIT"):
         resolve_profile_fiscal_cuit(conn, profile)
 
