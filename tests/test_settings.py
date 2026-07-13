@@ -133,7 +133,7 @@ def test_la_config_de_backups_es_global_al_perfil(conn):
 
 
 @pytest.mark.parametrize(
-    "corrupto", ["nueve", "[]", "[0]", '["7"]', "7", "[1.5]"]
+    "corrupto", ["nueve", "[0]", '["7"]', "7", "[1.5]"]
 )
 def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
     save_settings(conn, Settings())
@@ -142,6 +142,16 @@ def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
     with conn:
         conn.execute("UPDATE emisores SET puntos_venta = ?", (corrupto,))
     assert load_settings(conn).emisor.puntos_venta == (1,)
+
+
+def test_puntos_venta_lista_vacia_queda_sin_pv(conn):
+    """FAC-35: ``[]`` significa sin PV (point_of_sale_required), no default 1."""
+    save_settings(conn, Settings())
+    emisor_id = repo.list_emisores(conn)[0]["id"]
+    set_active_emisor(conn, emisor_id)
+    with conn:
+        conn.execute("UPDATE emisores SET puntos_venta = ?", ("[]",))
+    assert load_settings(conn).emisor.puntos_venta == ()
 
 
 def test_emisor_completo_exige_todas_las_lineas_del_encabezado():

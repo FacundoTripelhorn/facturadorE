@@ -21,13 +21,15 @@ from ..service import (
     InvoiceService,
     NotFoundError,
 )
-from . import clients, health, invoices, params
+from ..setup import make_setup_state_provider, reconcile_setup_state
+from . import clients, health, invoices, params, setup
 from .csrf import CsrfCookieMiddleware
 from .localhost_policy import (
     LocalhostPolicyMiddleware,
     resolve_listen_port,
     resolve_policy_ports,
 )
+from .setup_guard import SetupGuardMiddleware
 
 _ERROR_STATUS = {
     NotFoundError: 404,
@@ -57,7 +59,9 @@ def create_app(
     Host/Origin usa ese puerto y, si aplica, ``public_port`` /
     ``FACTURADOR_PUBLIC_PORT`` (publish del host en Docker cuando difiere
     del 8399 interno). FAC-42: cookie CSRF emitida en respuestas; los
-    POST ``/ui/…`` la validan vía dependency del router HTML.
+    POST ``/ui/…`` la validan vía dependency del router HTML. FAC-35:
+    setup state por perfil + guardia que bloquea factura/ARCA hasta
+    ``ready`` (``GET /health`` y ``/setup`` quedan libres).
     """
     if config is None:
         config = load_config(profile)
@@ -75,16 +79,22 @@ def create_app(
     wsfex = wsfex or WsfexClient(config)
     listen_port = resolve_listen_port(port)
     policy_ports = resolve_policy_ports(listen_port, public_port)
+    setup_state = reconcile_setup_state(profile, conn)
 
     app = FastAPI(title="facturador", version="0.1.0")
     app.state.profile = profile
     app.state.service = InvoiceService(config, conn, wsfex)
     app.state.listen_port = listen_port
     app.state.policy_ports = policy_ports
+    app.state.setup_state = setup_state
 
-    # CSRF cookie (FAC-42) + Host/Origin (FAC-41). add_middleware apila
-    # por fuera: el último agregado es el más externo. Orden de request:
-    # LocalhostPolicy → CsrfCookie → routers.
+    # Setup guard (FAC-35) + CSRF (FAC-42) + Host/Origin (FAC-41).
+    # add_middleware apila por fuera: el último agregado es el más externo.
+    # Orden de request: LocalhostPolicy → CsrfCookie → SetupGuard → routers.
+    app.add_middleware(
+        SetupGuardMiddleware,
+        get_state=make_setup_state_provider(profile, conn),
+    )
     app.add_middleware(CsrfCookieMiddleware)
     app.add_middleware(LocalhostPolicyMiddleware, ports=policy_ports)
 
@@ -101,6 +111,7 @@ def create_app(
     app.include_router(clients.router)
     app.include_router(params.router)
     app.include_router(health.router)
+    app.include_router(setup.router)
 
     # Frontend HTML (§2.4): mismas dependencias vía app.state.service. Los
     # errores de dominio del frontend se renderizan en partials, no acá.

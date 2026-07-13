@@ -387,20 +387,25 @@ def _sin_settings(api):
         api.conn.execute("DELETE FROM settings")
 
 
-def test_primer_arranque_dirige_a_configuracion_antes_de_emitir(api, arca):
+def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
+    """FAC-35: sin emisor el perfil no está ready; factura/ARCA → 503.
+    Configuración sigue disponible para completar el setup (FAC-38)."""
     _sin_settings(api)
     _crear_cliente_por_form(api)
 
     home = api.get("/")
-    assert home.status_code == 200
-    assert "datos del emisor" in home.text
-    assert 'href="/configuracion"' in home.text
-    assert "Generar borrador" not in home.text   # sin form hasta completar
+    assert home.status_code == 503
+    assert home.json()["setup_state"] == "emisor_required"
 
-    # El guard también existe en el dominio, no solo en la UI.
+    setup = api.get("/setup")
+    assert setup.status_code == 200
+    assert setup.json()["ready"] is False
+
     r = api.post("/ui/facturas", data=with_csrf(api, FACTURA_FORM))
-    assert r.status_code == 422
-    assert "emisor" in r.text
+    assert r.status_code == 503
+    assert r.json()["setup_state"] == "emisor_required"
+
+    assert api.get("/configuracion").status_code == 200
 
 
 def test_pagina_de_configuracion_carga_y_guarda(api, arca):

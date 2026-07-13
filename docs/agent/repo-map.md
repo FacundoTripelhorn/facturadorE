@@ -127,17 +127,20 @@ flowchart TB
 | App assembly, error mapping, router registration | `facturador/api/app.py` |
 | Localhost Host/Origin policy (FAC-41) | `facturador/api/localhost_policy.py` |
 | CSRF for browser forms (FAC-42) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html` |
+| Per-profile setup state + guard (FAC-35) | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
 | Shared `InvoiceService` dependency | `facturador/api/deps.py` |
 | REST: invoices (create, authorize, list, PDF) | `facturador/api/invoices.py` |
 | REST: clients CRUD | `facturador/api/clients.py` |
 | REST: ARCA param tables & cotización | `facturador/api/params.py` |
 | REST: health + ARCA connectivity | `facturador/api/health.py` |
+| REST: setup status (`GET /setup`) | `facturador/api/setup.py` |
 | Request/response Pydantic models | `facturador/schemas.py` |
 | Domain logic, state machine, authorize lock | `facturador/service.py` |
 | Row ↔ WSFEX `Invoice` mapping | `facturador/mappers.py` |
 | Contract tests | `tests/test_api.py`, `tests/test_authorize.py` |
 | Host/Origin policy | `tests/test_localhost_policy.py` |
 | CSRF forms | `tests/test_csrf.py`, `tests/test_web.py` |
+| Setup state / onboarding guard | `tests/test_setup.py` |
 
 OpenAPI is served by FastAPI at `/docs` when the app is running.
 

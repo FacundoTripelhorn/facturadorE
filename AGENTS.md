@@ -127,11 +127,13 @@ Do not regress these without an explicit design change in `docs/design.md`:
 
 Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
 
-- Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints.
-  This is expected — fix credentials, not application error handling, unless the
-  task explicitly asks for better UX around that case.
-- `GET /` may return 500 when a default client exists and WSAA fails
-  (`WsaaError` is not swallowed on the home handler).
+- Incomplete profile setup returns **503** with `setup_state` on invoice/ARCA
+  routes until `ready` (FAC-35); `GET /health` and `GET /setup` stay up.
+- Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints
+  once the profile is ready. This is expected — fix credentials, not application
+  error handling, unless the task explicitly asks for better UX around that case.
+- `GET /` may return 500 when setup is ready, a default client exists, and WSAA
+  fails (`WsaaError` is not swallowed on the home handler).
 - Contract tests against real homologación (`scripts/get_ta.py`,
   `scripts/check_wsfex.py`) are intentionally local-only; CI does not upload certs.
 

@@ -51,6 +51,7 @@ finishing.
 | PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (needs WeasyPrint system libs; CI installs them) |
 | Row ↔ SOAP mapping | `facturador/mappers.py`, `facturador/constants.py` | `uv run pytest tests/test_mappers.py tests/test_constants.py` |
 | Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |
+| Setup state / onboarding guard | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py`, `facturador/api/app.py` | `uv run pytest tests/test_setup.py tests/test_config.py` |
 | SQLite settings / emisor | `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` | `uv run pytest tests/test_settings.py` |
 | Backup / restore CLI | `facturador/backup.py`, `facturador/restore.py` | `uv run pytest tests/test_backup.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/migrations/`, `facturador/db.py` | `uv run pytest tests/test_migrations.py` then full `uv run pytest` (many modules touch the DB) |
