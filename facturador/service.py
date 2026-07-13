@@ -350,12 +350,7 @@ class InvoiceService:
             )
 
         try:
-            cuit_emisor = resolve_profile_fiscal_cuit(
-                self.conn,
-                EnvironmentProfile(
-                    environment=self.config.env, paths=self.config.paths
-                ),
-            )
+            cuit_emisor = resolve_profile_fiscal_cuit(self.conn, self._profile())
         except FiscalIdentityError as exc:
             raise ConflictError(str(exc)) from exc
 
@@ -408,6 +403,36 @@ class InvoiceService:
                 "otro. Restaurar cada backup en el perfil de su ambiente."
             )
 
+    def _profile(self) -> EnvironmentProfile:
+        return EnvironmentProfile(
+            environment=self.config.env, paths=self.config.paths
+        )
+
+    def _check_invoice_fiscal_identity(self, inv: sqlite3.Row) -> None:
+        """FAC-39: el snapshot de la factura debe coincidir con el perfil.
+
+        Se revalida al autorizar (antes de cualquier llamada WSFEX) para que
+        un swap manual del certificado o del sello no autorice bajo un CUIT
+        distinto al del comprobante.
+        """
+        try:
+            profile_cuit = resolve_profile_fiscal_cuit(self.conn, self._profile())
+        except FiscalIdentityError as exc:
+            raise ConflictError(str(exc)) from exc
+        snap = inv["cuit_emisor"]
+        if snap is None:
+            raise ConflictError(
+                f"La factura {inv['id']} no tiene CUIT fiscal snapshot; "
+                "crear un borrador nuevo tras instalar el certificado del perfil."
+            )
+        if str(snap) != profile_cuit:
+            raise ConflictError(
+                f"La factura {inv['id']} tiene CUIT {snap} pero este perfil "
+                f"está sellado al CUIT {profile_cuit}. Para cambiar de "
+                "contribuyente hay que usar un perfil nuevo o resetear este "
+                "(no hay migración automática de identidad fiscal)."
+            )
+
     def get_invoice(self, invoice_id: str, reconcile: bool = True) -> sqlite3.Row:
         inv = repo.get_invoice(self.conn, invoice_id)
         if inv is None:
@@ -441,6 +466,8 @@ class InvoiceService:
                     f"Factura rechazada por ARCA ({inv['last_error']}); "
                     "corregir los datos creando una nueva."
                 )
+            # Identidad fiscal antes de cualquier WSFEX (FAC-39).
+            self._check_invoice_fiscal_identity(inv)
 
             # Lock anti doble-submit de ESTA factura (regla 1).
             if not repo.try_transition_to_submitting(self.conn, invoice_id):

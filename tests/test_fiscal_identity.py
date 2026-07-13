@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,7 +21,6 @@ from facturador.fiscal_identity import (
     resolve_profile_fiscal_cuit,
     seal_fiscal_cuit,
 )
-from facturador.migrations import MIGRATIONS, current_version, migrate
 from facturador.profile import EnvironmentProfile
 from facturador.schemas import EmisorCreateIn, InvoiceCreate
 from facturador.service import ConflictError, InvoiceService
@@ -181,6 +179,46 @@ def test_mismatch_sello_bloquea_emision(profile: EnvironmentProfile, conn):
         )
 
 
+def test_authorize_rechaza_si_identidad_diverge_del_snapshot(
+    profile: EnvironmentProfile, conn
+):
+    """Authorize revalida el CUIT antes de WSFEX (swap manual del cert)."""
+    service = _service(profile, conn)
+    client = repo.create_client(conn, CLIENTE)
+    inv = service.create_invoice(
+        InvoiceCreate(imp_total=Decimal("80.00"), client_id=client["id"])
+    )
+    assert inv["cuit_emisor"] == VALID_CUIT
+
+    # Bypass store: reemplazar el par vivo con otro CUIT (el sello sigue).
+    other_cert, other_key, _ = _build_pair(cuit=OTHER_CUIT)
+    profile.paths.cert.write_bytes(other_cert)
+    profile.paths.key.chmod(0o600)
+    profile.paths.key.write_bytes(other_key)
+    profile.paths.key.chmod(0o400)
+    # Invalidar cache de CUIT del cliente WSFEX.
+    service.wsfex._cuit = None  # noqa: SLF001 — test del guard de authorize
+
+    with pytest.raises(ConflictError, match="sellado al CUIT|CUIT"):
+        service.authorize(inv["id"], force_desync=True)
+
+    # No debe haber tocado ARCA ni dejado la factura en submitting.
+    reloaded = repo.get_invoice(conn, inv["id"])
+    assert reloaded is not None
+    assert reloaded["status"] == "draft"
+    assert reloaded["raw_request"] is None
+
+
+def test_baseline_incluye_cuit_emisor(tmp_path: Path):
+    """Sin migración de upgrade: la columna vive en el baseline (no hay DBs viejas)."""
+    conn = db.connect(tmp_path / "fresh.db")
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
+        assert "cuit_emisor" in cols
+    finally:
+        conn.close()
+
+
 def test_api_invoice_incluye_cuit_emisor(api):
     """Contrato REST: el draft lleva el CUIT snapshot del perfil."""
     r = api.post(
@@ -209,39 +247,3 @@ def test_api_invoice_incluye_cuit_emisor(api):
     ).fetchone()
     assert sealed is not None
     assert sealed[0] == TEST_CUIT
-
-
-def test_migration_agrega_cuit_emisor(tmp_path: Path):
-    """DBs en baseline v1 sin columna reciben v2."""
-    path = tmp_path / "upgrade.db"
-    raw = sqlite3.connect(path)
-    raw.row_factory = sqlite3.Row
-    raw.execute("PRAGMA foreign_keys = ON")
-    try:
-        migrate(raw, migrations=(MIGRATIONS[0],))
-        assert current_version(raw) == 1
-        # Forzar ausencia de la columna (el schema.sql actual ya la incluye).
-        raw.executescript(
-            """
-            CREATE TABLE invoices_old AS SELECT
-                id, emisor_id, client_id, arca_id, cbte_tipo, punto_venta,
-                cbte_nro, status, fecha_cbte, fecha_pago, tipo_expo,
-                permiso_existente, dst_cmp, cliente, cuit_pais_cliente,
-                domicilio_cliente, id_impositivo, moneda_id, moneda_ctz,
-                incoterms, incoterms_ds, forma_pago, idioma_cbte, imp_total,
-                obs, cae, cae_fch_vto, raw_request, raw_response, last_error,
-                environment, created_at, updated_at
-            FROM invoices;
-            DROP TABLE invoices;
-            ALTER TABLE invoices_old RENAME TO invoices;
-            """
-        )
-        assert "cuit_emisor" not in {
-            r[1] for r in raw.execute("PRAGMA table_info(invoices)")
-        }
-        migrate(raw, migrations=MIGRATIONS)
-        assert current_version(raw) == 2
-        cols = {r[1] for r in raw.execute("PRAGMA table_info(invoices)")}
-        assert "cuit_emisor" in cols
-    finally:
-        raw.close()
