@@ -222,13 +222,6 @@ def test_artefactos_de_runtime_solo_bajo_el_perfil_seleccionado(isolated_pair):
         [{"code": "PRD", "description": "Moneda solo produccion"}],
     )
 
-    homo.profile.paths.onboarding.write_text(
-        '{"setup":"homo-only"}', encoding="utf-8"
-    )
-    prod.profile.paths.onboarding.write_text(
-        '{"setup":"prod-only"}', encoding="utf-8"
-    )
-
     homo.profile.paths.logs_dir.mkdir(parents=True, exist_ok=True)
     prod.profile.paths.logs_dir.mkdir(parents=True, exist_ok=True)
     homo.profile.paths.log_file.write_text("log-marker-homo\n", encoding="utf-8")
@@ -285,6 +278,15 @@ def test_artefactos_de_runtime_solo_bajo_el_perfil_seleccionado(isolated_pair):
     monedas_prod = {m["code"] for m in prod.client.get("/params/moneda").json()}
     assert monedas_homo == {"HOM"}
     assert monedas_prod == {"PRD"}
+
+    # Marcadores de aislamiento en onboarding.json DESPUÉS de rutas HTTP que
+    # reconcilian el setup (FAC-35 reescribe el archivo al tocar /params).
+    homo.profile.paths.onboarding.write_text(
+        '{"setup":"homo-only"}', encoding="utf-8"
+    )
+    prod.profile.paths.onboarding.write_text(
+        '{"setup":"prod-only"}', encoding="utf-8"
+    )
 
     assert "homo-only" in homo.profile.paths.onboarding.read_text(encoding="utf-8")
     assert "prod-only" in prod.profile.paths.onboarding.read_text(encoding="utf-8")

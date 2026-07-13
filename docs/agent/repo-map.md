@@ -127,7 +127,7 @@ flowchart TB
 | App assembly, error mapping, router registration | `facturador/api/app.py` |
 | Localhost Host/Origin policy (FAC-41) | `facturador/api/localhost_policy.py` |
 | CSRF for browser forms (FAC-42) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html` |
-| Per-profile setup state + guard (FAC-35) | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
+| Per-profile setup state + guard (FAC-35) | `facturador/setup.py` (incl. `make_setup_state_provider`), `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
 | Shared `InvoiceService` dependency | `facturador/api/deps.py` |
 | REST: invoices (create, authorize, list, PDF) | `facturador/api/invoices.py` |
 | REST: clients CRUD | `facturador/api/clients.py` |

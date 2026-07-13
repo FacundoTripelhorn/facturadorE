@@ -409,12 +409,22 @@ def test_main_startup_error_con_env_no_reintenta():
 
 
 def test_supervisor_falla_si_el_backend_muere_antes_de_ready(tmp_path):
-    """Sin certificados el backend aborta: el error es LauncherError visible."""
+    """Par incompleto (solo cert) aborta el boot: LauncherError visible.
+
+    FAC-35 permite arrancar sin el par; un archivo a medias sigue siendo
+    error fatal de Config (y el supervisor lo reporta).
+    """
     opened: list[str] = []
+    app_data = tmp_path / "appdata"
+    secrets = app_data / "homo" / "secrets"
+    secrets.mkdir(parents=True)
+    (secrets / "cert.crt").write_text("CERT", encoding="utf-8")
+    # Falta cert.key → ConfigError en load_config → proceso hijo muere.
+
     supervisor = ProcessSupervisor(
         environment=ArcaEnvironment.HOMO,
         port=_free_port(),
-        app_data_root=tmp_path / "appdata",
+        app_data_root=app_data,
         home=tmp_path / "home",
         readiness_timeout=15.0,
         open_browser=True,

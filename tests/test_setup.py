@@ -185,6 +185,8 @@ def test_factura_permitida_cuando_ready(api):
         ("GET", "/", True),
         ("POST", "/ui/facturas", True),
         ("POST", "/ui/facturas/abc/authorize", True),
+        ("GET", "/facturas/abc", True),
+        ("GET", "/facturas/abc/revisar", True),
         ("GET", "/invoices", True),
         ("GET", "/health/arca", True),
         ("GET", "/params/moneda", True),
@@ -193,6 +195,15 @@ def test_factura_permitida_cuando_ready(api):
 )
 def test_requires_ready_matrix(method, path, blocked):
     assert requires_ready_profile(method, path) is blocked
+
+
+def test_detalle_html_bloqueado_hasta_ready(tmp_path):
+    """Codex review: GET /facturas/{id} reconcilia UNKNOWN y no debe tocar ARCA."""
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    r = client.get("/facturas/any-id")
+    assert r.status_code == 503
+    assert r.json()["setup_state"] == SetupState.CERTIFICATE_REQUIRED.value
 
 
 def test_config_sin_certs_carga_ok(tmp_path):
