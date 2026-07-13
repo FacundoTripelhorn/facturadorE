@@ -268,6 +268,30 @@ def test_clientes_disponibles_con_params_cacheados_sin_ready(tmp_path):
     assert client.get("/clientes").status_code == 200
 
 
+def test_clientes_con_params_stale_sin_certs_usa_cache(tmp_path):
+    """Cache >24h sin certs: get_params cae al stale, selects poblados."""
+    import datetime as dt
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    seed_params(client.conn)
+    stale = (dt.datetime.now(dt.UTC) - dt.timedelta(hours=25)).isoformat()
+    client.conn.execute("UPDATE arca_params SET fetched_at = ?", (stale,))
+    client.conn.commit()
+
+    r = client.get("/clientes")
+    assert r.status_code == 200
+    assert "URUGUAY" in r.text
+    assert 'class="panel error"' not in r.text
+
+    created = client.post(
+        "/ui/clientes",
+        data=with_csrf(client, _CLIENTE_FORM),
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+
+
 def test_clientes_sin_params_ni_certs_muestra_error_no_500(tmp_path):
     """Sin cache de params ni certs: página con error, no 500."""
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")

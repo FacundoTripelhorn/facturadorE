@@ -24,6 +24,7 @@ import httpx
 
 from . import repo
 from .arca.wsfex import Invoice, WsfexClient, WsfexError
+from .certs import CertificateError
 from .config import Config
 from .constants import (
     CBTE_TIPO_FACTURA_E,
@@ -208,7 +209,9 @@ class InvoiceService:
             records = self.wsfex.get_param(kind)
             repo.replace_params(self.conn, kind, [r.as_dict() for r in records])
             return repo.get_params(self.conn, kind)
-        except (WsfexError, httpx.HTTPError) as exc:
+        except (WsfexError, httpx.HTTPError, CertificateError, OSError) as exc:
+            # Cert ausente/inválido en refresh: mismo fallback que ARCA caído
+            # (cache stale usable; sin cache → ArcaUnavailableError).
             if rows:
                 logger.warning(
                     "No se pudo refrescar %s (%s); se usa cache viejo", kind, exc
