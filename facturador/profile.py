@@ -27,6 +27,7 @@ WSAA_TA_CACHE_FILENAME = "ta-wsfex.json"
 LOG_FILENAME = "facturador.log"
 ONBOARDING_FILENAME = "onboarding.json"
 LAUNCHER_LOCK_FILENAME = "launcher.lock"
+PRODUCTION_ACK_FILENAME = "production_ack.json"
 
 _DISPLAY_NAMES = {
     ArcaEnvironment.HOMO: "Homologación",
@@ -164,6 +165,14 @@ class ProfilePaths:
     def launcher_lock(self) -> Path:
         """Lock anti-duplicado del launcher sobre este perfil (FAC-30)."""
         return self.data_dir / LAUNCHER_LOCK_FILENAME
+
+    @property
+    def production_ack(self) -> Path:
+        """Confirmación de primer uso de Producción (FAC-40).
+
+        Solo tiene sentido bajo el perfil ``prod``; Homologación no lo escribe.
+        """
+        return self.data_dir / PRODUCTION_ACK_FILENAME
 
     def ensure_layout(self) -> None:
         """Crea la estructura mínima del perfil en el primer arranque.

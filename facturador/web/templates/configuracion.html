@@ -4,6 +4,14 @@
 {% if aviso %}<div class="panel ok"><div>{{ aviso }}</div></div>{% endif %}
 {% if error %}<div class="panel error"><div>{{ error }}</div></div>{% endif %}
 
+{% if env == "prod" %}
+<div class="panel neutro">
+  <div><strong>Configuración de Producción.</strong> Emisor, puntos de venta y
+  certificados de este perfil se usan para emitir comprobantes con validez
+  fiscal real. Revisá con cuidado antes de autorizar en ARCA.</div>
+</div>
+{% endif %}
+
 {% if not s.emisor.completo and activo_id %}
 <div class="panel neutro">
   <div>Completar los datos del emisor activo para poder emitir: van impresos en el

@@ -9,6 +9,13 @@
 </div>
 {% endif %}
 
+{% if env == "prod" %}
+<div class="panel neutro">
+  <div><strong>Producción:</strong> al confirmar, ARCA asigna CAE y numeración
+  con validez fiscal real. Esta autorización no se puede deshacer.</div>
+</div>
+{% endif %}
+
 <section class="card revisar">
   <h2>Revisar antes de enviar
     <span class="sub">borrador — nada viajó a ARCA todavía</span>
@@ -22,18 +29,20 @@
         <button type="submit">Forzar de todos modos (homologación / restore reciente)</button>
       </form>
       {% else %}
-      <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize">
+      <form method="post" action="/ui/facturas/{{ f['id'] }}/authorize"
+            {% if env == "prod" %}onsubmit="return confirm('Producción: el comprobante tendrá validez fiscal real. ¿Autorizar en ARCA?')"{% endif %}>
         {% include "_csrf_field.html" %}
-        <button type="submit">Confirmar y autorizar en ARCA</button>
+        <button type="submit">{% if env == "prod" %}Autorizar en ARCA (validez fiscal){% else %}Confirmar y autorizar en ARCA{% endif %}</button>
       </form>
       {% endif %}
       <form method="post" action="/ui/facturas/{{ f['id'] }}/descartar"
-            onsubmit="return confirm('¿Descartar este borrador?')">
+            onsubmit="return confirm('{% if env == "prod" %}¿Descartar este borrador de Producción? No se emite nada a ARCA.{% else %}¿Descartar este borrador?{% endif %}')">
         {% include "_csrf_field.html" %}
         <button type="submit" class="secundario">Descartar borrador</button>
       </form>
     </div>
     <p class="nota">Al confirmar, ARCA asigna la numeración definitiva y el CAE.
+    {% if env == "prod" %}En Producción eso implica validez fiscal real.{% endif %}
     Si algo está mal, descartá el borrador y generá uno nuevo desde
     <a href="/">Emitir</a>: descartar no tiene ningún efecto impositivo.</p>
   </div>

@@ -616,7 +616,7 @@ def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
     ("environment", "label", "badge_extra"),
     [
         (ArcaEnvironment.HOMO, "Homologación", "sin valor fiscal"),
-        (ArcaEnvironment.PROD, "Producción", None),
+        (ArcaEnvironment.PROD, "Producción", "validez fiscal"),
     ],
 )
 def test_paginas_muestran_identidad_de_ambiente(
@@ -634,14 +634,46 @@ def test_paginas_muestran_identidad_de_ambiente(
         assert f'data-env="{environment.value}"' in r.text
         assert f'class="badge-env {environment.value}"' in r.text
         assert label in r.text
-        if badge_extra is None:
+        assert badge_extra in r.text
+        if environment is ArcaEnvironment.PROD:
             assert "sin valor fiscal" not in r.text
         else:
-            assert badge_extra in r.text
+            assert "validez fiscal" not in r.text
         # Diagnóstico seguro: nada de raíces de perfil ni certificados.
         assert str(profile.paths.root) not in r.text
         assert "cert.crt" not in r.text
         assert "cert.key" not in r.text
+
+
+def test_produccion_muestra_avisos_de_seguridad_fiscal(
+    tmp_path, test_cert_and_key, arca
+):
+    """FAC-40: copy de validez fiscal en setup/emisión; homo no lo muestra."""
+    prod, _ = _api_para_ambiente(
+        ArcaEnvironment.PROD, tmp_path / "prod", test_cert_and_key, arca
+    )
+    for path in ("/", "/configuracion"):
+        r = prod.get(path)
+        assert r.status_code == 200, path
+        assert "validez fiscal" in r.text.lower()
+
+    _crear_cliente_por_form(prod)
+    invoice_id = _generar_borrador(prod)
+    revisar = prod.get(f"/facturas/{invoice_id}/revisar")
+    assert revisar.status_code == 200
+    assert "validez fiscal real" in revisar.text.lower()
+    assert "Autorizar en ARCA (validez fiscal)" in revisar.text
+
+    homo, _ = _api_para_ambiente(
+        ArcaEnvironment.HOMO, tmp_path / "homo", test_cert_and_key, arca
+    )
+    home = homo.get("/")
+    assert home.status_code == 200
+    assert "Ambiente de Producción" not in home.text
+    assert "validez fiscal real" not in home.text.lower()
+    cfg = homo.get("/configuracion")
+    assert cfg.status_code == 200
+    assert "Configuración de Producción" not in cfg.text
 
 
 @pytest.mark.parametrize("environment", list(ArcaEnvironment))

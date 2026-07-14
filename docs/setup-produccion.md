@@ -59,8 +59,13 @@ compartido ni se "cambia el flag" dentro del mismo proceso.
 **Sin Docker:**
 
 ```bash
-uv run python -m facturador.launcher --env prod
+uv run python -m facturador.launcher
 ```
+
+Elegí **Producción**. La primera vez el launcher pide confirmación explícita
+(validez fiscal real); cancelar vuelve al selector. Con `--env prod` se saltea
+el chooser pero la confirmación de primer uso sigue aplicando si el perfil
+aún no tiene el ack.
 
 Si faltan certificados, el mensaje indica el `secrets/` del perfil Producción.
 Colocá ahí `cert.crt` / `cert.key` (key en `400`) y relanzá.
