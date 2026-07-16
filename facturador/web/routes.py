@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sqlite3
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -470,12 +471,24 @@ def _cert_metadata_seguro(profile) -> CertificateMetadata | None:
         return None
 
 
+def _emisor_onboarding_row(conn) -> sqlite3.Row | None:
+    """Emisor a retomar en onboarding: activo o el primero del perfil."""
+    active_id = get_active_emisor_id(conn)
+    if active_id:
+        row = repo.get_emisor(conn, active_id)
+        if row is not None:
+            return row
+    emisores = repo.list_emisores(conn)
+    return emisores[0] if emisores else None
+
+
 def _pagina_setup(
     request: Request,
     service,
     *,
     state: SetupState | None = None,
     cert_meta: CertificateMetadata | None = None,
+    emisor_editando=None,
     error: str | None = None,
     aviso: str | None = None,
     status_code: int = 200,
@@ -485,12 +498,18 @@ def _pagina_setup(
         state = reconcile_setup_state(profile, service.conn)
     if cert_meta is None:
         cert_meta = _cert_metadata_seguro(profile)
+    if emisor_editando is None and state in (
+        SetupState.EMISOR_REQUIRED,
+        SetupState.POINT_OF_SALE_REQUIRED,
+    ):
+        emisor_editando = _emisor_onboarding_row(service.conn)
     return templates.TemplateResponse(
         request,
         "setup.html",
         {
             "state": state.value,
             "cert_meta": cert_meta,
+            "emisor_editando": emisor_editando,
             "error": error,
             "aviso": aviso,
         },
@@ -500,8 +519,13 @@ def _pagina_setup(
 
 @router.get("/setup", response_class=HTMLResponse)
 def setup_pagina(request: Request, service: ServiceDep, aviso: str = ""):
-    """Paso de certificado del onboarding (FAC-37)."""
-    avisos = {"instalado": "instalado"}
+    """Onboarding por perfil: certificado, emisor y punto de venta (FAC-37/38)."""
+    avisos = {
+        "instalado": "instalado",
+        "emisor": "emisor",
+        "punto_venta": "punto_venta",
+        "listo": "listo",
+    }
     return _pagina_setup(request, service, aviso=avisos.get(aviso, aviso or None))
 
 
@@ -564,6 +588,175 @@ async def instalar_certificado_setup(
 
     reconcile_setup_state(profile, service.conn)
     return RedirectResponse("/setup?aviso=instalado", status_code=303)
+
+
+@router.post("/ui/setup/emisor", response_class=HTMLResponse)
+async def guardar_emisor_setup(
+    request: Request,
+    service: ServiceDep,
+    emisor_id: str = Form(""),
+    razon_social: str = Form(""),
+    domicilio: str = Form(""),
+    iibb: str = Form(""),
+    inicio_actividades: str = Form(""),
+    condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
+    puntos_venta: str = Form("1"),
+):
+    """Alta/edición del primer emisor durante onboarding (FAC-38)."""
+    profile = request.app.state.profile
+    state = reconcile_setup_state(profile, service.conn)
+    if state is not SetupState.EMISOR_REQUIRED:
+        return RedirectResponse("/setup", status_code=303)
+
+    onboarding_row = _emisor_onboarding_row(service.conn)
+    if emisor_id:
+        existente = repo.get_emisor(service.conn, emisor_id)
+    elif onboarding_row is not None:
+        existente = onboarding_row
+        emisor_id = onboarding_row["id"]
+    else:
+        existente = None
+
+    form = await request.form()
+    if "ambiente" in form:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=existente,
+            error="Datos inválidos: el ambiente sale del perfil activo y no se envía",
+            status_code=422,
+        )
+    try:
+        pvs = _parse_puntos_venta_form(puntos_venta)
+    except ValueError:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=existente,
+            error="Datos inválidos: los puntos de venta deben ser números"
+            " separados por coma",
+            status_code=422,
+        )
+    try:
+        if emisor_id:
+            row = service.update_emisor(
+                emisor_id,
+                EmisorUpdateIn(
+                    razon_social=razon_social,
+                    domicilio=domicilio,
+                    iibb=iibb,
+                    inicio_actividades=inicio_actividades,
+                    condicion_iva=condicion_iva,
+                    puntos_venta=pvs,
+                ),
+            )
+        else:
+            row = service.create_emisor(
+                EmisorCreateIn(
+                    razon_social=razon_social,
+                    domicilio=domicilio,
+                    iibb=iibb,
+                    inicio_actividades=inicio_actividades,
+                    condicion_iva=condicion_iva,
+                    puntos_venta=pvs,
+                )
+            )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=existente,
+            error=f"Datos inválidos: {detalles}",
+            status_code=422,
+        )
+    try:
+        service.activate_emisor(row["id"])
+    except ServiceError as exc:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=existente,
+            error=str(exc),
+            status_code=422,
+        )
+
+    new_state = reconcile_setup_state(profile, service.conn)
+    aviso = "listo" if new_state is SetupState.READY else "emisor"
+    return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
+
+
+@router.post("/ui/setup/punto-venta", response_class=HTMLResponse)
+async def guardar_punto_venta_setup(
+    request: Request,
+    service: ServiceDep,
+    puntos_venta: str = Form(""),
+):
+    """Habilita puntos de venta del emisor activo durante onboarding (FAC-38)."""
+    profile = request.app.state.profile
+    state = reconcile_setup_state(profile, service.conn)
+    if state is not SetupState.POINT_OF_SALE_REQUIRED:
+        return RedirectResponse("/setup", status_code=303)
+
+    emisor_row = _emisor_onboarding_row(service.conn)
+    if emisor_row is None:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error="No hay emisor activo para configurar el punto de venta.",
+            status_code=422,
+        )
+    try:
+        pvs = _parse_puntos_venta_form(puntos_venta)
+    except ValueError:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=emisor_row,
+            error="Datos inválidos: los puntos de venta deben ser números"
+            " separados por coma",
+            status_code=422,
+        )
+    try:
+        payload = EmisorUpdateIn(
+            razon_social=emisor_row["razon_social"],
+            domicilio=emisor_row["domicilio"],
+            iibb=emisor_row["iibb"],
+            inicio_actividades=emisor_row["inicio_actividades"],
+            condicion_iva=emisor_row["condicion_iva"] or CONDICION_IVA_DEFAULT,
+            puntos_venta=pvs,
+        )
+    except ValidationError as exc:
+        detalles = "; ".join(e["msg"] for e in exc.errors())
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=emisor_row,
+            error=f"Datos inválidos: {detalles}",
+            status_code=422,
+        )
+    try:
+        service.update_emisor(emisor_row["id"], payload)
+    except ServiceError as exc:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            emisor_editando=emisor_row,
+            error=str(exc),
+            status_code=422,
+        )
+
+    new_state = reconcile_setup_state(profile, service.conn)
+    aviso = "listo" if new_state is SetupState.READY else "punto_venta"
+    return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
