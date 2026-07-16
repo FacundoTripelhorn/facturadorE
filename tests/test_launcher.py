@@ -1191,6 +1191,63 @@ def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
     assert order == ["clear", "stop"]
 
 
+def test_handle_change_a_prod_cancel_ack_mantiene_backend(
+    tmp_path, monkeypatch
+):
+    """FAC-40: cancelar ack de Producción no apaga la sesión actual."""
+    from facturador.launcher.__main__ import _handle_change_environment_request
+    from facturador.launcher.switch import (
+        read_change_environment_request,
+        write_change_environment_request,
+    )
+    from facturador.profile import ProfilePaths
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    paths = ProfilePaths(root=app_data / "homo")
+    paths.ensure_layout()
+    write_change_environment_request(paths, ArcaEnvironment.HOMO)
+    stopped: list[str] = []
+    confirms: list[bool] = []
+
+    class _Fake:
+        plan = type(
+            "P",
+            (),
+            {
+                "profile": type(
+                    "Pr",
+                    (),
+                    {"paths": paths, "display_name": "Homologación"},
+                )(),
+            },
+        )()
+        open_browser = False
+        base_url = "http://127.0.0.1:8399"
+
+        def poll_change_environment_request(self):
+            return read_change_environment_request(paths)
+
+        def clear_change_environment_request(self):
+            from facturador.launcher.switch import clear_change_environment_request
+
+            clear_change_environment_request(paths)
+
+        def stop(self):
+            stopped.append("stop")
+
+    result = _handle_change_environment_request(
+        _Fake(),  # type: ignore[arg-type]
+        current=ArcaEnvironment.HOMO,
+        choose=lambda: ArcaEnvironment.PROD,
+        confirm_production=lambda: confirms.append(False) or False,
+    )
+    assert result is None
+    assert confirms == [False]
+    assert stopped == []
+    assert read_change_environment_request(paths) is None
+
+
 def test_handle_change_mismo_ambiente_no_reinicia(tmp_path):
     from facturador.launcher.__main__ import _handle_change_environment_request
     from facturador.launcher.switch import (

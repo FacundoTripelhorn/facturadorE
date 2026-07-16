@@ -263,6 +263,7 @@ def _run_session(
                 supervisor,
                 current=environment,
                 choose=choose,
+                confirm_production=confirm_production,
             )
             if switch is not None:
                 return switch
@@ -292,10 +293,13 @@ def _handle_change_environment_request(
     *,
     current: ArcaEnvironment,
     choose: _ChooseFn,
+    confirm_production: _ConfirmProdFn | None = None,
 ) -> SwitchTo | None:
     """FAC-32: chooser con el backend aún vivo; stop solo si confirma otro.
 
     ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
+    Si el destino es Producción sin ack, la confirmación corre *antes* de
+    ``stop()``: cancelar mantiene la sesión actual (FAC-40).
     """
     request = supervisor.poll_change_environment_request()
     if request is None:
@@ -334,6 +338,34 @@ def _handle_change_environment_request(
                 supervisor.browser_opener(f"{supervisor.base_url}/")
             except Exception:
                 pass
+        return None
+
+    # FAC-40: ack de Producción antes de apagar el backend actual.
+    try:
+        acknowledged = ensure_production_acknowledged(
+            selected,
+            confirm=confirm_production,
+        )
+    except ChooserUnavailable as exc:
+        print(
+            f"No se pudo mostrar la confirmación de Producción ({exc}). "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
+        return None
+    except (ProfileError, OSError) as exc:
+        print(
+            f"No se pudo confirmar Producción ({exc}). "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
+        return None
+    if not acknowledged:
+        print(
+            "Cambio a Producción cancelado. "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
         return None
 
     # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro.
