@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import sqlite3
 
-from ..constants import InvoiceStatus
+from ..constants import InvoiceSource, InvoiceStatus
 from ._common import new_id, now
 
 INVOICE_FIELDS = (
@@ -172,10 +172,22 @@ def try_transition_to_submitting(
 def max_authorized_cbte_nro(
     conn: sqlite3.Connection, punto_venta: int, cbte_tipo: int
 ) -> int:
+    """Máximo cbte_nro autorizado emitido por esta app (source=wsfex).
+
+    Los históricos importados (source=imported) no cuentan: no satisfacen el
+    chequeo de DB desactualizada ni pueden hacer parecer que el perfil local
+    está alineado o por delante de ARCA (FAC-48).
+    """
     row = conn.execute(
         "SELECT MAX(cbte_nro) AS m FROM invoices"
-        " WHERE punto_venta = ? AND cbte_tipo = ? AND status = ?",
-        (punto_venta, cbte_tipo, InvoiceStatus.AUTHORIZED),
+        " WHERE punto_venta = ? AND cbte_tipo = ? AND status = ?"
+        " AND source = ?",
+        (
+            punto_venta,
+            cbte_tipo,
+            InvoiceStatus.AUTHORIZED,
+            InvoiceSource.WSFEX,
+        ),
     ).fetchone()
     return int(row["m"] or 0)
 

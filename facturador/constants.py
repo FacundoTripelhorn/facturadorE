@@ -35,6 +35,18 @@ class InvoiceStatus(enum.StrEnum):
     REJECTED = "rejected"
     UNKNOWN = "unknown"  # timeout post-envío, pendiente de reconciliar
 
+
+class InvoiceSource(enum.StrEnum):
+    """Procedencia del comprobante local (FAC-48 / FAC-3).
+
+    Solo ``wsfex`` cuenta para el chequeo de registro frente a ARCA y para
+    el camino de emisión. ``imported`` es solo lectura histórica y no debe
+    satisfacer ni contaminar la comparación con ``FEXGetLast_CMP``.
+    """
+
+    WSFEX = "wsfex"
+    IMPORTED = "imported"
+
 # Endpoints de ARCA por ambiente (design.md §1.3). NO son configurables por
 # separado: Config los deriva del único flag ARCA_ENV (checklist §2.1.1
 # punto 1), imposible mezclar cert de homo con URL de prod por construcción.

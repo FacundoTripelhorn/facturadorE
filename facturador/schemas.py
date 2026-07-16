@@ -146,6 +146,7 @@ class InvoiceOut(BaseModel):
     punto_venta: int
     cbte_nro: int | None
     status: str
+    source: str = "wsfex"
     fecha_cbte: str
     fecha_pago: str
     tipo_expo: int

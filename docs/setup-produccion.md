@@ -131,13 +131,15 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
 ## Cuidados operativos en producción
 
 - **Numeración / registro desactualizado.** Antes de emitir, la app compara el
-  último comprobante que conoce ARCA (`FEXGetLast_CMP`) contra el máximo de la
-  DB local. Si ARCA conoce comprobantes que la DB no tiene, bloquea la emisión
-  con "Registro local desactualizado". En homologación eso se fuerza sin
-  problema (punto de venta compartido); **en producción significa que la DB
-  local no es la última** (por ejemplo, se emitió desde otra máquina): restaurar
-  el último backup del perfil Producción antes de emitir. Forzar
-  (`force_desync`) solo si se entiende exactamente por qué difiere.
+  último comprobante que conoce ARCA (`FEXGetLast_CMP`) contra el máximo local
+  de comprobantes **autorizados emitidos por la app** (`source=wsfex`). Los
+  históricos importados no cuentan. Si ARCA conoce comprobantes que el registro
+  wsfex local no tiene, bloquea la emisión con "Registro local desactualizado".
+  En homologación eso se fuerza sin problema (punto de venta compartido); **en
+  producción significa que la DB local no es la última** (por ejemplo, se emitió
+  desde otra máquina): restaurar el último backup del perfil Producción antes
+  de emitir. Forzar (`force_desync`) solo si se entiende exactamente por qué
+  difiere.
 - **Backups.** El estado de un perfil es `data/` + `secrets/`. Hacer backup
   después de cada emisión: nativo
   `uv run python -m facturador.backup --env prod`; Docker
