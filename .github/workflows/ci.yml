@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
-      - run: uv sync --frozen
+      - run: uv sync
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run pytest -q
