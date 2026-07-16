@@ -25,10 +25,10 @@ do not need to guess tooling. Run `./scripts/agent/doctor.sh` for a full
 environment check: Python and `uv` versions, `uv sync`, then lint, typecheck,
 and tests in order.
 
-CI runs the same three steps in `.github/workflows/ci.yml` (`checks` job). A
-separate `docker` job runs `docker build -t facturador:ci .` — add that
-locally only when `Dockerfile`, `docker-compose.yml`, or `docker/entrypoint.sh`
-change.
+CI runs `uv sync --frozen` then the same three steps in
+`.github/workflows/ci.yml` (`checks` job). A separate `docker` job runs
+`docker build -t facturador:ci .` — add that locally only when `Dockerfile`,
+`docker-compose.yml`, or `docker/entrypoint.sh` change.
 
 **Docs-only changes** (markdown under `docs/`, `README.md`, `AGENTS.md`) do not
 need lint, types, or tests unless you edited embedded commands or code samples.

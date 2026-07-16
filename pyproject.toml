@@ -23,13 +23,6 @@ dev = [
     "mypy>=1.13",
 ]
 
-# CI is Linux x86_64; local may be Windows/macOS. Refuse resolutions that
-# lack a Linux x86_64 wheel (partial PyPI publishes of packages like ruff).
-[tool.uv]
-required-environments = [
-    "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
