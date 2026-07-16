@@ -22,7 +22,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -31,8 +31,14 @@ from .. import repo
 from ..api.csrf import csrf_token_for_request, enforce_csrf
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
-from ..certs import CertificateError
+from ..certs import (
+    CertificateError,
+    CertificateMetadata,
+    load_certificate_metadata,
+    store_certificate_pair,
+)
 from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
+from ..fiscal_identity import FiscalIdentityError, get_sealed_fiscal_cuit
 from ..launcher.switch import (
     is_launcher_supervised,
     write_change_environment_request,
@@ -50,6 +56,7 @@ from ..settings import (
     CONDICION_IVA_DEFAULT,
     get_active_emisor_id,
 )
+from ..setup import SetupState, reconcile_setup_state
 
 router = APIRouter(
     include_in_schema=False,
@@ -449,6 +456,114 @@ def guardar_cliente(
         # Mismo caso que GET /clientes: sin certs/params cache no debe 500.
         return _pagina_clientes(request, service, error=str(exc), status_code=422)
     return RedirectResponse("/clientes", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Setup / onboarding (FAC-37)
+# ---------------------------------------------------------------------------
+
+
+def _cert_metadata_seguro(profile) -> CertificateMetadata | None:
+    try:
+        return load_certificate_metadata(profile)
+    except CertificateError:
+        return None
+
+
+def _pagina_setup(
+    request: Request,
+    service,
+    *,
+    state: SetupState | None = None,
+    cert_meta: CertificateMetadata | None = None,
+    error: str | None = None,
+    aviso: str | None = None,
+    status_code: int = 200,
+):
+    profile = request.app.state.profile
+    if state is None:
+        state = reconcile_setup_state(profile, service.conn)
+    if cert_meta is None:
+        cert_meta = _cert_metadata_seguro(profile)
+    return templates.TemplateResponse(
+        request,
+        "setup.html",
+        {
+            "state": state.value,
+            "cert_meta": cert_meta,
+            "error": error,
+            "aviso": aviso,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/setup", response_class=HTMLResponse)
+def setup_pagina(request: Request, service: ServiceDep, aviso: str = ""):
+    """Paso de certificado del onboarding (FAC-37)."""
+    avisos = {"instalado": "instalado"}
+    return _pagina_setup(request, service, aviso=avisos.get(aviso, aviso or None))
+
+
+@router.post("/ui/setup/certificado", response_class=HTMLResponse)
+async def instalar_certificado_setup(
+    request: Request,
+    service: ServiceDep,
+    certificado: UploadFile = File(...),  # noqa: B008
+    clave: UploadFile = File(...),  # noqa: B008
+):
+    """Valida y persiste el par cert/key del perfil (FAC-36 vía UI)."""
+    profile = request.app.state.profile
+    state = reconcile_setup_state(profile, service.conn)
+
+    if certificado.filename is None or clave.filename is None:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error="Hay que subir el certificado y la clave privada juntos.",
+            status_code=422,
+        )
+
+    try:
+        cert_bytes = await certificado.read()
+        key_bytes = await clave.read()
+    except OSError:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error="No se pudieron leer los archivos subidos.",
+            status_code=422,
+        )
+
+    if not cert_bytes.strip() or not key_bytes.strip():
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error="El certificado y la clave privada no pueden estar vacíos.",
+            status_code=422,
+        )
+
+    try:
+        store_certificate_pair(
+            profile,
+            cert_bytes,
+            key_bytes,
+            sealed_cuit=get_sealed_fiscal_cuit(service.conn),
+        )
+    except (CertificateError, FiscalIdentityError) as exc:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error=str(exc),
+            status_code=422,
+        )
+
+    reconcile_setup_state(profile, service.conn)
+    return RedirectResponse("/setup?aviso=instalado", status_code=303)
 
 
 # ---------------------------------------------------------------------------

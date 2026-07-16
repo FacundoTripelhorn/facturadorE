@@ -10,7 +10,7 @@ from .deps import ServiceDep
 router = APIRouter(tags=["setup"])
 
 
-@router.get("/setup")
+@router.get("/setup/status")
 def setup_status(request: Request, service: ServiceDep) -> dict[str, object]:
     """Paso actual del onboarding del perfil (reanudable tras reinicio)."""
     profile = request.app.state.profile

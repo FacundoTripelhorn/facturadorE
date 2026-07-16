@@ -396,7 +396,7 @@ def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
     assert home.status_code == 503
     assert home.json()["setup_state"] == "emisor_required"
 
-    setup = api.get("/setup")
+    setup = api.get("/setup/status")
     assert setup.status_code == 200
     assert setup.json()["ready"] is False
 
@@ -701,6 +701,108 @@ def test_health_identifica_ambiente_sin_filtrar_secretos(
     assert str(profile.paths.root) not in dumped
     assert "cert.crt" not in dumped
     assert "cert.key" not in dumped
+
+
+# --- setup certificado (FAC-37) ---
+
+
+def _client_sin_certificados(
+    tmp_path, arca, *, seed: bool = True
+) -> tuple[TestClient, EnvironmentProfile]:
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    conn = db.connect(profile.paths.db)
+    if seed:
+        seed_params(conn)
+        seed_settings(conn, ambiente="homo")
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
+    return TestClient(app, base_url=loopback_base_url()), profile
+
+
+def test_setup_pagina_identifica_ambiente_y_formulario(tmp_path, arca):
+    client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
+    r = client.get("/setup")
+    assert r.status_code == 200
+    assert "Homologación" in r.text
+    assert "read-only" in r.text.lower() or "read-only" in r.text
+    assert 'name="certificado"' in r.text
+    assert 'name="clave"' in r.text
+    assert str(tmp_path) not in r.text
+    assert "BEGIN PRIVATE KEY" not in r.text
+
+
+def test_setup_instala_certificado_y_muestra_metadata(
+    tmp_path, test_cert_and_key, arca
+):
+    client, profile = _client_sin_certificados(tmp_path, arca, seed=False)
+    cert_pem, key_pem = test_cert_and_key
+    r = client.post(
+        "/ui/setup/certificado",
+        data=with_csrf(client, {}),
+        files={
+            "certificado": ("cert.crt", cert_pem, "application/x-pem-file"),
+            "clave": ("cert.key", key_pem, "application/x-pem-file"),
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup?aviso=instalado"
+
+    ok = client.get("/setup?aviso=instalado")
+    assert ok.status_code == 200
+    assert "20111111112" in ok.text
+    assert "Certificado instalado" in ok.text
+    assert "Configuración" in ok.text
+    assert profile.paths.cert.is_file()
+    assert profile.paths.key.is_file()
+
+    status = client.get("/setup/status").json()
+    assert status["state"] == "emisor_required"
+    assert status["ready"] is False
+
+
+def test_setup_rechaza_par_invalido_sin_eco_de_clave(tmp_path, test_cert_and_key, arca):
+    client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
+    cert_pem, key_pem = test_cert_and_key
+    r = client.post(
+        "/ui/setup/certificado",
+        data=with_csrf(client, {}),
+        files={
+            "certificado": ("cert.crt", cert_pem, "application/x-pem-file"),
+            "clave": ("cert.key", b"NOT-A-VALID-KEY", "application/x-pem-file"),
+        },
+    )
+    assert r.status_code == 422
+    assert 'class="panel error"' in r.text
+    assert "BEGIN PRIVATE KEY" not in r.text
+    assert key_pem.decode() not in r.text
+
+
+def test_setup_retoma_paso_tras_reinicio(tmp_path, test_cert_and_key, arca):
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client2 = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+    assert client2.get("/setup/status").json()["state"] == "emisor_required"
+    assert "Certificado instalado" in client2.get("/setup").text
 
 
 # --- cambio de ambiente por reinicio (FAC-32 / ADR 0001) ---
