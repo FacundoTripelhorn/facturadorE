@@ -1633,3 +1633,27 @@ def test_main_prod_con_ack_previo_no_repregunta(tmp_path, monkeypatch):
     )
     assert code == 0
     assert started == [ArcaEnvironment.PROD]
+
+
+def test_main_profile_error_en_ack_prod_no_traceback(monkeypatch):
+    """ProfileError during pre-start ack is reported like other launcher failures."""
+    from facturador.launcher.__main__ import main
+
+    monkeypatch.setenv("FACTURADOR_APP_DATA", "relative/path")
+    failures: list[str] = []
+
+    def _boom_factory(**_kwargs):
+        raise AssertionError("no debe crear supervisor si el perfil falla")
+
+    code = main(
+        ["--env", "prod"],
+        choose=lambda: (_ for _ in ()).throw(
+            AssertionError("con --env no debe abrirse el chooser")
+        ),
+        confirm_production=lambda: True,
+        supervisor_factory=_boom_factory,
+        report_failure=failures.append,
+    )
+    assert code == 2
+    assert failures
+    assert "FACTURADOR_APP_DATA" in failures[0]

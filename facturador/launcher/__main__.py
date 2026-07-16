@@ -204,6 +204,10 @@ def _run_session(
             f"{exc}"
         )
         return None if return_to_chooser_on_startup_error else 2
+    except ProfileError as exc:
+        # Misma ruta que supervisor.start(): p.ej. FACTURADOR_APP_DATA inválida.
+        report_failure(str(exc))
+        return None if return_to_chooser_on_startup_error else 2
     if not acknowledged:
         print(
             "Apertura de Producción cancelada. "
