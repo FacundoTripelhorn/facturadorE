@@ -1,7 +1,8 @@
 """Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28).
 
 También cubre el chooser de ambiente (FAC-29), el lock anti-duplicado
-(FAC-30) y el cambio de ambiente por reinicio (FAC-32).
+(FAC-30), el cambio de ambiente por reinicio (FAC-32) y la confirmación
+de primer uso de Producción (FAC-40).
 """
 
 from __future__ import annotations
@@ -24,13 +25,21 @@ from facturador.launcher import (
     build_backend_command,
     build_backend_env,
     choose_environment,
+    ensure_production_acknowledged,
     environment_options,
+    is_production_acknowledged,
     plan_backend_launch,
     prompt_environment_tty,
     resolve_launch_environment,
     resolve_launch_profile,
+    save_production_ack,
 )
-from facturador.profile import EnvironmentProfile, ProfileError, resolve_app_data_root
+from facturador.profile import (
+    EnvironmentProfile,
+    ProfileError,
+    ProfilePaths,
+    resolve_app_data_root,
+)
 
 
 def _free_port() -> int:
@@ -1182,6 +1191,63 @@ def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
     assert order == ["clear", "stop"]
 
 
+def test_handle_change_a_prod_cancel_ack_mantiene_backend(
+    tmp_path, monkeypatch
+):
+    """FAC-40: cancelar ack de Producción no apaga la sesión actual."""
+    from facturador.launcher.__main__ import _handle_change_environment_request
+    from facturador.launcher.switch import (
+        read_change_environment_request,
+        write_change_environment_request,
+    )
+    from facturador.profile import ProfilePaths
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    paths = ProfilePaths(root=app_data / "homo")
+    paths.ensure_layout()
+    write_change_environment_request(paths, ArcaEnvironment.HOMO)
+    stopped: list[str] = []
+    confirms: list[bool] = []
+
+    class _Fake:
+        plan = type(
+            "P",
+            (),
+            {
+                "profile": type(
+                    "Pr",
+                    (),
+                    {"paths": paths, "display_name": "Homologación"},
+                )(),
+            },
+        )()
+        open_browser = False
+        base_url = "http://127.0.0.1:8399"
+
+        def poll_change_environment_request(self):
+            return read_change_environment_request(paths)
+
+        def clear_change_environment_request(self):
+            from facturador.launcher.switch import clear_change_environment_request
+
+            clear_change_environment_request(paths)
+
+        def stop(self):
+            stopped.append("stop")
+
+    result = _handle_change_environment_request(
+        _Fake(),  # type: ignore[arg-type]
+        current=ArcaEnvironment.HOMO,
+        choose=lambda: ArcaEnvironment.PROD,
+        confirm_production=lambda: confirms.append(False) or False,
+    )
+    assert result is None
+    assert confirms == [False]
+    assert stopped == []
+    assert read_change_environment_request(paths) is None
+
+
 def test_handle_change_mismo_ambiente_no_reinicia(tmp_path):
     from facturador.launcher.__main__ import _handle_change_environment_request
     from facturador.launcher.switch import (
@@ -1392,3 +1458,288 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     req = read_change_environment_request(profile.paths)
     assert req is not None
     assert req.from_environment is ArcaEnvironment.HOMO
+
+
+# --- confirmación de primer uso de Producción (FAC-40) ---
+
+
+def test_production_ack_solo_en_perfil_prod(tmp_path):
+    prod = ProfilePaths(root=tmp_path / "prod")
+    homo = ProfilePaths(root=tmp_path / "homo")
+    assert not is_production_acknowledged(prod)
+    save_production_ack(prod)
+    assert is_production_acknowledged(prod)
+    assert prod.production_ack.is_file()
+    assert not homo.production_ack.exists()
+    assert not is_production_acknowledged(homo)
+
+
+def test_ensure_production_ack_homo_nunca_pide_confirmacion(tmp_path):
+    called = {"n": 0}
+
+    def _boom() -> bool:
+        called["n"] += 1
+        raise AssertionError("homo no debe pedir confirmación de producción")
+
+    assert (
+        ensure_production_acknowledged(
+            ArcaEnvironment.HOMO,
+            app_data_root=tmp_path / "app",
+            confirm=_boom,
+        )
+        is True
+    )
+    assert called["n"] == 0
+    assert not (tmp_path / "app" / "homo" / "data" / "production_ack.json").exists()
+    assert not (tmp_path / "app" / "prod" / "data" / "production_ack.json").exists()
+
+
+def test_ensure_production_ack_pide_y_persiste_solo_en_prod(tmp_path):
+    app_data = tmp_path / "app"
+    confirms: list[bool] = []
+
+    def _confirm() -> bool:
+        confirms.append(True)
+        return True
+
+    assert (
+        ensure_production_acknowledged(
+            ArcaEnvironment.PROD,
+            app_data_root=app_data,
+            confirm=_confirm,
+        )
+        is True
+    )
+    assert confirms == [True]
+    prod_ack = app_data / "prod" / "data" / "production_ack.json"
+    assert prod_ack.is_file()
+    assert not (app_data / "homo" / "data" / "production_ack.json").exists()
+
+    # Segundo intento: ack presente → no re-pregunta.
+    assert (
+        ensure_production_acknowledged(
+            ArcaEnvironment.PROD,
+            app_data_root=app_data,
+            confirm=lambda: (_ for _ in ()).throw(
+                AssertionError("no debe re-preguntar")
+            ),
+        )
+        is True
+    )
+
+
+def test_ensure_production_ack_cancelar_no_persiste(tmp_path):
+    app_data = tmp_path / "app"
+    assert (
+        ensure_production_acknowledged(
+            ArcaEnvironment.PROD,
+            app_data_root=app_data,
+            confirm=lambda: False,
+        )
+        is False
+    )
+    assert not (app_data / "prod" / "data" / "production_ack.json").exists()
+
+
+def test_prompt_production_confirm_tty_acepta_y_cancela():
+    from facturador.launcher.production_ack import prompt_production_confirm_tty
+
+    outputs: list[str] = []
+    assert (
+        prompt_production_confirm_tty(
+            input_fn=lambda _p: "sí",
+            print_fn=lambda *a, **_k: outputs.append(" ".join(map(str, a))),
+        )
+        is True
+    )
+    joined = "\n".join(outputs).lower()
+    assert "validez fiscal" in joined or "fiscal" in joined
+    assert "producción" in joined
+
+    assert (
+        prompt_production_confirm_tty(
+            input_fn=lambda _p: "",
+            print_fn=lambda *_a, **_k: None,
+        )
+        is False
+    )
+
+
+def test_main_primera_prod_pide_confirmacion_y_persiste(
+    tmp_path, monkeypatch
+):
+    from facturador.launcher.__main__ import main
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    started: list[ArcaEnvironment] = []
+    confirms: list[bool] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            started.append(self.environment)
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            return LaunchResult(
+                plan=plan_backend_launch(
+                    self.environment, port=8399, app_data_root=app_data
+                ),
+                reused=True,
+            )
+
+    code = main(
+        [],
+        choose=lambda: ArcaEnvironment.PROD,
+        confirm_production=lambda: confirms.append(True) or True,
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+    assert started == [ArcaEnvironment.PROD]
+    assert confirms == [True]
+    assert is_production_acknowledged(
+        ProfilePaths(root=app_data / "prod")
+    )
+
+
+def test_main_cancelar_confirmacion_prod_vuelve_al_chooser(
+    tmp_path, monkeypatch
+):
+    from facturador.launcher.__main__ import main
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    picks = iter([ArcaEnvironment.PROD, ArcaEnvironment.HOMO])
+    confirms: list[bool] = []
+    started: list[ArcaEnvironment] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            started.append(self.environment)
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            return LaunchResult(
+                plan=plan_backend_launch(
+                    self.environment, port=8399, app_data_root=app_data
+                ),
+                reused=True,
+            )
+
+    def _confirm() -> bool:
+        confirms.append(False)
+        return False
+
+    code = main(
+        [],
+        choose=lambda: next(picks),
+        confirm_production=_confirm,
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+    assert confirms == [False]
+    assert started == [ArcaEnvironment.HOMO]
+    assert not is_production_acknowledged(ProfilePaths(root=app_data / "prod"))
+
+
+def test_main_prod_con_ack_previo_no_repregunta(tmp_path, monkeypatch):
+    from facturador.launcher.__main__ import main
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    save_production_ack(ProfilePaths(root=app_data / "prod"))
+    started: list[ArcaEnvironment] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+
+        def start(self):
+            started.append(self.environment)
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            return LaunchResult(
+                plan=plan_backend_launch(
+                    self.environment, port=8399, app_data_root=app_data
+                ),
+                reused=True,
+            )
+
+    code = main(
+        ["--env", "prod"],
+        choose=lambda: (_ for _ in ()).throw(
+            AssertionError("no debe abrir chooser")
+        ),
+        confirm_production=lambda: (_ for _ in ()).throw(
+            AssertionError("no debe re-preguntar")
+        ),
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+    assert started == [ArcaEnvironment.PROD]
+
+
+def test_main_profile_error_en_ack_prod_no_traceback(monkeypatch):
+    """ProfileError during pre-start ack is reported like other launcher failures."""
+    from facturador.launcher.__main__ import main
+
+    monkeypatch.setenv("FACTURADOR_APP_DATA", "relative/path")
+    failures: list[str] = []
+
+    def _boom_factory(**_kwargs):
+        raise AssertionError("no debe crear supervisor si el perfil falla")
+
+    code = main(
+        ["--env", "prod"],
+        choose=lambda: (_ for _ in ()).throw(
+            AssertionError("con --env no debe abrirse el chooser")
+        ),
+        confirm_production=lambda: True,
+        supervisor_factory=_boom_factory,
+        report_failure=failures.append,
+    )
+    assert code == 2
+    assert failures
+    assert "FACTURADOR_APP_DATA" in failures[0]
+
+
+def test_main_oserror_al_guardar_ack_prod_no_traceback(tmp_path, monkeypatch):
+    """OSError al persistir el ack se reporta sin traceback."""
+    from facturador.launcher.__main__ import main
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    # data/ como archivo: ensure_layout/mkdir o write_text fallan con OSError.
+    prod_data = app_data / "prod" / "data"
+    prod_data.parent.mkdir(parents=True)
+    prod_data.write_text("not-a-directory", encoding="utf-8")
+    failures: list[str] = []
+
+    def _boom_factory(**_kwargs):
+        raise AssertionError("no debe crear supervisor si el ack no se guarda")
+
+    code = main(
+        ["--env", "prod"],
+        choose=lambda: (_ for _ in ()).throw(
+            AssertionError("con --env no debe abrirse el chooser")
+        ),
+        confirm_production=lambda: True,
+        supervisor_factory=_boom_factory,
+        report_failure=failures.append,
+    )
+    assert code == 2
+    assert failures
+    assert "confirmación de Producción" in failures[0]

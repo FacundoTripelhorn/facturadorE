@@ -44,6 +44,7 @@ def test_todos_los_paths_se_derivan_de_una_raiz(tmp_path):
     assert paths.log_file == root / "data" / "logs" / "facturador.log"
     assert paths.onboarding == root / "data" / "onboarding.json"
     assert paths.launcher_lock == root / "data" / "launcher.lock"
+    assert paths.production_ack == root / "data" / "production_ack.json"
 
 
 def test_ensure_layout_crea_la_estructura_minima(tmp_path):

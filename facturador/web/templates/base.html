@@ -246,7 +246,7 @@
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
     <span class="badge-env {{ env }}" data-env="{{ env }}">
-      {% if env == "prod" %}{{ env_label }}{% else %}{{ env_label }} — sin valor fiscal{% endif %}
+      {% if env == "prod" %}{{ env_label }} — validez fiscal{% else %}{{ env_label }} — sin valor fiscal{% endif %}
     </span>
     {% if launcher_supervised %}
     <form class="cambiar-ambiente" method="post" action="/ui/cambiar-ambiente">

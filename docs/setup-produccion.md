@@ -59,8 +59,13 @@ compartido ni se "cambia el flag" dentro del mismo proceso.
 **Sin Docker:**
 
 ```bash
-uv run python -m facturador.launcher --env prod
+uv run python -m facturador.launcher
 ```
+
+Elegí **Producción**. La primera vez el launcher pide confirmación explícita
+(validez fiscal real); cancelar vuelve al selector. Con `--env prod` se saltea
+el chooser pero la confirmación de primer uso sigue aplicando si el perfil
+aún no tiene el ack.
 
 Si faltan certificados, el mensaje indica el `secrets/` del perfil Producción.
 Colocá ahí `cert.crt` / `cert.key` (key en `400`) y relanzá.
@@ -72,9 +77,13 @@ mkdir -p ~/facturador/profiles/prod/secrets
 cp cert.key cert.crt ~/facturador/profiles/prod/secrets/
 chmod 400 ~/facturador/profiles/prod/secrets/cert.key
 
-# Fijar Producción y reiniciar el contenedor (no hay hot-switch)
-printf 'ARCA_ENV=prod\n' > ~/facturador/.env
+# Fijar Producción y confirmar validez fiscal en el primer arranque
+# (FACTURADOR_ACK_PRODUCTION=1 graba el ack en el perfil; después no hace falta).
+printf 'ARCA_ENV=prod\nFACTURADOR_ACK_PRODUCTION=1\n' > ~/facturador/.env
 docker compose down && docker compose up -d
+
+# En siguientes arranques, sacá FACTURADOR_ACK_PRODUCTION del .env (el ack
+# ya quedó en profiles/prod/data/production_ack.json).
 ```
 
 En la página **Configuración** de la sesión **Producción**, cargá el

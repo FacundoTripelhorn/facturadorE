@@ -42,6 +42,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .constants import DEFAULT_PORT, WSAA_URLS, WSFEX_URLS, ArcaEnvironment
+from .production_ack import ProductionAckRequired, require_production_ack
 from .profile import (
     EnvironmentProfile,
     ProfileError,
@@ -146,6 +147,15 @@ def load_config(profile: EnvironmentProfile) -> Config:
     del perfil — nunca de un layout compartido ni del CWD.
     """
     profile.paths.ensure_layout()
+    try:
+        require_production_ack(profile)
+    except ProductionAckRequired as exc:
+        raise ConfigError(str(exc)) from exc
+    except OSError as exc:
+        raise ConfigError(
+            "No se pudo guardar la confirmación de Producción: "
+            f"{exc}"
+        ) from exc
     config = Config(env=profile.environment, paths=profile.paths)
     validate_config(config)
     return config

@@ -1,7 +1,7 @@
 """Launcher de FacturadorE: chooser, supervisión y lock de perfil.
 
 FAC-28 supervisor · FAC-29 chooser · FAC-30 lock anti-duplicado ·
-FAC-32 cambio de ambiente por reinicio.
+FAC-32 cambio de ambiente por reinicio · FAC-40 confirmación de Producción.
 """
 
 from .chooser import (
@@ -28,6 +28,12 @@ from .lock import (
     ProfileLockHeld,
     is_process_alive,
     read_lock_holder,
+)
+from .production_ack import (
+    confirm_production_first_use,
+    ensure_production_acknowledged,
+    is_production_acknowledged,
+    save_production_ack,
 )
 from .supervisor import LauncherError, LaunchResult, ProcessSupervisor, start_backend
 from .switch import (
@@ -61,8 +67,11 @@ __all__ = [
     "change_environment_request_path",
     "choose_environment",
     "clear_change_environment_request",
+    "confirm_production_first_use",
+    "ensure_production_acknowledged",
     "environment_options",
     "is_launcher_supervised",
+    "is_production_acknowledged",
     "is_process_alive",
     "plan_backend_launch",
     "prompt_environment_gui",
@@ -71,6 +80,7 @@ __all__ = [
     "read_lock_holder",
     "resolve_launch_environment",
     "resolve_launch_profile",
+    "save_production_ack",
     "start_backend",
     "write_change_environment_request",
 ]

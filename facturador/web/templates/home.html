@@ -8,6 +8,13 @@
 <div class="panel error"><div>{{ error }}</div></div>
 {% endif %}
 
+{% if env == "prod" %}
+<div class="panel neutro">
+  <div><strong>Ambiente de Producción.</strong> Los comprobantes que autorices
+  tendrán validez fiscal real y numeración definitiva en ARCA.</div>
+</div>
+{% endif %}
+
 {% if not emisor_ok %}
 <div class="panel error">
   <div>Faltan los datos del emisor (van impresos en el PDF).

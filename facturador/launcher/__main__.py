@@ -12,6 +12,9 @@ FAC-32: si la UI pide "Cambiar ambiente", el launcher muestra el chooser
 mientras el backend actual sigue vivo (cancelar = seguir igual). Al confirmar
 otro ambiente, detiene el backend corriente *antes* de arrancar el perfil
 nuevo; un fallo de arranque del destino no muta ninguno de los dos perfiles.
+
+FAC-40: la primera vez que se abre Producción pide confirmación explícita
+sobre la validez fiscal; cancelar vuelve al chooser sin arrancar.
 """
 
 from __future__ import annotations
@@ -27,10 +30,13 @@ from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
 from .chooser import ChooserUnavailable, choose_environment
 from .command import resolve_launch_environment
+from .production_ack import ensure_production_acknowledged
 from .supervisor import LauncherError, ProcessSupervisor
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
+# Inyectable en tests: confirmación de primer uso de Producción (FAC-40).
+_ConfirmProdFn = Callable[[], bool]
 
 
 @dataclass(frozen=True)
@@ -38,6 +44,11 @@ class SwitchTo:
     """El usuario confirmó otro ambiente: arrancar ese perfil a continuación."""
 
     environment: ArcaEnvironment
+
+
+@dataclass(frozen=True)
+class ReturnToChooser:
+    """Volver al chooser sin error (canceló confirmación de Producción)."""
 
 
 def _parse_port(value: str) -> int:
@@ -97,6 +108,7 @@ def main(
     argv: list[str] | None = None,
     *,
     choose: _ChooseFn | None = None,
+    confirm_production: _ConfirmProdFn | None = None,
     supervisor_factory: Callable[..., ProcessSupervisor] | None = None,
     report_failure: Callable[[str], None] | None = None,
 ) -> int:
@@ -140,12 +152,18 @@ def main(
             args,
             factory=factory,
             choose=chooser,
+            confirm_production=confirm_production,
             report_failure=fail,
             return_to_chooser_on_startup_error=allow_chooser_retry,
         )
         if isinstance(outcome, SwitchTo):
-            # Ya confirmado en el chooser del cambio: arrancar sin re-preguntar.
+            # Ya confirmado en el chooser del cambio: arrancar el destino.
+            # FAC-40 vuelve a pedir ack solo si el perfil prod aún no lo tiene.
             pending = outcome.environment
+            allow_chooser_retry = True
+            continue
+        if isinstance(outcome, ReturnToChooser):
+            # Canceló la confirmación de Producción: chooser, sin salir.
             allow_chooser_retry = True
             continue
         if outcome is None:
@@ -162,17 +180,48 @@ def _run_session(
     *,
     factory: Callable[..., ProcessSupervisor],
     choose: _ChooseFn,
+    confirm_production: _ConfirmProdFn | None,
     report_failure: Callable[[str], None],
     return_to_chooser_on_startup_error: bool = False,
-) -> int | None | SwitchTo:
+) -> int | None | SwitchTo | ReturnToChooser:
     """Supervisa una sesión.
 
     Retornos:
     - ``int``: código de salida del proceso launcher.
     - ``None``: volver al chooser (fallo de start o caída post-arranque).
+    - ``ReturnToChooser``: canceló ack de Producción; sin error.
     - ``SwitchTo``: el usuario eligió otro ambiente; el backend actual ya
       está detenido.
     """
+    try:
+        acknowledged = ensure_production_acknowledged(
+            environment,
+            confirm=confirm_production,
+        )
+    except ChooserUnavailable as exc:
+        report_failure(
+            "No se pudo mostrar la confirmación de Producción. "
+            f"{exc}"
+        )
+        return None if return_to_chooser_on_startup_error else 2
+    except ProfileError as exc:
+        # Misma ruta que supervisor.start(): p.ej. FACTURADOR_APP_DATA inválida.
+        report_failure(str(exc))
+        return None if return_to_chooser_on_startup_error else 2
+    except OSError as exc:
+        report_failure(
+            "No se pudo guardar la confirmación de Producción: "
+            f"{exc}"
+        )
+        return None if return_to_chooser_on_startup_error else 2
+    if not acknowledged:
+        print(
+            "Apertura de Producción cancelada. "
+            "Volvé a elegir el ambiente cuando quieras.",
+            flush=True,
+        )
+        return ReturnToChooser()
+
     supervisor = factory(
         environment=environment,
         port=args.port,
@@ -214,6 +263,7 @@ def _run_session(
                 supervisor,
                 current=environment,
                 choose=choose,
+                confirm_production=confirm_production,
             )
             if switch is not None:
                 return switch
@@ -243,10 +293,13 @@ def _handle_change_environment_request(
     *,
     current: ArcaEnvironment,
     choose: _ChooseFn,
+    confirm_production: _ConfirmProdFn | None = None,
 ) -> SwitchTo | None:
     """FAC-32: chooser con el backend aún vivo; stop solo si confirma otro.
 
     ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
+    Si el destino es Producción sin ack, la confirmación corre *antes* de
+    ``stop()``: cancelar mantiene la sesión actual (FAC-40).
     """
     request = supervisor.poll_change_environment_request()
     if request is None:
@@ -285,6 +338,34 @@ def _handle_change_environment_request(
                 supervisor.browser_opener(f"{supervisor.base_url}/")
             except Exception:
                 pass
+        return None
+
+    # FAC-40: ack de Producción antes de apagar el backend actual.
+    try:
+        acknowledged = ensure_production_acknowledged(
+            selected,
+            confirm=confirm_production,
+        )
+    except ChooserUnavailable as exc:
+        print(
+            f"No se pudo mostrar la confirmación de Producción ({exc}). "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
+        return None
+    except (ProfileError, OSError) as exc:
+        print(
+            f"No se pudo confirmar Producción ({exc}). "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
+        return None
+    if not acknowledged:
+        print(
+            "Cambio a Producción cancelado. "
+            "Se mantiene el ambiente actual.",
+            flush=True,
+        )
         return None
 
     # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro.
