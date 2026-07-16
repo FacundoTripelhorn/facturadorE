@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from facturador.constants import InvoiceStatus
+from facturador.constants import InvoiceSource, InvoiceStatus
 
 SCHEMA = Path("facturador/schema.sql").read_text(encoding="utf-8")
 
@@ -15,6 +15,13 @@ def test_check_de_status_en_schema_sql_coincide_con_el_enum():
     assert match, "no se encontró el CHECK de status en schema.sql"
     en_schema = set(re.findall(r"'([a-z]+)'", match.group(1)))
     assert en_schema == {s.value for s in InvoiceStatus}
+
+
+def test_check_de_source_en_schema_sql_coincide_con_el_enum():
+    match = re.search(r"CHECK \(source IN\s*\(([^)]*)\)\)", SCHEMA)
+    assert match, "no se encontró el CHECK de source en schema.sql"
+    en_schema = set(re.findall(r"'([a-z]+)'", match.group(1)))
+    assert en_schema == {s.value for s in InvoiceSource}
 
 
 def test_invoice_status_es_transparente_como_str():

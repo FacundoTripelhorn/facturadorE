@@ -30,6 +30,7 @@ from .constants import (
     CBTE_TIPO_FACTURA_E,
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
+    InvoiceSource,
     InvoiceStatus,
 )
 from .fiscal_identity import FiscalIdentityError, resolve_profile_fiscal_cuit
@@ -471,6 +472,11 @@ class InvoiceService:
                     f"Factura rechazada por ARCA ({inv['last_error']}); "
                     "corregir los datos creando una nueva."
                 )
+            if self._invoice_source(inv) == InvoiceSource.IMPORTED:
+                raise ConflictError(
+                    "Los comprobantes importados son solo lectura histórica; "
+                    "no se pueden autorizar ni reenviar a ARCA."
+                )
             # Identidad fiscal antes de cualquier WSFEX (FAC-39).
             self._check_invoice_fiscal_identity(inv)
 
@@ -492,6 +498,46 @@ class InvoiceService:
                     )
                 raise
 
+    @staticmethod
+    def _invoice_source(inv: sqlite3.Row) -> str:
+        if "source" in inv.keys() and inv["source"]:
+            return str(inv["source"])
+        return InvoiceSource.WSFEX
+
+    def _assert_local_registry_consistent(
+        self,
+        inv: sqlite3.Row,
+        last_cmp: int,
+        *,
+        force_desync: bool,
+    ) -> None:
+        """FAC-48 / design.md §2.5: local wsfex vs FEXGetLast_CMP.
+
+        Solo cuentan filas ``source=wsfex`` autorizadas. Si ARCA está adelante,
+        el perfil local está desactualizado (otra máquina / backup viejo).
+        Si el local está adelante de ARCA, el registro es inconsistente.
+        """
+        local_max = repo.max_authorized_cbte_nro(
+            self.conn, inv["punto_venta"], inv["cbte_tipo"]
+        )
+        pv = inv["punto_venta"]
+        tipo = inv["cbte_tipo"]
+        if last_cmp > local_max and not force_desync:
+            raise StaleRegistryError(
+                f"Registro local desactualizado: ARCA reporta último comprobante "
+                f"{last_cmp} para PV {pv} tipo {tipo} pero el registro local "
+                f"autorizado (wsfex) llega a {local_max}. Restaurar el último "
+                "backup antes de emitir (o forzar con force_desync=true si es "
+                "intencional, p.ej. homologación)."
+            )
+        if local_max > last_cmp:
+            raise ConflictError(
+                f"Registro local inconsistente: la DB local tiene comprobante "
+                f"{local_max} para PV {pv} tipo {tipo} pero ARCA reporta último "
+                f"{last_cmp}. No emitir: restaurar un backup coherente o "
+                "investigar antes de continuar."
+            )
+
     def _authorize_first_time(
         self, inv: sqlite3.Row, force_desync: bool
     ) -> sqlite3.Row:
@@ -507,19 +553,10 @@ class InvoiceService:
         except (WsfexError, httpx.HTTPError) as exc:
             raise ArcaUnavailableError(f"ARCA no disponible: {exc}") from exc
 
-        # Detección de DB desactualizada (§2.5): si ARCA conoce comprobantes
-        # que la DB local no tiene, bloquear (esquema multi-máquina).
-        local_max = repo.max_authorized_cbte_nro(
-            self.conn, inv["punto_venta"], inv["cbte_tipo"]
+        # Antes de asignar número / persistir raw_request / llamar FEXAuthorize.
+        self._assert_local_registry_consistent(
+            inv, last_cmp, force_desync=force_desync
         )
-        if last_cmp > local_max and not force_desync:
-            raise StaleRegistryError(
-                f"Registro local desactualizado: ARCA reporta último comprobante "
-                f"{last_cmp} para PV {inv['punto_venta']} tipo {inv['cbte_tipo']} "
-                f"pero la DB local llega a {local_max}. Restaurar el último "
-                "backup antes de emitir (o forzar con force_desync=true si es "
-                "intencional, p.ej. homologación)."
-            )
 
         cbte_nro = last_cmp + 1
         wsfex_invoice = row_to_wsfex_invoice(

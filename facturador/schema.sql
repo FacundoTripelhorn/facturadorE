@@ -67,6 +67,11 @@ CREATE TABLE invoices (
     cbte_nro           INTEGER,
     status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
                        ('draft','submitting','authorized','rejected','unknown')),
+    -- Procedencia (FAC-48): solo 'wsfex' es autoritativo para numeración /
+    -- emisión. 'imported' es histórico de solo lectura (FAC-3) y no cuenta
+    -- en el chequeo de DB desactualizada frente a FEXGetLast_CMP.
+    source             TEXT NOT NULL DEFAULT 'wsfex' CHECK (source IN
+                       ('wsfex','imported')),
     fecha_cbte         TEXT NOT NULL,
     fecha_pago         TEXT NOT NULL,
     tipo_expo          INTEGER NOT NULL DEFAULT 2,

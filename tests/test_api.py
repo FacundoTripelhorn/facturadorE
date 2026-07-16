@@ -287,22 +287,113 @@ def test_submitting_reciente_bloquea_doble_submit(api, arca):
     assert "en curso" in r.json()["detail"]
 
 
-# --- chequeo de DB desactualizada (§2.5) ---
+# --- chequeo de DB desactualizada (§2.5 / FAC-48) ---
+
+
+def _insert_authorized(
+    api,
+    *,
+    cbte_nro: int,
+    source: str = "wsfex",
+    punto_venta: int = 1,
+    cbte_tipo: int = 19,
+    arca_id: int | None = None,
+) -> str:
+    """Inserta una factura authorized de prueba (wsfex o imported)."""
+    invoice_id = f"seed-{source}-{cbte_nro}-{punto_venta}"
+    now = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
+    reserved_id = arca_id if arca_id is not None else (10_000 + cbte_nro)
+    api.conn.execute(
+        "INSERT INTO invoices ("
+        "  id, arca_id, cbte_tipo, punto_venta, cbte_nro, status, source,"
+        "  fecha_cbte, fecha_pago, dst_cmp, cliente, cuit_pais_cliente,"
+        "  moneda_ctz, imp_total, cae, cae_fch_vto, environment,"
+        "  created_at, updated_at"
+        ") VALUES ("
+        "  ?, ?, ?, ?, ?, 'authorized', ?,"
+        "  '20260101', '20260101', 225, 'SEED', 55000002002,"
+        "  '1', '100', '76123456789012', '20260713', 'homo',"
+        "  ?, ?)",
+        (
+            invoice_id,
+            reserved_id if source == "wsfex" else None,
+            cbte_tipo,
+            punto_venta,
+            cbte_nro,
+            source,
+            now,
+            now,
+        ),
+    )
+    api.conn.commit()
+    return invoice_id
+
+
+def test_registro_alineado_permite_emision(api, arca):
+    """FAC-48: last_cmp == max wsfex local → se puede emitir el siguiente."""
+    _crear_cliente(api)
+    _insert_authorized(api, cbte_nro=3, source="wsfex", arca_id=103)
+    arca.last_cmp[(1, 19)] = 3
+    arca.last_id = 103
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize")
+    assert r.status_code == 200, r.text
+    assert r.json()["cbte_nro"] == 4
+    assert r.json()["source"] == "wsfex"
 
 
 def test_db_desactualizada_bloquea_emision(api, arca):
+    """FAC-48: ARCA adelante del registro wsfex local → bloqueo pre-asignación."""
     _crear_cliente(api)
     draft = _crear_draft(api)
     arca.last_cmp[(1, 19)] = 5  # ARCA conoce 5 comprobantes; DB local, 0
     r = api.post(f"/invoices/{draft['id']}/authorize")
     assert r.status_code == 409
     assert "desactualizado" in r.json()["detail"]
-    # La factura vuelve a draft (el lock no queda tomado).
-    assert api.get(f"/invoices/{draft['id']}").json()["status"] == "draft"
+    # La factura vuelve a draft (el lock no queda tomado) y no se asignó número.
+    body = api.get(f"/invoices/{draft['id']}").json()
+    assert body["status"] == "draft"
+    assert body["cbte_nro"] is None
+    row = repo.get_invoice(api.conn, draft["id"])
+    assert row is not None
+    assert row["raw_request"] is None
 
     forzada = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
     assert forzada.status_code == 200
     assert forzada.json()["cbte_nro"] == 6
+
+
+def test_local_adelante_de_arca_bloquea_sin_force(api, arca):
+    """FAC-48: local wsfex > FEXGetLast_CMP → inconsistencia no forzable."""
+    _crear_cliente(api)
+    _insert_authorized(api, cbte_nro=7, source="wsfex", arca_id=107)
+    arca.last_cmp[(1, 19)] = 3
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize")
+    assert r.status_code == 409
+    assert "inconsistente" in r.json()["detail"]
+    forced = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert forced.status_code == 409
+    assert "inconsistente" in forced.json()["detail"]
+    assert api.get(f"/invoices/{draft['id']}").json()["status"] == "draft"
+
+
+def test_importados_no_satisfacen_ni_contaminan_el_chequeo(api, arca):
+    """FAC-48: filas imported no alinean el registro ni provocan local-ahead."""
+    _crear_cliente(api)
+    _insert_authorized(api, cbte_nro=20, source="imported")
+    # ARCA adelante del wsfex local (0): el importado no "satisface" el chequeo.
+    arca.last_cmp[(1, 19)] = 5
+    draft = _crear_draft(api)
+    r = api.post(f"/invoices/{draft['id']}/authorize")
+    assert r.status_code == 409
+    assert "desactualizado" in r.json()["detail"]
+
+    # Sin hueco ARCA: el importado tampoco contamina como local-ahead.
+    arca.last_cmp[(1, 19)] = 0
+    ok = api.post(f"/invoices/{draft['id']}/authorize")
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["cbte_nro"] == 1
 
 
 def test_db_desactualizada_es_un_tipo_propio_no_un_mensaje(api, arca):
