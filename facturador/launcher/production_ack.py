@@ -1,23 +1,22 @@
-"""Confirmación de primer uso de Producción (FAC-40).
+"""Diálogo de primer uso de Producción en el launcher (FAC-40).
 
-La primera vez que se elige Producción, el launcher exige un ack explícito
-sobre la validez fiscal real. El flag vive solo en el perfil ``prod``
-(``data/production_ack.json``); Homologación nunca lo pide ni lo escribe.
-Los relanzamientos normales con el ack presente no vuelven a mostrar el
-diálogo.
+La persistencia del ack vive en ``facturador.production_ack`` (también la
+usa el backend/Docker). Acá solo está el flujo interactivo del launcher.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 from ..constants import ArcaEnvironment
-from ..profile import EnvironmentProfile, ProfilePaths
+from ..production_ack import (
+    is_production_acknowledged,
+    save_production_ack,
+)
+from ..profile import EnvironmentProfile
 from .chooser import ChooserUnavailable
 
 _CONFIRM_TITLE = "Producción — confirmación"
@@ -31,36 +30,15 @@ _CONFIRM_BODY = (
 _CONFIRM_OK = "Entiendo: abrir Producción"
 _CONFIRM_CANCEL = "Cancelar"
 
-
-def production_ack_path(paths: ProfilePaths) -> Path:
-    """Path del ack bajo el perfil dado (solo se persiste en prod)."""
-    return paths.production_ack
-
-
-def is_production_acknowledged(paths: ProfilePaths) -> bool:
-    """True si el perfil ya tiene un ack de primer uso de Producción."""
-    path = production_ack_path(paths)
-    if not path.is_file():
-        return False
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeError):
-        return False
-    return isinstance(raw, dict) and raw.get("acknowledged") is True
-
-
-def save_production_ack(paths: ProfilePaths) -> None:
-    """Persiste el ack solo en el perfil indicado (layout mínimo incluido)."""
-    paths.ensure_layout()
-    payload = {
-        "acknowledged": True,
-        "acknowledged_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
-    }
-    path = production_ack_path(paths)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+# Re-export para callers del launcher / tests.
+__all__ = [
+    "confirm_production_first_use",
+    "ensure_production_acknowledged",
+    "is_production_acknowledged",
+    "prompt_production_confirm_gui",
+    "prompt_production_confirm_tty",
+    "save_production_ack",
+]
 
 
 def ensure_production_acknowledged(
@@ -74,6 +52,11 @@ def ensure_production_acknowledged(
     Returns:
         True si se puede arrancar (homo, ack previo, o confirmación OK).
         False si el usuario canceló (volver al chooser).
+
+    Raises:
+        ChooserUnavailable: no hay UI/TTY para confirmar.
+        ProfileError: raíz de perfil inválida.
+        OSError: no se pudo persistir el ack tras confirmar.
     """
     if environment is not ArcaEnvironment.PROD:
         return True

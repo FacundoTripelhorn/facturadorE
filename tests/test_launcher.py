@@ -1657,3 +1657,32 @@ def test_main_profile_error_en_ack_prod_no_traceback(monkeypatch):
     assert code == 2
     assert failures
     assert "FACTURADOR_APP_DATA" in failures[0]
+
+
+def test_main_oserror_al_guardar_ack_prod_no_traceback(tmp_path, monkeypatch):
+    """OSError al persistir el ack se reporta sin traceback."""
+    from facturador.launcher.__main__ import main
+
+    app_data = tmp_path / "appdata"
+    monkeypatch.setenv("FACTURADOR_APP_DATA", str(app_data))
+    # data/ como archivo: ensure_layout/mkdir o write_text fallan con OSError.
+    prod_data = app_data / "prod" / "data"
+    prod_data.parent.mkdir(parents=True)
+    prod_data.write_text("not-a-directory", encoding="utf-8")
+    failures: list[str] = []
+
+    def _boom_factory(**_kwargs):
+        raise AssertionError("no debe crear supervisor si el ack no se guarda")
+
+    code = main(
+        ["--env", "prod"],
+        choose=lambda: (_ for _ in ()).throw(
+            AssertionError("con --env no debe abrirse el chooser")
+        ),
+        confirm_production=lambda: True,
+        supervisor_factory=_boom_factory,
+        report_failure=failures.append,
+    )
+    assert code == 2
+    assert failures
+    assert "confirmación de Producción" in failures[0]

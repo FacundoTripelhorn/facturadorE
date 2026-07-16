@@ -208,6 +208,12 @@ def _run_session(
         # Misma ruta que supervisor.start(): p.ej. FACTURADOR_APP_DATA inválida.
         report_failure(str(exc))
         return None if return_to_chooser_on_startup_error else 2
+    except OSError as exc:
+        report_failure(
+            "No se pudo guardar la confirmación de Producción: "
+            f"{exc}"
+        )
+        return None if return_to_chooser_on_startup_error else 2
     if not acknowledged:
         print(
             "Apertura de Producción cancelada. "
