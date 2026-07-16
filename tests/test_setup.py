@@ -191,7 +191,7 @@ def test_health_y_setup_disponibles_sin_ready(tmp_path):
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
 
-    setup = client.get("/setup")
+    setup = client.get("/setup/status")
     assert setup.status_code == 200
     body = setup.json()
     assert body["state"] == SetupState.CERTIFICATE_REQUIRED.value
@@ -220,7 +220,7 @@ def test_factura_y_arca_bloqueados_hasta_ready(tmp_path):
 
 def test_factura_permitida_cuando_ready(api):
     """El fixture ``api`` siembra certs + emisor completo → ready."""
-    assert api.get("/setup").json()["ready"] is True
+    assert api.get("/setup/status").json()["ready"] is True
     # create_invoice exige cliente/códigos; acá solo importa que no sea 503.
     listed = api.get("/invoices")
     assert listed.status_code == 200
@@ -230,6 +230,7 @@ def test_factura_permitida_cuando_ready(api):
     ("method", "path", "blocked"),
     [
         ("GET", "/health", False),
+        ("GET", "/setup/status", False),
         ("GET", "/setup", False),
         ("GET", "/configuracion", False),
         ("GET", "/static/htmx.min.js", False),

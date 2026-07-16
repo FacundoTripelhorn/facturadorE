@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if aviso == "instalado" and cert_meta %}
+<div class="panel ok">
+  <div>
+    <strong>Certificado instalado.</strong> CUIT {{ cert_meta.cuit }};
+    vigente desde {{ cert_meta.not_valid_before.date().isoformat() }}
+    hasta {{ cert_meta.not_valid_after.date().isoformat() }}.
+    {% if state == "emisor_required" %}
+    <p>Siguiente paso: completar los datos del emisor en
+      <a href="/configuracion">Configuración</a>.</p>
+    {% elif state == "ready" %}
+    <p>El perfil ya está listo para emitir. <a href="/">Ir a Emitir</a>.</p>
+    {% endif %}
+  </div>
+</div>
+{% elif aviso %}<div class="panel ok"><div>{{ aviso }}</div></div>{% endif %}
+{% if error %}<div class="panel error"><div>{{ error }}</div></div>{% endif %}
+
+<section class="card">
+  <h2>Configuración inicial <span class="sub">certificado ARCA del perfil {{ env_label }}</span></h2>
+  <div class="cuerpo">
+    <p class="nota" style="margin-top:0">
+      <b>Ambiente ARCA:</b> {{ env_label }} (read-only; lo define el perfil activo).
+      Este paso instala el par certificado/clave de <em>este</em> ambiente — no hay
+      selector de Homologación/Producción acá.
+    </p>
+
+    {% if env == "prod" %}
+    <div class="panel neutro">
+      <div><strong>Perfil de Producción.</strong> El certificado que subas se usará
+      para emitir comprobantes con validez fiscal real. Verificá que sea el
+      certificado productivo autorizado al servicio <code>wsfex</code>.</div>
+    </div>
+    {% endif %}
+
+    {% if cert_meta and state != "certificate_required" %}
+    <div class="panel neutro">
+      <div>
+        <strong>Certificado instalado.</strong><br>
+        CUIT: <span class="num">{{ cert_meta.cuit }}</span><br>
+        Vigencia: {{ cert_meta.not_valid_before.date().isoformat() }}
+        — {{ cert_meta.not_valid_after.date().isoformat() }}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if state == "certificate_required" %}
+    <form method="post" action="/ui/setup/certificado" enctype="multipart/form-data">
+      {% include "_csrf_field.html" %}
+      <div class="fila">
+        <div>
+          <label for="certificado">Certificado (<code>cert.crt</code>)</label>
+          <input id="certificado" name="certificado" type="file" required
+                 accept=".crt,.pem,.cer,text/plain,application/x-pem-file">
+        </div>
+        <div>
+          <label for="clave">Clave privada (<code>cert.key</code>)</label>
+          <input id="clave" name="clave" type="file" required
+                 accept=".key,.pem,text/plain,application/x-pem-file">
+        </div>
+      </div>
+      <p class="nota">Subí el par emitido por ARCA (WSASS en homologación o portal
+      en producción). La clave privada <strong>no debe tener passphrase</strong>.
+      Los archivos quedan en el perfil local con permisos restrictivos; el contenido
+      de la clave nunca se muestra ni se registra.</p>
+      <button type="submit">Instalar certificado</button>
+    </form>
+    {% elif state == "emisor_required" %}
+    <p>El certificado ya está instalado. Completá los datos del emisor en
+      <a href="/configuracion">Configuración</a> para continuar.</p>
+    {% elif state == "point_of_sale_required" %}
+    <p>Falta habilitar al menos un punto de venta en
+      <a href="/configuracion">Configuración</a>.</p>
+    {% elif state == "ready" %}
+    <p>El perfil {{ env_label }} está listo. <a href="/">Ir a Emitir</a>.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}
