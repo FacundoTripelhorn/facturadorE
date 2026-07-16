@@ -17,6 +17,7 @@ from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import ArcaEnvironment
 from facturador.profile import EnvironmentProfile
+from facturador.settings import get_active_emisor_id
 from tests.arca_fake import FakeWsaa
 from tests.conftest import install_test_cert_pair, seed_params, seed_settings, with_csrf
 
@@ -722,7 +723,9 @@ def _client_sin_certificados(
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
     app = create_app(profile, config=config, conn=conn, wsfex=wsfex)
-    return TestClient(app, base_url=loopback_base_url()), profile
+    client = TestClient(app, base_url=loopback_base_url())
+    client.conn = conn
+    return client, profile
 
 
 def test_setup_pagina_identifica_ambiente_y_formulario(tmp_path, arca):
@@ -758,13 +761,314 @@ def test_setup_instala_certificado_y_muestra_metadata(
     assert ok.status_code == 200
     assert "20111111112" in ok.text
     assert "Certificado instalado" in ok.text
-    assert "Configuración" in ok.text
+    assert 'action="/ui/setup/emisor"' in ok.text
+    assert 'name="razon_social"' in ok.text
     assert profile.paths.cert.is_file()
     assert profile.paths.key.is_file()
 
     status = client.get("/setup/status").json()
     assert status["state"] == "emisor_required"
     assert status["ready"] is False
+
+
+def test_setup_emisor_onboarding_llega_a_ready(
+    tmp_path, test_cert_and_key, arca
+):
+    """FAC-38: crear emisor en /setup activa y completa el perfil."""
+    client, profile = _client_sin_certificados(tmp_path, arca, seed=False)
+    cert_pem, key_pem = test_cert_and_key
+    client.post(
+        "/ui/setup/certificado",
+        data=with_csrf(client, {}),
+        files={
+            "certificado": ("cert.crt", cert_pem, "application/x-pem-file"),
+            "clave": ("cert.key", key_pem, "application/x-pem-file"),
+        },
+        follow_redirects=False,
+    )
+
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(client, EMISOR_FORM),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup?aviso=listo"
+
+    ok = client.get("/setup?aviso=listo")
+    assert ok.status_code == 200
+    assert "está listo" in ok.text.lower()
+    assert 'name="ambiente"' not in ok.text
+
+    status = client.get("/setup/status").json()
+    assert status["state"] == "ready"
+    assert status["ready"] is True
+    assert client.conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0] == 1
+    assert get_active_emisor_id(client.conn) is not None
+
+
+def test_setup_emisor_invalido_no_crea_duplicados(tmp_path, test_cert_and_key, arca):
+    client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
+    cert_pem, key_pem = test_cert_and_key
+    client.post(
+        "/ui/setup/certificado",
+        data=with_csrf(client, {}),
+        files={
+            "certificado": ("cert.crt", cert_pem, "application/x-pem-file"),
+            "clave": ("cert.key", key_pem, "application/x-pem-file"),
+        },
+    )
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(client, {**EMISOR_FORM, "razon_social": ""}),
+    )
+    assert r.status_code == 422
+    assert client.conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0] == 0
+
+    r2 = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(client, EMISOR_FORM),
+        follow_redirects=False,
+    )
+    assert r2.status_code == 303
+    assert client.conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0] == 1
+
+
+def test_setup_retoma_emisor_sin_duplicar_tras_reinicio(
+    tmp_path, test_cert_and_key, arca
+):
+    """FAC-38: reinicio con emisor incompleto retoma el mismo registro."""
+    from facturador import repo
+    from facturador.settings import Emisor, Settings, save_settings
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="PARCIAL S.A.",
+                domicilio="",
+                iibb="",
+                inicio_actividades="",
+                ambiente="homo",
+            )
+        ),
+    )
+    emisor_id = repo.list_emisores(conn)[0]["id"]
+
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+    client.conn = conn
+
+    pagina = client.get("/setup")
+    assert pagina.status_code == 200
+    assert "PARCIAL S.A." in pagina.text
+    assert 'name="emisor_id"' in pagina.text
+
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(
+            client,
+            {
+                **EMISOR_FORM,
+                "emisor_id": emisor_id,
+                "razon_social": "PARCIAL S.A.",
+            },
+        ),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert conn.execute("SELECT COUNT(*) FROM emisores").fetchone()[0] == 1
+    assert client.get("/setup/status").json()["ready"] is True
+
+
+def test_setup_punto_venta_onboarding(tmp_path, test_cert_and_key, arca):
+    """FAC-38: emisor completo sin PV exige paso de punto de venta."""
+    from facturador import repo
+    from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social=EMISOR_FORM["razon_social"],
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="homo",
+                puntos_venta=(),
+            ),
+        ),
+    )
+    set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
+
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+
+    pagina = client.get("/setup")
+    assert pagina.status_code == 200
+    assert 'action="/ui/setup/punto-venta"' in pagina.text
+
+    r = client.post(
+        "/ui/setup/punto-venta",
+        data=with_csrf(client, {"puntos_venta": "3, 7"}),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup?aviso=listo"
+    assert client.get("/setup/status").json()["ready"] is True
+
+
+def test_setup_emisor_rechaza_editar_emisor_de_otro_ambiente(
+    tmp_path, test_cert_and_key, arca
+):
+    """Codex: no mutar emisor legacy de otro perfil durante onboarding."""
+    from facturador import repo
+    from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="LEGACY PROD S.A.",
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="prod",
+            )
+        ),
+    )
+    otro_id = repo.list_emisores(conn)[0]["id"]
+    set_active_emisor(conn, otro_id)
+
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+    client.conn = conn
+
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(client, {**EMISOR_FORM, "emisor_id": otro_id}),
+    )
+    assert r.status_code == 422
+    assert "perfil homo" in r.text
+    row = repo.get_emisor(conn, otro_id)
+    assert row is not None
+    assert row["razon_social"] == "LEGACY PROD S.A."
+
+
+def test_setup_emisor_rechaza_id_ajeno_al_onboarding(
+    tmp_path, test_cert_and_key, arca
+):
+    """Codex: no actualizar otro emisor del mismo perfil vía emisor_id."""
+    from facturador import repo
+    from facturador.settings import Emisor, Settings, save_settings
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="PRIMERO S.A.",
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="homo",
+            )
+        ),
+    )
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="SEGUNDO S.A.",
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="homo",
+            )
+        ),
+    )
+    primero_id, segundo_id = (
+        row["id"] for row in repo.list_emisores(conn)[:2]
+    )
+
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+    client.conn = conn
+
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(
+            client,
+            {
+                **EMISOR_FORM,
+                "emisor_id": segundo_id,
+                "razon_social": "PIRATADO S.A.",
+            },
+        ),
+    )
+    assert r.status_code == 422
+    assert "paso de setup en curso" in r.text
+    assert repo.get_emisor(conn, segundo_id)["razon_social"] == "SEGUNDO S.A."
+    assert repo.get_emisor(conn, primero_id)["razon_social"] == "PRIMERO S.A."
 
 
 def test_setup_rechaza_par_invalido_sin_eco_de_clave(tmp_path, test_cert_and_key, arca):
