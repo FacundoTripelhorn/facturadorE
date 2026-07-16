@@ -664,6 +664,16 @@ def test_produccion_muestra_avisos_de_seguridad_fiscal(
     assert "validez fiscal real" in revisar.text.lower()
     assert "Autorizar en ARCA (validez fiscal)" in revisar.text
 
+    arca.last_cmp[(1, 19)] = 5
+    force_page = prod.post(
+        f"/ui/facturas/{invoice_id}/authorize",
+        data=with_csrf(prod),
+    )
+    assert force_page.status_code == 409
+    assert "force=true" in force_page.text
+    assert "Forzar autorización" in force_page.text
+    assert "¿Forzar autorización en ARCA?" in force_page.text
+
     homo, _ = _api_para_ambiente(
         ArcaEnvironment.HOMO, tmp_path / "homo", test_cert_and_key, arca
     )
