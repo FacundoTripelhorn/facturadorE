@@ -619,27 +619,41 @@ async def guardar_emisor_setup(
         return RedirectResponse("/setup", status_code=303)
 
     onboarding_row = _emisor_onboarding_row(service.conn, service.config.env)
-    if emisor_id:
-        existente = repo.get_emisor(service.conn, emisor_id)
-        if existente is None:
+    if onboarding_row is not None:
+        if emisor_id and emisor_id != onboarding_row["id"]:
             return _pagina_setup(
                 request,
                 service,
                 state=state,
-                error=f"Emisor {emisor_id} no existe",
+                emisor_editando=onboarding_row,
+                error=(
+                    "Datos inválidos: el emisor no coincide con "
+                    "el paso de setup en curso"
+                ),
                 status_code=422,
             )
-        if existente["ambiente"] != service.config.env:
-            return _pagina_setup(
-                request,
-                service,
-                state=state,
-                error=_error_emisor_otro_ambiente(existente, service.config.env),
-                status_code=422,
-            )
-    elif onboarding_row is not None:
         existente = onboarding_row
         emisor_id = onboarding_row["id"]
+    elif emisor_id:
+        ajeno = repo.get_emisor(service.conn, emisor_id)
+        if ajeno is not None and ajeno["ambiente"] != service.config.env:
+            return _pagina_setup(
+                request,
+                service,
+                state=state,
+                error=_error_emisor_otro_ambiente(ajeno, service.config.env),
+                status_code=422,
+            )
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error=(
+                "Datos inválidos: el emisor no coincide con "
+                "el paso de setup en curso"
+            ),
+            status_code=422,
+        )
     else:
         existente = None
 

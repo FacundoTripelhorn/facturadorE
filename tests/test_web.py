@@ -999,6 +999,78 @@ def test_setup_emisor_rechaza_editar_emisor_de_otro_ambiente(
     assert row["razon_social"] == "LEGACY PROD S.A."
 
 
+def test_setup_emisor_rechaza_id_ajeno_al_onboarding(
+    tmp_path, test_cert_and_key, arca
+):
+    """Codex: no actualizar otro emisor del mismo perfil vía emisor_id."""
+    from facturador import repo
+    from facturador.settings import Emisor, Settings, save_settings
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "setup")
+    profile.paths.ensure_layout()
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+
+    conn = db.connect(profile.paths.db)
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="PRIMERO S.A.",
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="homo",
+            )
+        ),
+    )
+    save_settings(
+        conn,
+        Settings(
+            emisor=Emisor(
+                razon_social="SEGUNDO S.A.",
+                domicilio=EMISOR_FORM["domicilio"],
+                iibb=EMISOR_FORM["iibb"],
+                inicio_actividades=EMISOR_FORM["inicio_actividades"],
+                condicion_iva=EMISOR_FORM["condicion_iva"],
+                ambiente="homo",
+            )
+        ),
+    )
+    primero_id, segundo_id = (
+        row["id"] for row in repo.list_emisores(conn)[:2]
+    )
+
+    config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
+    wsfex = WsfexClient(
+        config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+    )
+    client = TestClient(
+        create_app(profile, config=config, conn=conn, wsfex=wsfex),
+        base_url=loopback_base_url(),
+    )
+    client.conn = conn
+
+    r = client.post(
+        "/ui/setup/emisor",
+        data=with_csrf(
+            client,
+            {
+                **EMISOR_FORM,
+                "emisor_id": segundo_id,
+                "razon_social": "PIRATADO S.A.",
+            },
+        ),
+    )
+    assert r.status_code == 422
+    assert "paso de setup en curso" in r.text
+    assert repo.get_emisor(conn, segundo_id)["razon_social"] == "SEGUNDO S.A."
+    assert repo.get_emisor(conn, primero_id)["razon_social"] == "PRIMERO S.A."
+
+
 def test_setup_rechaza_par_invalido_sin_eco_de_clave(tmp_path, test_cert_and_key, arca):
     client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
     cert_pem, key_pem = test_cert_and_key
