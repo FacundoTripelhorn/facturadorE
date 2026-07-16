@@ -471,15 +471,25 @@ def _cert_metadata_seguro(profile) -> CertificateMetadata | None:
         return None
 
 
-def _emisor_onboarding_row(conn) -> sqlite3.Row | None:
-    """Emisor a retomar en onboarding: activo o el primero del perfil."""
+def _emisor_onboarding_row(conn, env) -> sqlite3.Row | None:
+    """Emisor a retomar en onboarding: activo o el primero del perfil actual."""
     active_id = get_active_emisor_id(conn)
     if active_id:
         row = repo.get_emisor(conn, active_id)
-        if row is not None:
+        if row is not None and row["ambiente"] == env:
             return row
-    emisores = repo.list_emisores(conn)
-    return emisores[0] if emisores else None
+    for row in repo.list_emisores(conn):
+        if row["ambiente"] == env:
+            return row
+    return None
+
+
+def _error_emisor_otro_ambiente(row: sqlite3.Row, env) -> str:
+    return (
+        f"El emisor {row['id']} pertenece al ambiente {row['ambiente']} "
+        f"y este backend corre el perfil {env}: no se puede editar desde "
+        "el setup de este perfil."
+    )
 
 
 def _pagina_setup(
@@ -502,7 +512,7 @@ def _pagina_setup(
         SetupState.EMISOR_REQUIRED,
         SetupState.POINT_OF_SALE_REQUIRED,
     ):
-        emisor_editando = _emisor_onboarding_row(service.conn)
+        emisor_editando = _emisor_onboarding_row(service.conn, profile.environment)
     return templates.TemplateResponse(
         request,
         "setup.html",
@@ -608,9 +618,25 @@ async def guardar_emisor_setup(
     if state is not SetupState.EMISOR_REQUIRED:
         return RedirectResponse("/setup", status_code=303)
 
-    onboarding_row = _emisor_onboarding_row(service.conn)
+    onboarding_row = _emisor_onboarding_row(service.conn, service.config.env)
     if emisor_id:
         existente = repo.get_emisor(service.conn, emisor_id)
+        if existente is None:
+            return _pagina_setup(
+                request,
+                service,
+                state=state,
+                error=f"Emisor {emisor_id} no existe",
+                status_code=422,
+            )
+        if existente["ambiente"] != service.config.env:
+            return _pagina_setup(
+                request,
+                service,
+                state=state,
+                error=_error_emisor_otro_ambiente(existente, service.config.env),
+                status_code=422,
+            )
     elif onboarding_row is not None:
         existente = onboarding_row
         emisor_id = onboarding_row["id"]
@@ -702,13 +728,21 @@ async def guardar_punto_venta_setup(
     if state is not SetupState.POINT_OF_SALE_REQUIRED:
         return RedirectResponse("/setup", status_code=303)
 
-    emisor_row = _emisor_onboarding_row(service.conn)
+    emisor_row = _emisor_onboarding_row(service.conn, service.config.env)
     if emisor_row is None:
         return _pagina_setup(
             request,
             service,
             state=state,
             error="No hay emisor activo para configurar el punto de venta.",
+            status_code=422,
+        )
+    if emisor_row["ambiente"] != service.config.env:
+        return _pagina_setup(
+            request,
+            service,
+            state=state,
+            error=_error_emisor_otro_ambiente(emisor_row, service.config.env),
             status_code=422,
         )
     try:
