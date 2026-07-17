@@ -1,9 +1,9 @@
 """Fase 5 — PDF + QR RG 4892.
 
 Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
-endpoint (200/409/404), copia persistida en data/pdfs, escaping de datos
-hostiles, y que el render use solo el snapshot inmutable de la factura
-(FAC-10 / FAC-52).
+endpoint (200/409/404), cache local descartable en data/pdfs (FAC-53),
+escaping de datos hostiles, snapshot inmutable (FAC-10 / FAC-52) y
+despacho por ``pdf_render_version``.
 """
 
 import base64
@@ -15,8 +15,14 @@ import pytest
 
 from facturador import repo
 from facturador.constants import PDF_RENDER_VERSION
-from facturador.pdf import render_invoice_html
+from facturador.pdf import (
+    get_or_render_invoice_pdf,
+    invoice_pdf_cache_path,
+    known_pdf_render_versions,
+    render_invoice_html,
+)
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
+from facturador.pdf.registry import PDF_RENDERERS
 from facturador.settings import load_settings
 from tests.conftest import TEST_CUIT
 
@@ -117,7 +123,7 @@ def test_pdf_de_factura_autorizada(api, arca, test_config):
     assert r.content.startswith(b"%PDF-")
     filename = "factura-E-00001-00000001-homo.pdf"
     assert filename in r.headers["content-disposition"]
-    # Copia persistida en el pdfs/ del perfil (FAC-25), idéntica a la respuesta.
+    # Cache local en pdfs/ del perfil (FAC-25/53), idéntica a la respuesta.
     assert (test_config.paths.pdf_dir / filename).read_bytes() == r.content
 
 
@@ -161,7 +167,7 @@ def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
         return b"%PDF-fake"
 
     monkeypatch.setattr(
-        "facturador.api.invoices.render_invoice_pdf", fake_render
+        "facturador.pdf.render.render_invoice_pdf", fake_render
     )
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
@@ -202,7 +208,7 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
         return b"%PDF-fake"
 
     monkeypatch.setattr(
-        "facturador.api.invoices.render_invoice_pdf", fake_render
+        "facturador.pdf.render.render_invoice_pdf", fake_render
     )
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
@@ -332,7 +338,7 @@ def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
         return b"%PDF-fake"
 
     monkeypatch.setattr(
-        "facturador.api.invoices.render_invoice_pdf", fake_render
+        "facturador.pdf.render.render_invoice_pdf", fake_render
     )
     r = api.get(f"/invoices/{factura['id']}/pdf")
     assert r.status_code == 200, r.text
@@ -473,3 +479,113 @@ def test_baseline_incluye_snapshot_de_render(tmp_path):
         assert latest_version() == 1
     finally:
         conn.close()
+
+
+# --- FAC-53: despacho versionado + cache descartable ---
+
+
+def test_renderer_v1_esta_registrado():
+    """FAC-53: el layout actual es la versión 1 del registry."""
+    assert PDF_RENDER_VERSION == 1
+    assert known_pdf_render_versions() == [1]
+    assert 1 in PDF_RENDERERS
+
+
+def test_version_desconocida_falla_en_claro(api, arca):
+    """FAC-53: no se cae al template más nuevo en silencio."""
+    factura = _factura_autorizada(api)
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET pdf_render_version = 999 WHERE id = ?",
+            (factura["id"],),
+        )
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+
+    with pytest.raises(ValueError, match="pdf_render_version=999") as exc:
+        render_invoice_html(inv, items)
+    assert "versiones conocidas: 1" in str(exc.value)
+
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+    assert r.status_code == 409
+    assert "pdf_render_version=999" in r.json()["detail"]
+
+
+def test_cache_ausente_regenera_desde_db(api, arca, test_config, monkeypatch):
+    """FAC-53: sin archivo en pdfs/, se regenera desde el snapshot."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+    cache = invoice_pdf_cache_path(test_config.paths.pdf_dir, inv)
+    assert not cache.exists()
+
+    calls = {"n": 0}
+
+    def fake_render(row, items):
+        calls["n"] += 1
+        return b"%PDF-regenerado"
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", fake_render)
+
+    pdf = get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+    assert pdf == b"%PDF-regenerado"
+    assert calls["n"] == 1
+    assert cache.read_bytes() == b"%PDF-regenerado"
+
+
+def test_cache_hit_no_vuelve_a_renderizar(api, arca, test_config, monkeypatch):
+    """FAC-53: si el cache existe, se sirve sin re-render."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+    cache = invoice_pdf_cache_path(test_config.paths.pdf_dir, inv)
+    test_config.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
+    cache.write_bytes(b"%PDF-desde-cache")
+
+    def boom(_inv, _items):
+        raise AssertionError("no debió regenerar con cache presente")
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", boom)
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+    assert r.status_code == 200, r.text
+    assert r.content == b"%PDF-desde-cache"
+
+
+def test_borrar_cache_no_pierde_registro_fiscal(
+    api, arca, test_config, monkeypatch
+):
+    """FAC-53: borrar pdfs/ no toca CAE ni fila en SQLite; se regenera."""
+    factura = _factura_autorizada(api)
+    invoice_id = factura["id"]
+    cae = factura["cae"]
+    assert cae
+
+    # Primera descarga: crea cache.
+    monkeypatch.setattr(
+        "facturador.pdf.render.render_invoice_pdf",
+        lambda inv, items: b"%PDF-primera",
+    )
+    r1 = api.get(f"/invoices/{invoice_id}/pdf")
+    assert r1.status_code == 200, r1.text
+    inv = repo.get_invoice(api.conn, invoice_id)
+    assert inv is not None
+    cache = invoice_pdf_cache_path(test_config.paths.pdf_dir, inv)
+    assert cache.is_file()
+    cache.unlink()
+    assert not cache.exists()
+
+    # El registro fiscal sigue intacto.
+    row = repo.get_invoice(api.conn, invoice_id)
+    assert row is not None
+    assert row["cae"] == cae
+    assert row["status"] == "authorized"
+    assert row["pdf_render_version"] == PDF_RENDER_VERSION
+
+    monkeypatch.setattr(
+        "facturador.pdf.render.render_invoice_pdf",
+        lambda inv, items: b"%PDF-regenerado",
+    )
+    r2 = api.get(f"/invoices/{invoice_id}/pdf")
+    assert r2.status_code == 200, r2.text
+    assert r2.content == b"%PDF-regenerado"
+    assert cache.read_bytes() == b"%PDF-regenerado"

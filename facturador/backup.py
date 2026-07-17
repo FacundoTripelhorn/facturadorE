@@ -6,9 +6,10 @@ elegido (FAC-25: todo archivo de runtime pasa por ``ProfilePaths``; el
 
 1. Snapshot de la DB con la API de backup de sqlite3 (nunca copiar el
    archivo en caliente).
-2. Tarball en memoria con el snapshot en lugar de la DB viva. Los logs y
-   los archivos -wal/-shm/-journal quedan afuera. El tar nunca toca el
-   disco en claro: el backup contiene la clave fiscal.
+2. Tarball en memoria con el snapshot en lugar de la DB viva. Los logs,
+   los PDFs generados (cache descartable FAC-53) y los archivos
+   -wal/-shm/-journal quedan afuera. El tar nunca toca el disco en
+   claro: el backup contiene la clave fiscal.
 3. Cifrado del lado del cliente con ``age -p`` (passphrase interactiva del
    usuario; nunca en el repo, el entorno ni AWS). El SSE de S3 NO alcanza.
 4. Upload a S3 con ``aws s3 cp`` si el bucket está configurado en la app
@@ -52,7 +53,8 @@ from .profile import (
 from .settings import BACKUP_PREFIX_DEFAULT
 
 # Derivados de SQLite que no tiene sentido llevar (el snapshot ya es
-# consistente) y logs, que no son estado.
+# consistente), logs (no son estado) y PDFs generados (cache descartable
+# FAC-53: se regeneran desde el snapshot inmutable de la factura).
 _EXCLUDE_SUFFIXES = ("-wal", "-shm", "-journal")
 
 
@@ -131,12 +133,21 @@ def snapshot_db(db_path: Path) -> bytes:
 
 
 def build_tar(paths: ProfilePaths, db_snapshot: bytes | None) -> bytes:
-    """Tarball gz en memoria de secrets/ + data/ del perfil (DB = snapshot)."""
+    """Tarball gz en memoria de secrets/ + data/ del perfil (DB = snapshot).
+
+    Excluye logs y ``data/pdfs/`` (FAC-53: los PDF generados no son
+    fuente de verdad ni viajan en el backup normal).
+    """
 
     def _skip(name: str, path: Path) -> bool:
         if path.name == DB_NAME or path.name.startswith(DB_NAME + "-"):
             return True  # la DB viva y sus derivados; va el snapshot
-        return name.startswith("data/logs")
+        if name.startswith("data/logs"):
+            return True
+        # Cache local de PDFs: regenerable; no forma parte del backup.
+        if name == "data/pdfs" or name.startswith("data/pdfs/"):
+            return True
+        return False
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
