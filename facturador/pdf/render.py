@@ -57,8 +57,11 @@ _env.filters["ctz"] = lambda valor: f"{Decimal(str(valor)):.6f}"
 
 
 def invoice_pdf_filename(inv: sqlite3.Row) -> str:
+    # Incluye cbte_tipo: la numeración ARCA es por (punto_venta, cbte_tipo),
+    # así Factura E / NC E / ND E con el mismo nro no colisionan en el cache.
     return (
-        f"factura-E-{inv['punto_venta']:05d}-{inv['cbte_nro']:08d}"
+        f"factura-E-{inv['cbte_tipo']}"
+        f"-{inv['punto_venta']:05d}-{inv['cbte_nro']:08d}"
         f"-{inv['environment']}.pdf"
     )
 

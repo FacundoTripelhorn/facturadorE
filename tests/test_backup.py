@@ -29,7 +29,7 @@ def perfil(tmp_path) -> ProfilePaths:
     paths.key.write_text("KEY-PRIVADA", encoding="utf-8")
     paths.cert.write_text("CERT", encoding="utf-8")
     paths.pdf_dir.mkdir()
-    (paths.pdf_dir / "factura-E-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
+    (paths.pdf_dir / "factura-E-19-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
     paths.logs_dir.mkdir()
     paths.log_file.write_text("ruido", encoding="utf-8")
     conn = sqlite3.connect(paths.db)
@@ -88,11 +88,11 @@ def test_tar_sin_db_respalda_el_resto(perfil):
 
 def test_tar_excluye_pdfs_generados_aunque_existan(perfil):
     """FAC-53: el backup normal no incluye el cache local de PDFs."""
-    pdf = perfil.pdf_dir / "factura-E-00001-00000001-homo.pdf"
+    pdf = perfil.pdf_dir / "factura-E-19-00001-00000001-homo.pdf"
     assert pdf.is_file()
     members = _members(build_tar(perfil, snapshot_db(perfil.db)))
     assert "data/facturador.db" in members
-    assert "data/pdfs/factura-E-00001-00000001-homo.pdf" not in members
+    assert "data/pdfs/factura-E-19-00001-00000001-homo.pdf" not in members
     assert pdf.read_bytes() == b"%PDF-"  # el cache local sigue en disco
 
 

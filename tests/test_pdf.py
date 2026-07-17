@@ -123,7 +123,7 @@ def test_pdf_de_factura_autorizada(api, arca, test_config):
     assert r.status_code == 200, r.text
     assert r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF-")
-    filename = "factura-E-00001-00000001-homo.pdf"
+    filename = "factura-E-19-00001-00000001-homo.pdf"
     assert filename in r.headers["content-disposition"]
     # Cache local en pdfs/ del perfil (FAC-25/53), idéntica a la respuesta.
     assert (test_config.paths.pdf_dir / filename).read_bytes() == r.content
@@ -654,3 +654,54 @@ def test_cache_write_fallido_no_deja_pdf_parcial(
 
     assert not cache.exists()
     assert list(test_config.paths.pdf_dir.glob(".*.tmp")) == []
+
+
+def test_cache_key_incluye_cbte_tipo(tmp_path, monkeypatch):
+    """FAC-53 review: numeración ARCA es por (PV, cbte_tipo); no colisionar."""
+    import sqlite3
+    from typing import cast
+
+    from facturador.pdf import invoice_pdf_filename
+
+    factura = cast(
+        sqlite3.Row,
+        {
+            "cbte_tipo": 19,
+            "punto_venta": 1,
+            "cbte_nro": 1,
+            "environment": "homo",
+        },
+    )
+    nota_credito = cast(
+        sqlite3.Row,
+        {
+            "cbte_tipo": 21,
+            "punto_venta": 1,
+            "cbte_nro": 1,
+            "environment": "homo",
+        },
+    )
+    name_fe = invoice_pdf_filename(factura)
+    name_nc = invoice_pdf_filename(nota_credito)
+    assert name_fe == "factura-E-19-00001-00000001-homo.pdf"
+    assert name_nc == "factura-E-21-00001-00000001-homo.pdf"
+    assert name_fe != name_nc
+
+    def render(inv, _items):
+        return f"%PDF-tipo-{inv['cbte_tipo']}".encode()
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", render)
+    pdf_dir = tmp_path / "pdfs"
+
+    out_fe = get_or_render_invoice_pdf(factura, [], pdf_dir)
+    out_nc = get_or_render_invoice_pdf(nota_credito, [], pdf_dir)
+    assert out_fe == b"%PDF-tipo-19"
+    assert out_nc == b"%PDF-tipo-21"
+    assert (pdf_dir / name_fe).read_bytes() == out_fe
+    assert (pdf_dir / name_nc).read_bytes() == out_nc
+
+    def boom(*_a, **_k):
+        raise AssertionError("no debió regenerar")
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", boom)
+    assert get_or_render_invoice_pdf(nota_credito, [], pdf_dir) == b"%PDF-tipo-21"
