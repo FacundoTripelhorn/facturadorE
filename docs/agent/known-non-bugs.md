@@ -228,19 +228,21 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 
 ---
 
-## Emisor snapshot on invoices (FAC-10) / old profile DBs
+## Emisor snapshot lives in the baseline (FAC-10) — no upgrade migration
 
-**Symptom:** After pulling FAC-10, an existing profile DB created before the
-issuer snapshot columns may fail on `INSERT INTO invoices` or PDF generation
-(`snapshot de emisor` / missing columns).
+**Symptom / review ask:** “Should FAC-10 add a v2 migration / `ALTER TABLE`
+for the new `emisor_*` snapshot columns?”
 
-**Expected.** There are no production users to migrate. Development profiles
-should **reset** the SQLite file (`data/facturador.db` under the profile) and
-re-run onboarding / seed. New drafts persist `emisor_id` plus immutable issuer
-fields; PDF rendering reads that snapshot, never the live `emisores` row.
+**Expected: no.** Those columns were added to the **baseline** (`schema.sql`,
+migración v1) on purpose. There are no deployed profile DBs that need an
+upgrade path for this change. Reviewers should **not** request a v2 migration
+solely for FAC-10 issuer snapshot fields.
 
-**Do not:** treat missing snapshot columns as an app bug, or “fix” historical
-PDFs by reloading the current emisor.
+New drafts persist `emisor_id` plus immutable issuer fields; PDF rendering
+reads that snapshot, never the live `emisores` row.
+
+**Do not:** add a no-op or defensive `ALTER TABLE` migration “just in case”,
+or “fix” historical PDFs by reloading the current emisor.
 
 ---
 

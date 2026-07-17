@@ -139,10 +139,10 @@ def emisor_from_invoice_snapshot(inv: sqlite3.Row) -> Emisor:
     """Emisor inmutable del comprobante (FAC-10), sin releer ``emisores``."""
     keys = inv.keys()
     if "emisor_razon_social" not in keys:
+        # Solo defensivo: el baseline siempre trae estas columnas (FAC-10).
         raise ValueError(
             f"La factura {inv['id']} no tiene snapshot de emisor; "
-            "resetear la DB del perfil (borrar data/facturador.db) y "
-            "crear un borrador nuevo."
+            "crear un borrador nuevo con el esquema actual."
         )
     return Emisor(
         id=inv["emisor_id"],

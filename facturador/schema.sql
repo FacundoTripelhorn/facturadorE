@@ -99,9 +99,9 @@ CREATE TABLE invoices (
     cuit_emisor        TEXT,
     -- Snapshot del emisor al crear el borrador (FAC-10): el PDF y la
     -- revisión usan estos campos, nunca la fila viva de emisores. emisor_id
-    -- queda solo para trazabilidad. Sin usuarios de producción aún: DBs de
-    -- desarrollo anteriores a esta columna se resetean (borrar
-    -- data/facturador.db del perfil) en lugar de migrar filas viejas.
+    -- queda solo para trazabilidad.
+    -- Intencional: vive en el baseline (migración v1). No hay DBs desplegadas
+    -- que migrar — NO agregar una migración v2/ALTER solo por estas columnas.
     emisor_razon_social       TEXT NOT NULL DEFAULT '',
     emisor_domicilio          TEXT NOT NULL DEFAULT '',
     emisor_condicion_iva      TEXT NOT NULL DEFAULT '',
