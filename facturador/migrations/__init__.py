@@ -12,9 +12,10 @@ La baseline (versión 1) es el esquema de perfiles aislados vigente. Toda
 DB vive bajo un perfil; no hay camino de compatibilidad para esquemas
 anteriores a este mecanismo.
 
-FAC-10 (snapshot de emisor en ``invoices``) amplía el baseline a propósito:
-no hay DBs desplegadas que migrar, así que NO corresponde una migración v2
-solo por esas columnas.
+FAC-10 (snapshot de emisor) y FAC-52 (snapshot de render: descripciones
+de params + ``pdf_render_version``) amplían el baseline a propósito: no hay
+DBs desplegadas que migrar, así que NO corresponde una migración v2 solo
+por esas columnas.
 """
 
 from __future__ import annotations

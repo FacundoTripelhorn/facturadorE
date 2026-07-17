@@ -11,7 +11,6 @@ from ..constants import InvoiceStatus
 from ..pdf import invoice_pdf_filename, render_invoice_pdf
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
-from ..settings import emisor_from_invoice_snapshot
 from .deps import ServiceDep
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -52,15 +51,6 @@ def list_invoices(
     ]
 
 
-def _param_ds(conn: sqlite3.Connection, kind: str, code: object) -> str:
-    """Descripción de un código desde el cache de params (mejor esfuerzo):
-    si falta, el PDF imprime solo el código."""
-    for row in repo.get_params(conn, kind):
-        if row["code"] == str(code):
-            return row["description"] or ""
-    return ""
-
-
 @router.get("/{invoice_id}/pdf")
 def invoice_pdf(invoice_id: str, service: ServiceDep):
     inv = service.get_invoice(invoice_id)  # 404 si no existe; reconcilia unknown
@@ -69,34 +59,13 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
             f"El PDF existe solo para facturas autorizadas "
             f"(estado actual: {inv['status']})"
         )
-    if not inv["emisor_id"]:
-        raise ConflictError(
-            "La factura no tiene emisor asociado; no se puede generar el PDF."
-        )
+    items = repo.get_invoice_items(service.conn, invoice_id)
+    # FAC-52: el render lee solo la fila de la factura y sus ítems; no hay
+    # lookup a emisores/clients/settings/arca_params ni CUIT del cert vivo.
     try:
-        emisor = emisor_from_invoice_snapshot(inv)
+        pdf = render_invoice_pdf(inv, items)
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
-    if not emisor.completo:
-        raise ConflictError(
-            "La factura no tiene snapshot completo del emisor; "
-            "no se puede generar el PDF."
-        )
-    # Preferir el snapshot de la factura (FAC-39); filas viejas sin columna
-    # caen al CUIT del certificado vivo del perfil.
-    raw_cuit = inv["cuit_emisor"] if "cuit_emisor" in inv.keys() else None
-    cuit_emisor = int(raw_cuit) if raw_cuit else service.wsfex.cuit
-    pdf = render_invoice_pdf(
-        inv,
-        repo.get_invoice_items(service.conn, invoice_id),
-        emisor,
-        cuit_emisor,
-        pais_ds=_param_ds(service.conn, "pais", inv["dst_cmp"]),
-        cuit_pais_ds=_param_ds(
-            service.conn, "cuit_pais", inv["cuit_pais_cliente"]
-        ),
-        moneda_ds=_param_ds(service.conn, "moneda", inv["moneda_id"]),
-    )
     filename = invoice_pdf_filename(inv)
     # Copia persistida en el pdfs/ del perfil (FAC-25); la respuesta no
     # depende del archivo, se sirve siempre el render fresco.

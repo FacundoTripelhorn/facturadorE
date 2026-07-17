@@ -77,11 +77,16 @@ CREATE TABLE invoices (
     tipo_expo          INTEGER NOT NULL DEFAULT 2,
     permiso_existente  TEXT NOT NULL DEFAULT '',
     dst_cmp            INTEGER NOT NULL,
+    -- Descripción de país/CUIT país/moneda resuelta al crear el borrador
+    -- (FAC-52): el PDF no relee arca_params vivos.
+    dst_cmp_ds         TEXT NOT NULL DEFAULT '',
     cliente            TEXT NOT NULL,
     cuit_pais_cliente  INTEGER NOT NULL,
+    cuit_pais_cliente_ds TEXT NOT NULL DEFAULT '',
     domicilio_cliente  TEXT NOT NULL DEFAULT '',
     id_impositivo      TEXT NOT NULL DEFAULT '',
     moneda_id          TEXT NOT NULL DEFAULT 'DOL',
+    moneda_ds          TEXT NOT NULL DEFAULT '',
     moneda_ctz         TEXT NOT NULL,
     incoterms          TEXT NOT NULL DEFAULT '',
     incoterms_ds       TEXT NOT NULL DEFAULT '',
@@ -107,6 +112,12 @@ CREATE TABLE invoices (
     emisor_condicion_iva      TEXT NOT NULL DEFAULT '',
     emisor_iibb               TEXT NOT NULL DEFAULT '',
     emisor_inicio_actividades TEXT NOT NULL DEFAULT '',
+    -- Contrato de render del PDF (FAC-52): versión del renderer que debe
+    -- regenerar este comprobante. FAC-53 despachará por esta versión.
+    -- Intencional: vive en el baseline (migración v1). No hay DBs
+    -- desplegadas que migrar — NO agregar una migración v2/ALTER solo
+    -- por estas columnas de snapshot de render.
+    pdf_render_version INTEGER NOT NULL DEFAULT 1,
     -- Auditoría inmutable (ADR 0001 / FAC-26): sello del perfil al crear,
     -- validado contra el perfil corriente en cada acceso por id.
     environment        TEXT NOT NULL,
@@ -121,6 +132,9 @@ CREATE TABLE invoice_items (
     pro_ds          TEXT NOT NULL,
     pro_qty         TEXT NOT NULL DEFAULT '1',
     pro_umed        INTEGER NOT NULL DEFAULT 7,
+    -- Descripción de U. Medida al crear el borrador (FAC-52); el PDF no
+    -- relee arca_params ni el hardcode de constantes.
+    pro_umed_ds     TEXT NOT NULL DEFAULT '',
     pro_precio_uni  TEXT NOT NULL,
     pro_total_item  TEXT NOT NULL
 );
