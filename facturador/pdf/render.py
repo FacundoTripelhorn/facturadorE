@@ -15,7 +15,9 @@ borrar sin perder el registro fiscal (la DB es la fuente de verdad).
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 
@@ -149,6 +151,24 @@ def render_invoice_pdf(inv: sqlite3.Row, items: list[sqlite3.Row]) -> bytes:
     return pdf
 
 
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Escribe ``data`` en ``path`` vía temp + replace (sin PDF a medias)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def get_or_render_invoice_pdf(
     inv: sqlite3.Row,
     items: list[sqlite3.Row],
@@ -157,12 +177,13 @@ def get_or_render_invoice_pdf(
     """Sirve el cache local si existe; si no, regenera desde el snapshot.
 
     El archivo bajo ``pdf_dir`` es descartable: borrarlo no afecta el
-    registro fiscal en SQLite. Tras regenerar se vuelve a cachear.
+    registro fiscal en SQLite. Tras regenerar se vuelve a cachear con
+    escritura atómica (temp + ``os.replace``) para que un hit concurrente
+    no lea un PDF a medias.
     """
     path = invoice_pdf_cache_path(pdf_dir, inv)
     if path.is_file():
         return path.read_bytes()
     pdf = render_invoice_pdf(inv, items)
-    pdf_dir.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(pdf)
+    _atomic_write_bytes(path, pdf)
     return pdf

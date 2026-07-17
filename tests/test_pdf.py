@@ -9,6 +9,8 @@ despacho por ``pdf_render_version``.
 import base64
 import datetime as dt
 import json
+import os
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -589,3 +591,66 @@ def test_borrar_cache_no_pierde_registro_fiscal(
     assert r2.status_code == 200, r2.text
     assert r2.content == b"%PDF-regenerado"
     assert cache.read_bytes() == b"%PDF-regenerado"
+
+
+def test_cache_write_es_atomico(api, arca, test_config, monkeypatch):
+    """FAC-53 review: el cache se publica con os.replace, no write in-place."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+    cache = invoice_pdf_cache_path(test_config.paths.pdf_dir, inv)
+    assert not cache.exists()
+
+    replaces: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def tracking_replace(src, dst, *args, **kwargs):
+        replaces.append((str(src), str(dst)))
+        # Mientras no haya replace, el destino final no debe existir
+        # (evita hits concurrentes sobre un PDF a medias).
+        assert not cache.exists()
+        return real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("facturador.pdf.render.os.replace", tracking_replace)
+    monkeypatch.setattr(
+        "facturador.pdf.render.render_invoice_pdf",
+        lambda _inv, _items: b"%PDF-atomico",
+    )
+
+    pdf = get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+
+    assert pdf == b"%PDF-atomico"
+    assert cache.read_bytes() == b"%PDF-atomico"
+    assert len(replaces) == 1
+    src, dst = replaces[0]
+    assert dst == str(cache)
+    assert src.endswith(".tmp")
+    assert Path(src).name.startswith(f".{cache.name}.")
+    # El temp no queda huérfano tras el replace exitoso.
+    assert not Path(src).exists()
+    assert list(test_config.paths.pdf_dir.glob(".*.tmp")) == []
+
+
+def test_cache_write_fallido_no_deja_pdf_parcial(
+    api, arca, test_config, monkeypatch
+):
+    """Si el replace falla, el path final no existe (nada que servir a medias)."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+    cache = invoice_pdf_cache_path(test_config.paths.pdf_dir, inv)
+
+    def boom_replace(src, dst, *args, **kwargs):
+        raise OSError("disco lleno")
+
+    monkeypatch.setattr("facturador.pdf.render.os.replace", boom_replace)
+    monkeypatch.setattr(
+        "facturador.pdf.render.render_invoice_pdf",
+        lambda _inv, _items: b"%PDF-parcial",
+    )
+
+    with pytest.raises(OSError, match="disco lleno"):
+        get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+
+    assert not cache.exists()
+    assert list(test_config.paths.pdf_dir.glob(".*.tmp")) == []
