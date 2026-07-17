@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query, Response
 
 from .. import repo
 from ..constants import InvoiceStatus
-from ..pdf import invoice_pdf_filename, render_invoice_pdf
+from ..pdf import get_or_render_invoice_pdf, invoice_pdf_filename
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
 from .deps import ServiceDep
@@ -60,17 +60,15 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
             f"(estado actual: {inv['status']})"
         )
     items = repo.get_invoice_items(service.conn, invoice_id)
-    # FAC-52: el render lee solo la fila de la factura y sus ítems; no hay
-    # lookup a emisores/clients/settings/arca_params ni CUIT del cert vivo.
+    # FAC-52/53: render solo desde snapshot; cache local opcional bajo
+    # pdf_dir (descartable; regenera si falta).
     try:
-        pdf = render_invoice_pdf(inv, items)
+        pdf = get_or_render_invoice_pdf(
+            inv, items, service.config.paths.pdf_dir
+        )
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
     filename = invoice_pdf_filename(inv)
-    # Copia persistida en el pdfs/ del perfil (FAC-25); la respuesta no
-    # depende del archivo, se sirve siempre el render fresco.
-    service.config.paths.pdf_dir.mkdir(parents=True, exist_ok=True)
-    (service.config.paths.pdf_dir / filename).write_bytes(pdf)
     return Response(
         content=pdf,
         media_type="application/pdf",

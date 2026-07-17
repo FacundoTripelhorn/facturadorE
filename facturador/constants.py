@@ -87,10 +87,10 @@ MONEDA_DISPLAY = {"DOL": "USD", "PES": "ARS"}
 QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
 TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA
 
-# Versión del contrato de render PDF (FAC-52). Cada factura nueva guarda
-# este valor; FAC-53 despachará el renderer por ``pdf_render_version``.
-# Los alias de presentación (p.ej. MONEDA_DISPLAY) quedan atados a esta
-# versión: cambiarlos exige bump + renderer nuevo, no releer settings.
+# Versión del contrato de render PDF (FAC-52/53). Cada factura nueva
+# guarda este valor; ``facturador.pdf.registry`` despacha el renderer
+# registrado. Los alias de presentación (p.ej. MONEDA_DISPLAY) quedan
+# atados a esta versión: cambiarlos exige bump + renderer nuevo.
 PDF_RENDER_VERSION = 1
 
 # Puerto local por defecto (siempre bind 127.0.0.1 en host; design.md §2.5).

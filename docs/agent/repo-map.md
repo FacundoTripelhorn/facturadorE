@@ -183,15 +183,18 @@ UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domai
 
 | What | Where |
 |------|-------|
-| HTML → PDF (WeasyPrint) | `facturador/pdf/render.py` |
+| HTML → PDF (WeasyPrint) + cache helper | `facturador/pdf/render.py` |
+| Versioned renderer registry (FAC-53) | `facturador/pdf/registry.py` |
 | QR payload (RG 4892) | `facturador/pdf/qr.py` |
-| Print layout template | `facturador/pdf/invoice.html` |
+| Print layout template (v1) | `facturador/pdf/invoice.html` |
 | PDF download route (API) | `facturador/api/invoices.py` (`GET …/pdf`) |
 | Layout spec & field mapping | `docs/design.md` §0.1 |
 | PDF tests | `tests/test_pdf.py` |
 
-PDFs are written under the active profile's `data/pdfs/` (`ProfilePaths.pdf_dir`)
-after authorization.
+Generated PDFs are an optional local cache under the active profile's
+`data/pdfs/` (`ProfilePaths.pdf_dir`). Missing cache regenerates from the
+invoice snapshot via the renderer selected by `pdf_render_version`; normal
+backups exclude `data/pdfs/` (FAC-53).
 
 ### Emisor entity / multi-emisor (FAC-8 area)
 

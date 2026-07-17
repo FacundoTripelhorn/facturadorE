@@ -29,7 +29,7 @@ def perfil(tmp_path) -> ProfilePaths:
     paths.key.write_text("KEY-PRIVADA", encoding="utf-8")
     paths.cert.write_text("CERT", encoding="utf-8")
     paths.pdf_dir.mkdir()
-    (paths.pdf_dir / "factura-E-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
+    (paths.pdf_dir / "factura-E-19-00001-00000001-homo.pdf").write_bytes(b"%PDF-")
     paths.logs_dir.mkdir()
     paths.log_file.write_text("ruido", encoding="utf-8")
     conn = sqlite3.connect(paths.db)
@@ -67,14 +67,15 @@ def test_tar_lleva_estado_del_perfil_sin_db_viva_ni_logs(perfil):
 
     archivos = {k for k, v in members.items() if v is not None}
     # Sin .env: el bootstrap no es estado del perfil (FAC-25).
+    # Sin PDFs generados: cache descartable (FAC-53); la DB basta.
     assert archivos == {
         "secrets/cert.key",
         "secrets/cert.crt",
         "data/facturador.db",
-        "data/pdfs/factura-E-00001-00000001-homo.pdf",
     }
     assert members["data/facturador.db"] == snapshot
     assert not any(n.startswith("data/logs") for n in members)
+    assert not any(n == "data/pdfs" or n.startswith("data/pdfs/") for n in members)
 
 
 def test_tar_sin_db_respalda_el_resto(perfil):
@@ -82,6 +83,17 @@ def test_tar_sin_db_respalda_el_resto(perfil):
     members = _members(build_tar(perfil, None))
     assert "data/facturador.db" not in members
     assert "secrets/cert.key" in members
+    assert not any(n.startswith("data/pdfs/") for n in members)
+
+
+def test_tar_excluye_pdfs_generados_aunque_existan(perfil):
+    """FAC-53: el backup normal no incluye el cache local de PDFs."""
+    pdf = perfil.pdf_dir / "factura-E-19-00001-00000001-homo.pdf"
+    assert pdf.is_file()
+    members = _members(build_tar(perfil, snapshot_db(perfil.db)))
+    assert "data/facturador.db" in members
+    assert "data/pdfs/factura-E-19-00001-00000001-homo.pdf" not in members
+    assert pdf.read_bytes() == b"%PDF-"  # el cache local sigue en disco
 
 
 def test_extract_reconstruye_el_layout_del_perfil(perfil, tmp_path_factory):
