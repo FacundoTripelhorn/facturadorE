@@ -97,6 +97,16 @@ CREATE TABLE invoices (
     -- Identidad fiscal del perfil al crear (FAC-39): CUIT del certificado,
     -- inmutable; el PDF y la auditoría no releen el cert vivo.
     cuit_emisor        TEXT,
+    -- Snapshot del emisor al crear el borrador (FAC-10): el PDF y la
+    -- revisión usan estos campos, nunca la fila viva de emisores. emisor_id
+    -- queda solo para trazabilidad. Sin usuarios de producción aún: DBs de
+    -- desarrollo anteriores a esta columna se resetean (borrar
+    -- data/facturador.db del perfil) en lugar de migrar filas viejas.
+    emisor_razon_social       TEXT NOT NULL DEFAULT '',
+    emisor_domicilio          TEXT NOT NULL DEFAULT '',
+    emisor_condicion_iva      TEXT NOT NULL DEFAULT '',
+    emisor_iibb               TEXT NOT NULL DEFAULT '',
+    emisor_inicio_actividades TEXT NOT NULL DEFAULT '',
     -- Auditoría inmutable (ADR 0001 / FAC-26): sello del perfil al crear,
     -- validado contra el perfil corriente en cada acceso por id.
     environment        TEXT NOT NULL,

@@ -48,7 +48,7 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 | Incoterms | `Incoterms` | **Vacío en servicios** — el form lo oculta para tipo_expo=2 |
 | Ítem único: código `0001`, descripción del servicio, cant. `1,000000`, U.Medida "unidades", precio unit. = total | `Items[]`: `Pro_codigo`, `Pro_ds`, `Pro_qty=1`, `Pro_umed=7` (unidades), `Pro_precio_uni`, `Pro_total_item` | Patrón real: 1 línea, qty 1, precio = importe total. El form puede reducirse a descripción (default del cliente) + monto |
 | Importe Total | `Imp_total` | = suma de ítems; validar en dominio |
-| Leyenda "IVA EXENTO OPERACIÓN DE EXPORTACIÓN", IIBB, inicio de actividades | — (no viajan a ARCA) | Datos del emisor para el PDF, desde la tabla `settings` de la DB (página Configuración) |
+| Leyenda "IVA EXENTO OPERACIÓN DE EXPORTACIÓN", IIBB, inicio de actividades | — (no viajan a ARCA) | Datos del emisor para el PDF: snapshot inmutable en la factura al crear el borrador (FAC-10); la página Configuración edita la entidad `emisores` viva, no el historial |
 | CAE + Fecha Vto. CAE + QR | respuesta de `FEXAuthorize` | Al PDF junto con QR RG 4892 |
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
@@ -200,6 +200,7 @@ clients
 
 invoices
   id (uuid, pk)
+  emisor_id (fk → emisores, nullable)  -- trazabilidad; NO es fuente del PDF
   client_id (fk → clients, nullable)   -- referencia; los datos se snapshotean abajo
   arca_id (bigint, unique)        -- Id secuencial enviado a FEXAuthorize
   cbte_tipo (int)                 -- 19/20/21
@@ -221,6 +222,9 @@ invoices
   obs (text)
   cae (text, null), cae_fch_vto (date, null)
   raw_request (jsonb), raw_response (jsonb)   -- auditoría completa
+  cuit_emisor (text)              -- CUIT fiscal del perfil al crear (FAC-39)
+  emisor_razon_social, emisor_domicilio, emisor_condicion_iva,
+  emisor_iibb, emisor_inicio_actividades  -- snapshot del emisor al crear el borrador (FAC-10)
   environment ('homo'|'prod')
   created_at, updated_at
 
@@ -350,7 +354,7 @@ Componentes:
    - No hay problema de escala ni de concurrencia real; SQLite alcanza incluso más allá del spike.
    - El TA del WSAA (12 h de vida) probablemente se pida fresco en cada emisión — el cache sigue siendo necesario para reintentos dentro de la misma sesión, pero no hace falta nada sofisticado.
    - El refresh del cache de parámetros puede ser lazy (al momento de emitir, si `fetched_at` > 24 h) en lugar de un job programado.
-3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al autorizar (razón social, domicilio, id impositivo, país, CUIT país): el comprobante autorizado es inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default.
+3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al crear el borrador (razón social, domicilio, id impositivo, país, CUIT país): el comprobante queda inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default. Lo mismo aplica al emisor (FAC-10): se guardan `emisor_id` (trazabilidad) y los campos de encabezado/CUIT en la fila de `invoices`; el PDF no relee la tabla `emisores`. Sin usuarios de producción aún, DBs de desarrollo anteriores al snapshot se resetean (borrar `data/facturador.db` del perfil) en lugar de migrar filas.
 4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md), implementado FAC-23 … FAC-34).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` compartido y el ambiente por emisor.
 
 **Siguen abiertas:**

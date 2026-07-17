@@ -166,6 +166,12 @@ class InvoiceOut(BaseModel):
     cae_fch_vto: str | None
     last_error: str | None
     cuit_emisor: str | None = None
+    # Snapshot del emisor al crear el borrador (FAC-10); no se relee emisores.
+    emisor_razon_social: str = ""
+    emisor_domicilio: str = ""
+    emisor_condicion_iva: str = ""
+    emisor_iibb: str = ""
+    emisor_inicio_actividades: str = ""
     environment: str
     created_at: str
     updated_at: str

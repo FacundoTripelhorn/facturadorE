@@ -293,6 +293,23 @@ def test_baseline_incluye_cuit_emisor(tmp_path: Path):
         conn.close()
 
 
+def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
+    """FAC-10: columnas de snapshot en el baseline; DBs viejas se resetean."""
+    conn = db.connect(tmp_path / "fresh.db")
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
+        for name in (
+            "emisor_razon_social",
+            "emisor_domicilio",
+            "emisor_condicion_iva",
+            "emisor_iibb",
+            "emisor_inicio_actividades",
+        ):
+            assert name in cols
+    finally:
+        conn.close()
+
+
 def test_api_invoice_incluye_cuit_emisor(api):
     """Contrato REST: el draft lleva el CUIT snapshot del perfil."""
     r = api.post(

@@ -228,6 +228,22 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 
 ---
 
+## Emisor snapshot on invoices (FAC-10) / old profile DBs
+
+**Symptom:** After pulling FAC-10, an existing profile DB created before the
+issuer snapshot columns may fail on `INSERT INTO invoices` or PDF generation
+(`snapshot de emisor` / missing columns).
+
+**Expected.** There are no production users to migrate. Development profiles
+should **reset** the SQLite file (`data/facturador.db` under the profile) and
+re-run onboarding / seed. New drafts persist `emisor_id` plus immutable issuer
+fields; PDF rendering reads that snapshot, never the live `emisores` row.
+
+**Do not:** treat missing snapshot columns as an app bug, or “fix” historical
+PDFs by reloading the current emisor.
+
+---
+
 ## Multi-emisor: schema ready, selection UI pending (FAC-8)
 
 **Symptom:** The `emisores` table can hold multiple rows in the same profile

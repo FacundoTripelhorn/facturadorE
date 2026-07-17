@@ -383,6 +383,14 @@ class InvoiceService:
             # Identidad fiscal del perfil (FAC-39): CUIT del certificado,
             # no editable vía emisor. Snapshot inmutable en el comprobante.
             "cuit_emisor": cuit_emisor,
+            # Snapshot del emisor al crear el borrador (FAC-10): la revisión
+            # y el PDF usan estos valores; editar emisores después no muda
+            # el comprobante. emisor_id queda solo para trazabilidad.
+            "emisor_razon_social": settings.emisor.razon_social,
+            "emisor_domicilio": settings.emisor.domicilio,
+            "emisor_condicion_iva": settings.emisor.condicion_iva,
+            "emisor_iibb": settings.emisor.iibb,
+            "emisor_inicio_actividades": settings.emisor.inicio_actividades,
             # Auditoría inmutable (ADR 0001 / FAC-26): el ambiente del
             # comprobante sale SIEMPRE del perfil corriente, nunca del
             # request, y después se valida en cada acceso por id.

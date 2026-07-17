@@ -1,12 +1,12 @@
 """Render del comprobante: fila SQLite → HTML (Jinja2) → PDF (weasyprint).
 
 El layout replica el comprobante real de Comprobantes en Línea analizado en
-design.md §0.1. Los datos del emisor (leyenda IVA, IIBB, inicio de
-actividades) salen de la tabla settings de la DB; el resto es el snapshot
-inmutable de la factura autorizada. Autoescape SIEMPRE activo: razón social,
-domicilio y descripciones (incluidos los datos del emisor, que también son
-texto libre) son hostiles (checklist §2.1.1 punto 4 aplica al HTML igual que
-al XML).
+design.md §0.1. Los datos del emisor (razón social, domicilio, condición IVA,
+IIBB, inicio de actividades) vienen del snapshot inmutable de la factura
+(FAC-10), no de la fila viva de ``emisores``. Autoescape SIEMPRE activo:
+razón social, domicilio y descripciones (incluidos los del emisor, texto
+libre) son hostiles (checklist §2.1.1 punto 4 aplica al HTML igual que al
+XML).
 """
 
 from __future__ import annotations
