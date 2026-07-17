@@ -1,8 +1,9 @@
 """Fase 5 — PDF + QR RG 4892.
 
 Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
-endpoint (200/409/404), copia persistida en data/pdfs y escaping de datos
-hostiles en el HTML del comprobante.
+endpoint (200/409/404), copia persistida en data/pdfs, escaping de datos
+hostiles, y que el render use solo el snapshot inmutable de la factura
+(FAC-10 / FAC-52).
 """
 
 import base64
@@ -13,9 +14,10 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from facturador import repo
+from facturador.constants import PDF_RENDER_VERSION
 from facturador.pdf import render_invoice_html
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
-from facturador.settings import Emisor, load_settings
+from facturador.settings import load_settings
 from tests.conftest import TEST_CUIT
 
 CLIENTE = {
@@ -153,9 +155,9 @@ def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
 
     capturado = {}
 
-    def fake_render(inv, items, emisor, cuit_emisor, **kwargs):
-        capturado["emisor"] = emisor
+    def fake_render(inv, items):
         capturado["inv"] = inv
+        capturado["items"] = items
         return b"%PDF-fake"
 
     monkeypatch.setattr(
@@ -164,13 +166,11 @@ def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
     assert r.status_code == 200, r.text
-    assert capturado["emisor"].id == emisor_id
-    assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
-    assert capturado["emisor"].domicilio == "Calle Falsa 123, CABA"
-    assert capturado["emisor"].iibb == "Exento"
-    assert capturado["emisor"].inicio_actividades == "01/08/2020"
     assert capturado["inv"]["emisor_razon_social"] == "MI EMPRESA S.R.L."
-    assert "RAZON SOCIAL EDITADA" not in capturado["emisor"].razon_social
+    assert capturado["inv"]["emisor_domicilio"] == "Calle Falsa 123, CABA"
+    assert capturado["inv"]["emisor_iibb"] == "Exento"
+    assert capturado["inv"]["emisor_inicio_actividades"] == "01/08/2020"
+    assert "RAZON SOCIAL EDITADA" not in capturado["inv"]["emisor_razon_social"]
 
 
 def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkeypatch):
@@ -197,8 +197,8 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
 
     capturado = {}
 
-    def fake_render(inv, items, emisor, cuit_emisor, **kwargs):
-        capturado["emisor"] = emisor
+    def fake_render(inv, items):
+        capturado["inv"] = inv
         return b"%PDF-fake"
 
     monkeypatch.setattr(
@@ -207,8 +207,8 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
     assert r.status_code == 200, r.text
-    assert capturado["emisor"].id == emisor_original
-    assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
+    assert capturado["inv"]["emisor_id"] == emisor_original
+    assert capturado["inv"]["emisor_razon_social"] == "MI EMPRESA S.R.L."
 
 
 def test_editar_emisor_tras_draft_no_cambia_el_snapshot(api, arca):
@@ -249,28 +249,139 @@ def test_editar_emisor_tras_draft_no_cambia_el_snapshot(api, arca):
     assert body["emisor_domicilio"] == "Calle Falsa 123, CABA"
 
 
+def test_nueva_factura_registra_snapshot_de_render_completo(api, arca):
+    """FAC-52: descripciones de params + pdf_render_version al crear."""
+    api.post("/clients", json=CLIENTE)
+    draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
+
+    assert draft["pdf_render_version"] == PDF_RENDER_VERSION
+    assert draft["dst_cmp_ds"] == "URUGUAY"
+    assert draft["cuit_pais_cliente_ds"] == "URUGUAY - Persona Juridica"
+    assert draft["moneda_ds"] == "Dolar Estadounidense"
+    assert draft["items"][0]["pro_umed_ds"] == "unidades"
+
+    inv = repo.get_invoice(api.conn, draft["id"])
+    assert inv is not None
+    assert inv["pdf_render_version"] == PDF_RENDER_VERSION
+    items = repo.get_invoice_items(api.conn, draft["id"])
+    assert items[0]["pro_umed_ds"] == "unidades"
+
+
+def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
+    api, arca, monkeypatch
+):
+    """FAC-52: regenerar el PDF no depende de filas vivas ni del cache."""
+    factura = _factura_autorizada(api)
+    client_id = factura["client_id"]
+
+    # Mutar cliente vivo.
+    edited = api.put(
+        f"/clients/{client_id}",
+        json={
+            **CLIENTE,
+            "razon_social": "CLIENTE EDITADO S.A.",
+            "domicilio": "Otra calle 99",
+            "id_impositivo": "RUT EDITADO",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    # Mutar descripciones de arca_params (fuente dinámica del label).
+    repo.replace_params(
+        api.conn,
+        "pais",
+        [{"code": "225", "description": "PAIS MUTADO"}],
+    )
+    repo.replace_params(
+        api.conn,
+        "cuit_pais",
+        [{"code": "55000002002", "description": "CUIT PAIS MUTADO"}],
+    )
+    repo.replace_params(
+        api.conn,
+        "moneda",
+        [
+            {"code": "DOL", "description": "MONEDA MUTADA"},
+            {"code": "PES", "description": "Peso Argentino"},
+        ],
+    )
+    repo.replace_params(
+        api.conn,
+        "umed",
+        [{"code": "7", "description": "umed-mutada"}],
+    )
+    # Mutar emisor / settings activos.
+    emisor_id = repo.get_invoice(api.conn, factura["id"])["emisor_id"]
+    repo.update_emisor(
+        api.conn,
+        emisor_id,
+        {
+            "razon_social": "EMISOR MUTADO S.A.",
+            "domicilio": "Domicilio mutado",
+            "iibb": "Local mutado",
+            "inicio_actividades": "99/99/9999",
+            "condicion_iva": "IVA mutado",
+            "puntos_venta": "[1]",
+        },
+    )
+
+    capturado = {}
+
+    def fake_render(inv, items):
+        capturado["inv"] = dict(inv)
+        capturado["items"] = [dict(i) for i in items]
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(
+        "facturador.api.invoices.render_invoice_pdf", fake_render
+    )
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+    assert r.status_code == 200, r.text
+
+    inv = capturado["inv"]
+    item = capturado["items"][0]
+    assert inv["cliente"] == "CLIENTE URUGUAY S.A."
+    assert inv["domicilio_cliente"] == "Av. Siempreviva 123, Montevideo"
+    assert inv["id_impositivo"] == "RUT 219999830019"
+    assert inv["dst_cmp_ds"] == "URUGUAY"
+    assert inv["cuit_pais_cliente_ds"] == "URUGUAY - Persona Juridica"
+    assert inv["moneda_ds"] == "Dolar Estadounidense"
+    assert inv["emisor_razon_social"] == "MI EMPRESA S.R.L."
+    assert inv["pdf_render_version"] == PDF_RENDER_VERSION
+    assert item["pro_umed_ds"] == "unidades"
+    assert "PAIS MUTADO" not in inv["dst_cmp_ds"]
+    assert "MONEDA MUTADA" not in inv["moneda_ds"]
+    assert "umed-mutada" not in item["pro_umed_ds"]
+
+
+def test_html_usa_solo_snapshot_sin_lookups_externos(api, arca):
+    """FAC-52: render_invoice_html(inv, items) sin kwargs de params/emisor."""
+    factura = _factura_autorizada(api)
+    # Envenenar el cache: si el render lo leyera, el HTML saldría mutado.
+    repo.replace_params(
+        api.conn, "pais", [{"code": "225", "description": "XX-MUTADO"}]
+    )
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+
+    html = render_invoice_html(inv, items)
+
+    assert "URUGUAY" in html
+    assert "XX-MUTADO" not in html
+    assert "URUGUAY - Persona Juridica" in html
+    assert "Dolar Estadounidense" in html
+    assert "U. Medida: unidades" in html
+
+
 # --- contenido y escaping del HTML ---
 
 
 def test_html_contiene_los_datos_del_comprobante(api, arca):
-    # Los datos del emisor salen del snapshot de la factura (FAC-10), no
-    # de la fila viva de emisores ni del entorno.
-    from facturador.settings import emisor_from_invoice_snapshot
-
+    # Los datos del emisor y las descripciones salen del snapshot (FAC-10/52).
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
-    emisor = emisor_from_invoice_snapshot(inv)
 
-    html = render_invoice_html(
-        inv,
-        items,
-        emisor,
-        int(TEST_CUIT),
-        pais_ds="URUGUAY",
-        cuit_pais_ds="URUGUAY - Persona Juridica",
-        moneda_ds="Dolar Estadounidense",
-    )
+    html = render_invoice_html(inv, items)
 
     assert "MI EMPRESA S.R.L." in html
     # IIBB sale literal de la config ("Exento" en el comprobante real),
@@ -307,9 +418,7 @@ def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(
-        inv, items, load_settings(api.conn).emisor, int(TEST_CUIT)
-    )
+    html = render_invoice_html(inv, items)
 
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
@@ -321,14 +430,46 @@ def test_datos_hostiles_del_emisor_quedan_escapados_en_el_html(api, arca):
     punto 4 aplicado al HTML)."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
+    # Inyectar texto hostil en el snapshot de la fila (fuente real del PDF).
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET emisor_razon_social = ?, emisor_domicilio = ?"
+            " WHERE id = ?",
+            (
+                'EMISORA <img src=x onerror=alert(1)> & "SA"',
+                "Av. <b>Negrita</b> 1",
+                factura["id"],
+            ),
+        )
+    inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
-    emisor = Emisor(
-        razon_social='EMISORA <img src=x onerror=alert(1)> & "SA"',
-        domicilio="Av. <b>Negrita</b> 1",
-    )
 
-    html = render_invoice_html(inv, items, emisor, int(TEST_CUIT))
+    html = render_invoice_html(inv, items)
 
     assert "<img src=x" not in html
     assert "&lt;img src=x" in html
     assert "<b>Negrita</b>" not in html
+
+
+def test_baseline_incluye_snapshot_de_render(tmp_path):
+    """FAC-52: columnas de render en el baseline — sin migración de upgrade."""
+    from facturador import db
+    from facturador.migrations import latest_version
+
+    conn = db.connect(tmp_path / "fresh.db")
+    try:
+        inv_cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
+        item_cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(invoice_items)")
+        }
+        for name in (
+            "dst_cmp_ds",
+            "cuit_pais_cliente_ds",
+            "moneda_ds",
+            "pdf_render_version",
+        ):
+            assert name in inv_cols
+        assert "pro_umed_ds" in item_cols
+        assert latest_version() == 1
+    finally:
+        conn.close()

@@ -212,9 +212,11 @@ invoices
   tipo_expo (int)                 -- 1 bienes / 2 servicios / 4 otros
   permiso_existente ('S'|'N'|'')
   dst_cmp (int)                   -- país destino
-  cliente (text), cuit_pais_cliente (bigint), domicilio_cliente (text)
+  dst_cmp_ds (text)               -- descripción país al crear (FAC-52; PDF no relee arca_params)
+  cliente (text), cuit_pais_cliente (bigint), cuit_pais_cliente_ds (text)
+  domicilio_cliente (text)
   id_impositivo (text)
-  moneda_id (text), moneda_ctz (numeric)
+  moneda_id (text), moneda_ds (text), moneda_ctz (numeric)
   incoterms (text), incoterms_ds (text)
   forma_pago (text)
   idioma_cbte (int)
@@ -225,12 +227,13 @@ invoices
   cuit_emisor (text)              -- CUIT fiscal del perfil al crear (FAC-39)
   emisor_razon_social, emisor_domicilio, emisor_condicion_iva,
   emisor_iibb, emisor_inicio_actividades  -- snapshot del emisor al crear el borrador (FAC-10)
+  pdf_render_version (int)        -- contrato de render PDF (FAC-52; FAC-53 despacha)
   environment ('homo'|'prod')
   created_at, updated_at
 
 invoice_items
   id, invoice_id (fk)
-  pro_codigo, pro_ds, pro_qty, pro_umed, pro_precio_uni, pro_total_item
+  pro_codigo, pro_ds, pro_qty, pro_umed, pro_umed_ds, pro_precio_uni, pro_total_item
 
 arca_params (cache de tablas dinámicas)
   kind (moneda|pais|umed|incoterms|cbte_tipo|idioma|cuit_pais|tipo_expo)
@@ -354,7 +357,7 @@ Componentes:
    - No hay problema de escala ni de concurrencia real; SQLite alcanza incluso más allá del spike.
    - El TA del WSAA (12 h de vida) probablemente se pida fresco en cada emisión — el cache sigue siendo necesario para reintentos dentro de la misma sesión, pero no hace falta nada sofisticado.
    - El refresh del cache de parámetros puede ser lazy (al momento de emitir, si `fetched_at` > 24 h) en lugar de un job programado.
-3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al crear el borrador (razón social, domicilio, id impositivo, país, CUIT país): el comprobante queda inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default. Lo mismo aplica al emisor (FAC-10): se guardan `emisor_id` (trazabilidad) y los campos de encabezado/CUIT en la fila de `invoices`; el PDF no relee la tabla `emisores`. El snapshot de emisor se agregó al **baseline** (`schema.sql` / migración v1): no hay DBs desplegadas que requieran un ALTER/migración v2.
+3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al crear el borrador (razón social, domicilio, id impositivo, país, CUIT país): el comprobante queda inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default. Lo mismo aplica al emisor (FAC-10): se guardan `emisor_id` (trazabilidad) y los campos de encabezado/CUIT en la fila de `invoices`; el PDF no relee la tabla `emisores`. FAC-52 completa el snapshot de render: descripciones resueltas de `arca_params` (país, CUIT país, moneda, U. Medida) y `pdf_render_version` viven en la factura/ítems; regenerar el PDF no consulta emisores, clients, settings ni el cache de params. Esos campos viven en el **baseline** (`schema.sql` / migración v1): no hay DBs desplegadas que requieran un ALTER/migración v2.
 4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md), implementado FAC-23 … FAC-34).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` compartido y el ambiente por emisor.
 
 **Siguen abiertas:**

@@ -133,6 +133,7 @@ class ItemOut(BaseModel):
     pro_ds: str
     pro_qty: str
     pro_umed: int
+    pro_umed_ds: str = ""
     pro_precio_uni: str
     pro_total_item: str
 
@@ -151,11 +152,14 @@ class InvoiceOut(BaseModel):
     fecha_pago: str
     tipo_expo: int
     dst_cmp: int
+    dst_cmp_ds: str = ""
     cliente: str
     cuit_pais_cliente: int
+    cuit_pais_cliente_ds: str = ""
     domicilio_cliente: str
     id_impositivo: str
     moneda_id: str
+    moneda_ds: str = ""
     moneda_ctz: str
     incoterms: str
     forma_pago: str
@@ -172,6 +176,8 @@ class InvoiceOut(BaseModel):
     emisor_condicion_iva: str = ""
     emisor_iibb: str = ""
     emisor_inicio_actividades: str = ""
+    # Contrato de render PDF (FAC-52); no se relee arca_params al regenerar.
+    pdf_render_version: int = 1
     environment: str
     created_at: str
     updated_at: str

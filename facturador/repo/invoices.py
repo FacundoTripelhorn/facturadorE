@@ -18,11 +18,14 @@ INVOICE_FIELDS = (
     "tipo_expo",
     "permiso_existente",
     "dst_cmp",
+    "dst_cmp_ds",
     "cliente",
     "cuit_pais_cliente",
+    "cuit_pais_cliente_ds",
     "domicilio_cliente",
     "id_impositivo",
     "moneda_id",
+    "moneda_ds",
     "moneda_ctz",
     "incoterms",
     "incoterms_ds",
@@ -36,6 +39,7 @@ INVOICE_FIELDS = (
     "emisor_condicion_iva",
     "emisor_iibb",
     "emisor_inicio_actividades",
+    "pdf_render_version",
     "environment",
 )
 
@@ -62,8 +66,8 @@ def create_invoice(
             conn.execute(
                 "INSERT INTO invoice_items"
                 " (id, invoice_id, pro_codigo, pro_ds, pro_qty, pro_umed,"
-                "  pro_precio_uni, pro_total_item)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "  pro_umed_ds, pro_precio_uni, pro_total_item)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     new_id(),
                     invoice_id,
@@ -71,6 +75,7 @@ def create_invoice(
                     item["pro_ds"],
                     item["pro_qty"],
                     item["pro_umed"],
+                    item.get("pro_umed_ds", ""),
                     item["pro_precio_uni"],
                     item["pro_total_item"],
                 ),

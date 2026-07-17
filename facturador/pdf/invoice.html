@@ -134,7 +134,7 @@
           {# U. Medida no es columna propia: va como segunda línea bajo la
              cantidad, igual que en el comprobante real. #}
           <td class="num">{{ item["pro_qty"] | num(6) }}<br>
-            <span class="umedida">U. Medida: {{ "unidades" if item["pro_umed"] == UMED_UNIDADES else item["pro_umed"] }}</span></td>
+            <span class="umedida">U. Medida: {{ umed_label(item) }}</span></td>
           <td class="num">{{ item["pro_precio_uni"] | num(6) }}</td>
           <td class="num">{{ item["pro_total_item"] | num(2) }}</td>
         </tr>

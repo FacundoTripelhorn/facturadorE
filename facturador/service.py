@@ -28,6 +28,7 @@ from .certs import CertificateError
 from .config import Config
 from .constants import (
     CBTE_TIPO_FACTURA_E,
+    PDF_RENDER_VERSION,
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
     InvoiceSource,
@@ -229,6 +230,17 @@ class InvoiceService:
                 f"{campo}={code} no está en la tabla '{kind}' de ARCA"
             )
 
+    def _param_description(self, kind: str, code: object) -> str:
+        """Descripción de un código ARCA al momento del snapshot (FAC-52).
+
+        Mejor esfuerzo: si el cache no trae descripción, queda vacío y el
+        PDF imprime solo el código. No se relee en el render.
+        """
+        for row in self.get_params(kind):
+            if row["code"] == str(code):
+                return row["description"] or ""
+        return ""
+
     # ------------------------------------------------------------------
     # Clientes
     # ------------------------------------------------------------------
@@ -313,6 +325,7 @@ class InvoiceService:
                     "pro_ds": i.pro_ds,
                     "pro_qty": dec(i.pro_qty),
                     "pro_umed": i.pro_umed,
+                    "pro_umed_ds": self._param_description("umed", i.pro_umed),
                     "pro_precio_uni": dec(i.pro_precio_uni),
                     "pro_total_item": dec(i.pro_qty * i.pro_precio_uni),
                 }
@@ -330,6 +343,7 @@ class InvoiceService:
                     "pro_ds": descripcion,
                     "pro_qty": "1",
                     "pro_umed": UMED_UNIDADES,
+                    "pro_umed_ds": self._param_description("umed", UMED_UNIDADES),
                     "pro_precio_uni": dec(payload.imp_total),
                     "pro_total_item": dec(payload.imp_total),
                 }
@@ -374,6 +388,13 @@ class InvoiceService:
             "id_impositivo": client["id_impositivo"],
             "moneda_id": moneda_id,
             "moneda_ctz": dec(ctz),
+            # Descripciones de params al crear el borrador (FAC-52): el PDF
+            # regenera desde estos campos, nunca desde arca_params vivos.
+            "dst_cmp_ds": self._param_description("pais", client["pais_dst"]),
+            "cuit_pais_cliente_ds": self._param_description(
+                "cuit_pais", client["cuit_pais"]
+            ),
+            "moneda_ds": self._param_description("moneda", moneda_id),
             "incoterms": "",  # vacío en servicios (§0.1)
             "incoterms_ds": "",
             "forma_pago": client["forma_pago_default"],
@@ -391,6 +412,8 @@ class InvoiceService:
             "emisor_condicion_iva": settings.emisor.condicion_iva,
             "emisor_iibb": settings.emisor.iibb,
             "emisor_inicio_actividades": settings.emisor.inicio_actividades,
+            # Contrato de render (FAC-52); FAC-53 despachará por versión.
+            "pdf_render_version": PDF_RENDER_VERSION,
             # Auditoría inmutable (ADR 0001 / FAC-26): el ambiente del
             # comprobante sale SIEMPRE del perfil corriente, nunca del
             # request, y después se valida en cada acceso por id.
