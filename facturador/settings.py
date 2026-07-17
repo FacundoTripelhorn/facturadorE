@@ -124,11 +124,35 @@ def set_active_emisor(conn: sqlite3.Connection, emisor_id: str) -> None:
 
 
 def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
-    """Emisor persistido en un comprobante (snapshot por id)."""
+    """Fila viva de ``emisores`` (configuración editable).
+
+    No usar para PDF ni historial fiscal: esos flujos leen el snapshot del
+    comprobante vía :func:`emisor_from_invoice_snapshot` (FAC-10).
+    """
     row = repo.get_emisor(conn, emisor_id)
     if row is None:
         raise ValueError(f"Emisor {emisor_id} no existe")
     return _row_to_emisor(row)
+
+
+def emisor_from_invoice_snapshot(inv: sqlite3.Row) -> Emisor:
+    """Emisor inmutable del comprobante (FAC-10), sin releer ``emisores``."""
+    keys = inv.keys()
+    if "emisor_razon_social" not in keys:
+        # Solo defensivo: el baseline siempre trae estas columnas (FAC-10).
+        raise ValueError(
+            f"La factura {inv['id']} no tiene snapshot de emisor; "
+            "crear un borrador nuevo con el esquema actual."
+        )
+    return Emisor(
+        id=inv["emisor_id"],
+        razon_social=inv["emisor_razon_social"] or "",
+        domicilio=inv["emisor_domicilio"] or "",
+        iibb=inv["emisor_iibb"] or "",
+        inicio_actividades=inv["emisor_inicio_actividades"] or "",
+        condicion_iva=inv["emisor_condicion_iva"] or CONDICION_IVA_DEFAULT,
+        ambiente=inv["environment"],
+    )
 
 
 def load_settings(conn: sqlite3.Connection) -> Settings:

@@ -15,7 +15,7 @@ import pytest
 from facturador import repo
 from facturador.pdf import render_invoice_html
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
-from facturador.settings import Emisor, Settings, load_settings, save_settings
+from facturador.settings import Emisor, load_settings
 from tests.conftest import TEST_CUIT
 
 CLIENTE = {
@@ -131,18 +131,31 @@ def test_pdf_inexistente_es_404(api):
     assert api.get("/invoices/inexistente/pdf").status_code == 404
 
 
-def test_el_pdf_usa_el_emisor_persistido_en_el_comprobante(api, arca, monkeypatch):
-    """El comprobante es un snapshot: su PDF usa el emisor persistido en la
-    factura, no cualquier otro emisor del perfil dado de alta después."""
+def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
+    api, arca, monkeypatch
+):
+    """FAC-10: editar el mismo emisor tras autorizar no muda el PDF."""
     factura = _factura_autorizada(api)
-    save_settings(
+    emisor_id = repo.get_invoice(api.conn, factura["id"])["emisor_id"]
+    repo.update_emisor(
         api.conn,
-        Settings(emisor=Emisor(razon_social="OTRA S.R.L.")),
+        emisor_id,
+        {
+            "razon_social": "RAZON SOCIAL EDITADA S.A.",
+            "domicilio": "Calle Nueva 999",
+            "iibb": "Convenio Multilateral",
+            "inicio_actividades": "15/03/2021",
+            "condicion_iva": "IVA Responsable Inscripto",
+            "puntos_venta": "[1]",
+        },
     )
+    assert load_settings(api.conn).emisor.razon_social == "RAZON SOCIAL EDITADA S.A."
+
     capturado = {}
 
     def fake_render(inv, items, emisor, cuit_emisor, **kwargs):
         capturado["emisor"] = emisor
+        capturado["inv"] = inv
         return b"%PDF-fake"
 
     monkeypatch.setattr(
@@ -151,8 +164,13 @@ def test_el_pdf_usa_el_emisor_persistido_en_el_comprobante(api, arca, monkeypatc
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
     assert r.status_code == 200, r.text
-    assert capturado["emisor"].ambiente == "homo"
+    assert capturado["emisor"].id == emisor_id
     assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
+    assert capturado["emisor"].domicilio == "Calle Falsa 123, CABA"
+    assert capturado["emisor"].iibb == "Exento"
+    assert capturado["emisor"].inicio_actividades == "01/08/2020"
+    assert capturado["inv"]["emisor_razon_social"] == "MI EMPRESA S.R.L."
+    assert "RAZON SOCIAL EDITADA" not in capturado["emisor"].razon_social
 
 
 def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkeypatch):
@@ -193,16 +211,56 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
     assert capturado["emisor"].razon_social == "MI EMPRESA S.R.L."
 
 
+def test_editar_emisor_tras_draft_no_cambia_el_snapshot(api, arca):
+    """FAC-10: el borrador revisado es el que se autorizará."""
+    api.post("/clients", json=CLIENTE)
+    draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
+    assert draft["emisor_razon_social"] == "MI EMPRESA S.R.L."
+    assert draft["emisor_domicilio"] == "Calle Falsa 123, CABA"
+    assert draft["emisor_iibb"] == "Exento"
+    assert draft["emisor_inicio_actividades"] == "01/08/2020"
+    assert draft["emisor_condicion_iva"] == "IVA Responsable Inscripto"
+
+    emisor_id = draft["emisor_id"]
+    repo.update_emisor(
+        api.conn,
+        emisor_id,
+        {
+            "razon_social": "CAMBIO POST DRAFT S.A.",
+            "domicilio": "Otro domicilio 1",
+            "iibb": "Local",
+            "inicio_actividades": "02/02/2022",
+            "condicion_iva": "IVA Responsable Inscripto",
+            "puntos_venta": "[1]",
+        },
+    )
+
+    inv = repo.get_invoice(api.conn, draft["id"])
+    assert inv is not None
+    assert inv["emisor_razon_social"] == "MI EMPRESA S.R.L."
+    assert inv["emisor_domicilio"] == "Calle Falsa 123, CABA"
+    assert inv["emisor_iibb"] == "Exento"
+    assert inv["emisor_inicio_actividades"] == "01/08/2020"
+
+    auth = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert auth.status_code == 200, auth.text
+    body = auth.json()
+    assert body["emisor_razon_social"] == "MI EMPRESA S.R.L."
+    assert body["emisor_domicilio"] == "Calle Falsa 123, CABA"
+
+
 # --- contenido y escaping del HTML ---
 
 
 def test_html_contiene_los_datos_del_comprobante(api, arca):
-    # Los datos del emisor salen de la DB (sembrados por seed_settings en
-    # el fixture), no del entorno.
-    emisor = load_settings(api.conn).emisor
+    # Los datos del emisor salen del snapshot de la factura (FAC-10), no
+    # de la fila viva de emisores ni del entorno.
+    from facturador.settings import emisor_from_invoice_snapshot
+
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
+    emisor = emisor_from_invoice_snapshot(inv)
 
     html = render_invoice_html(
         inv,

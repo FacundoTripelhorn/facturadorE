@@ -11,7 +11,7 @@ from ..constants import InvoiceStatus
 from ..pdf import invoice_pdf_filename, render_invoice_pdf
 from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
 from ..service import ConflictError
-from ..settings import load_emisor
+from ..settings import emisor_from_invoice_snapshot
 from .deps import ServiceDep
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -73,6 +73,15 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
         raise ConflictError(
             "La factura no tiene emisor asociado; no se puede generar el PDF."
         )
+    try:
+        emisor = emisor_from_invoice_snapshot(inv)
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from exc
+    if not emisor.completo:
+        raise ConflictError(
+            "La factura no tiene snapshot completo del emisor; "
+            "no se puede generar el PDF."
+        )
     # Preferir el snapshot de la factura (FAC-39); filas viejas sin columna
     # caen al CUIT del certificado vivo del perfil.
     raw_cuit = inv["cuit_emisor"] if "cuit_emisor" in inv.keys() else None
@@ -80,7 +89,7 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
     pdf = render_invoice_pdf(
         inv,
         repo.get_invoice_items(service.conn, invoice_id),
-        load_emisor(service.conn, inv["emisor_id"]),
+        emisor,
         cuit_emisor,
         pais_ds=_param_ds(service.conn, "pais", inv["dst_cmp"]),
         cuit_pais_ds=_param_ds(

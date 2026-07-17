@@ -21,6 +21,7 @@ from facturador.fiscal_identity import (
     resolve_profile_fiscal_cuit,
     seal_fiscal_cuit,
 )
+from facturador.migrations import latest_version
 from facturador.profile import EnvironmentProfile
 from facturador.schemas import EmisorCreateIn, InvoiceCreate
 from facturador.service import ConflictError, InvoiceService
@@ -289,6 +290,25 @@ def test_baseline_incluye_cuit_emisor(tmp_path: Path):
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
         assert "cuit_emisor" in cols
+    finally:
+        conn.close()
+
+
+def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
+    """FAC-10: snapshot en el baseline — sin migración de upgrade (no hay DBs)."""
+    conn = db.connect(tmp_path / "fresh.db")
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
+        for name in (
+            "emisor_razon_social",
+            "emisor_domicilio",
+            "emisor_condicion_iva",
+            "emisor_iibb",
+            "emisor_inicio_actividades",
+        ):
+            assert name in cols
+        # Guardrail de review: sigue siendo una sola migración (baseline).
+        assert latest_version() == 1
     finally:
         conn.close()
 

@@ -31,6 +31,11 @@ INVOICE_FIELDS = (
     "imp_total",
     "obs",
     "cuit_emisor",
+    "emisor_razon_social",
+    "emisor_domicilio",
+    "emisor_condicion_iva",
+    "emisor_iibb",
+    "emisor_inicio_actividades",
     "environment",
 )
 
