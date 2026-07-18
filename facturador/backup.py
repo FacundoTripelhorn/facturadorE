@@ -1,32 +1,22 @@
-"""Backup cifrado del estado completo de UN perfil (design.md §2.5, ADR 0001).
+"""Backup cifrado del seed de UN perfil (FAC-44, design.md §2.5, ADR 0001).
 
-El estado es ``data/`` + ``secrets/`` bajo la raíz del perfil del ambiente
-elegido (FAC-25: todo archivo de runtime pasa por ``ProfilePaths``; el
-``.env`` de bootstrap no es estado del perfil y queda afuera). Pasos:
+ARCA es el ledger autoritativo. Este módulo respalda solo el **seed** de
+configuración que ARCA no puede reproducir (emisores, CUIT fiscal, ambiente,
+PV/tipos, cliente default / UI, versión de esquema + manifiesto). La DB
+local, PDFs, certificados e identidades ``age`` **no** viajan en el bundle;
+el registro se reconstruye desde ARCA (FAC-65).
 
-1. Snapshot de la DB con la API de backup de sqlite3 (nunca copiar el
-   archivo en caliente).
-2. Tarball en memoria con el snapshot en lugar de la DB viva. Los logs,
-   los PDFs generados (cache descartable FAC-53) y los archivos
-   -wal/-shm/-journal quedan afuera. El tar nunca toca el disco en
-   claro: el backup contiene la clave fiscal.
-3. Cifrado del lado del cliente con ``age -p`` (passphrase interactiva del
-   usuario; nunca en el repo, el entorno ni AWS). El SSE de S3 NO alcanza.
-4. Upload a S3 con ``aws s3 cp`` si el bucket está configurado en la app
-   (página Configuración → tabla ``settings`` de la DB del perfil); si no,
-   el ``.tar.gz.age`` queda solo en el ``backups/`` del perfil.
+Pasos (FAC-44):
 
-Corre en el HOST (no en el contenedor): requiere ``age`` en el PATH y, para
-el upload, ``aws`` CLI con credenciales del IAM user dedicado al bucket.
-La emisión nunca depende de esto (S3 caído solo degrada portabilidad).
+1. Armar el seed JSON desde la DB del perfil (sin filas de comprobantes).
+2. Adjuntar manifiesto (schema version, device-id, timestamp, checksum).
+3. Cifrar con ``age`` a **todas** las claves de ``backups/recipients.txt``.
+4. Sobrescribir ``backups/seed.age`` (nombre fijo). Upload S3: FAC-45.
 
 Uso:  uv run python -m facturador.backup --env homo|prod
       uv run python -m facturador.backup --root <raíz-del-perfil>
 
-El perfil se elige EXPLÍCITO (--env resuelve la raíz en el app-data del SO;
---root la fija a mano, p.ej. para el layout de Docker o tests). Sin default
-silencioso, igual que el arranque (FAC-24). No se lee ningún .env: el
-bucket/prefijo de S3 salen de la DB, dentro del propio backup.
+El perfil se elige EXPLÍCITO (--env o --root). Sin default silencioso.
 """
 
 from __future__ import annotations
@@ -41,6 +31,7 @@ import sys
 import tarfile
 from pathlib import Path
 
+from .db import connect
 from .profile import (
     DB_FILENAME as DB_NAME,
 )
@@ -50,12 +41,14 @@ from .profile import (
     ProfilePaths,
     parse_environment,
 )
+from .seed_backup import (
+    SeedBackupError,
+    create_encrypted_seed,
+    recipients_path,
+    seed_archive_path,
+    seed_object_key,
+)
 from .settings import BACKUP_PREFIX_DEFAULT
-
-# Derivados de SQLite que no tiene sentido llevar (el snapshot ya es
-# consistente), logs (no son estado) y PDFs generados (cache descartable
-# FAC-53: se regeneran desde el snapshot inmutable de la factura).
-_EXCLUDE_SUFFIXES = ("-wal", "-shm", "-journal")
 
 
 class BackupError(RuntimeError):
@@ -99,9 +92,9 @@ def resolve_profile_paths(
 def backup_s3_settings(snapshot: bytes | None) -> tuple[str, str]:
     """Bucket/prefijo de S3 desde la tabla settings del snapshot de la DB.
 
-    La config de backups vive en la app (DB del perfil), no en el entorno:
-    se lee del mismo snapshot que se está respaldando. Sin DB, o con una DB
-    anterior a la tabla settings, el backup queda solo local."""
+    Legacy helper (restore / tests). El seed nuevo lee settings vía
+    ``assemble_seed``; el upload lo hace FAC-45.
+    """
     if snapshot is None:
         return "", BACKUP_PREFIX_DEFAULT
     conn = sqlite3.connect(":memory:")
@@ -135,8 +128,8 @@ def snapshot_db(db_path: Path) -> bytes:
 def build_tar(paths: ProfilePaths, db_snapshot: bytes | None) -> bytes:
     """Tarball gz en memoria de secrets/ + data/ del perfil (DB = snapshot).
 
-    Excluye logs y ``data/pdfs/`` (FAC-53: los PDF generados no son
-    fuente de verdad ni viajan en el backup normal).
+    Legacy: el backup normal (FAC-44) ya no empaqueta DB ni secrets.
+    Conservado para restore.py / tests hasta el rebuild FAC-65.
     """
 
     def _skip(name: str, path: Path) -> bool:
@@ -168,7 +161,10 @@ def build_tar(paths: ProfilePaths, db_snapshot: bytes | None) -> bytes:
 
 
 def encrypt_age(plaintext: bytes, out_path: Path) -> None:
-    """``age -p``: pide la passphrase en la terminal, jamás por argv/env."""
+    """``age -p``: pide la passphrase en la terminal, jamás por argv/env.
+
+    Legacy (archives con passphrase). El seed FAC-44 usa recipients.
+    """
     if shutil.which("age") is None:
         raise BackupError(
             "No se encontró `age` en el PATH. Instalar: winget install "
@@ -181,11 +177,28 @@ def encrypt_age(plaintext: bytes, out_path: Path) -> None:
 
 
 def upload_s3(archive: Path, bucket: str, prefix: str) -> str:
+    """Legacy upload por nombre timestamped. FAC-45 reemplaza esto."""
     if shutil.which("aws") is None:
         raise BackupError("BACKUP_S3_BUCKET definido pero no hay `aws` CLI en PATH.")
     dest = f"s3://{bucket}/{prefix.strip('/')}/{archive.name}"
     subprocess.run(["aws", "s3", "cp", str(archive), dest], check=True)
     return dest
+
+
+def _environment_from_db(conn: sqlite3.Connection) -> str:
+    """Sello de ambiente del perfil (FAC-26): emisor activo o primer emisor."""
+    from .settings import get_active_emisor_id, load_emisor
+
+    active_id = get_active_emisor_id(conn)
+    if active_id:
+        return load_emisor(conn, active_id).ambiente
+    rows = list(conn.execute("SELECT ambiente FROM emisores ORDER BY created_at, id"))
+    if rows:
+        return str(rows[0][0])
+    raise BackupError(
+        "No hay emisores en la DB; no se puede determinar el ambiente del seed. "
+        "Usar --env homo|prod."
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -200,36 +213,53 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         paths = resolve_profile_paths(args.env, args.root)
-        # Guardia contra respaldar el directorio equivocado (p.ej. un typo
-        # en --root): sin secrets/ esto no es la raíz de un perfil y el
-        # archivo saldría vacío.
-        if not paths.secrets_dir.is_dir():
+        if not paths.db.is_file():
             raise BackupError(
-                f"{paths.root} no parece la raíz de un perfil (no tiene "
-                "secrets/). Pasar --env homo|prod o --root apuntando a la "
-                "raíz real del perfil."
+                f"No hay DB en {paths.db}; el seed necesita la config del "
+                "perfil (emisores / settings)."
             )
+        recipients = recipients_path(paths)
+        if not recipients.is_file():
+            raise BackupError(
+                f"Falta {recipients}. Crear el archivo con una clave "
+                "pública age por línea (una por máquina) antes de respaldar."
+            )
+
         print(f"Perfil: {paths.root}")
-        snapshot = snapshot_db(paths.db) if paths.db.is_file() else None
-        if snapshot is None:
-            print(f"AVISO: no hay DB en {paths.db}; se respalda el resto.")
 
-        stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-        archive = paths.backups_dir / f"facturador-{stamp}.tar.gz.age"
-        encrypt_age(build_tar(paths, snapshot), archive)
-        print(f"Backup cifrado: {archive}")
-
-        # El destino S3 sale de la config guardada en la app (en la DB).
-        bucket, prefix = backup_s3_settings(snapshot)
-        if bucket:
-            print(f"Subido a {upload_s3(archive, bucket, prefix)}")
-        else:
-            print(
-                "Sin bucket S3 configurado (página Configuración): "
-                "el backup queda solo local."
+        conn = connect(paths.db)
+        try:
+            if args.env:
+                environment = parse_environment(args.env).value
+            else:
+                environment = _environment_from_db(conn)
+            print(f"Ambiente: {environment}")
+            archive, envelope = create_encrypted_seed(
+                conn, paths, environment=environment
             )
+        finally:
+            conn.close()
+
+        seed = envelope["seed"]
+        cuit = seed["fiscal_cuit"]
+        prefix = seed["ui"]["backup_s3_prefix"]
+        logical = seed_object_key(prefix, cuit, environment)
+        print(f"Seed cifrado: {archive} ({archive.stat().st_size} bytes)")
+        print(f"Clave lógica (S3, FAC-45): {logical}")
+        print(
+            "Upload a S3: pendiente de FAC-45 "
+            f"(recipients locales: {recipients_path(paths)})."
+        )
+        # Evitar que un seed.age viejo con otro nombre confunda: el único
+        # artefacto FAC-44 es backups/seed.age.
+        assert archive == seed_archive_path(paths)
         return 0
-    except (BackupError, subprocess.CalledProcessError) as exc:
+    except (
+        BackupError,
+        SeedBackupError,
+        ProfileError,
+        subprocess.CalledProcessError,
+    ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
