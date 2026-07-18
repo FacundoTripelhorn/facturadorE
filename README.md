@@ -235,6 +235,7 @@ facturador/
   config.py     # arranque: ambiente inyectado, certificados del perfil
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
   backup.py     # CLI del seed cifrado (FAC-44); seed_backup.py arma/cifra
+  s3_seed.py    # adapter S3 del seed (FAC-45: seed.age + recipients.txt)
   restore.py    # restore legacy; rebuild desde ARCA es FAC-65
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations

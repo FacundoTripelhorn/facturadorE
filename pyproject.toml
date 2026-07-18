@@ -14,6 +14,7 @@ dependencies = [
     "qrcode[pil]>=8.2",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
+    "boto3>=1.35",
 ]
 
 [dependency-groups]
@@ -49,7 +50,7 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-module = ["weasyprint", "qrcode"]
+module = ["weasyprint", "qrcode", "boto3", "boto3.*", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [build-system]
