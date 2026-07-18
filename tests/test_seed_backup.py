@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -34,6 +35,12 @@ from facturador.seed_backup import (
 )
 from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 from tests.conftest import EMISOR_PRUEBA, TEST_CUIT
+
+_HAS_AGE = shutil.which("age") is not None and shutil.which("age-keygen") is not None
+requires_age = pytest.mark.skipif(
+    not _HAS_AGE,
+    reason="age/age-keygen no están en PATH (CI los instala; ver workflow)",
+)
 
 
 def _age_keygen(path: Path) -> str:
@@ -172,6 +179,7 @@ def test_assemble_seed_tiene_config_y_excluye_comprobantes(perfil_listo):
     assert manifest["checksum"].startswith("sha256:")
 
 
+@requires_age
 def test_encrypt_to_all_recipients_and_roundtrip(perfil_listo, tmp_path):
     paths, conn = perfil_listo
     key1 = tmp_path / "id1.txt"
@@ -210,6 +218,7 @@ def test_encrypt_to_all_recipients_and_roundtrip(perfil_listo, tmp_path):
     assert paths.key.read_text(encoding="utf-8")  # secrets intactos en disco
 
 
+@requires_age
 def test_agregar_recipient_alcanza_para_el_proximo_backup(perfil_listo, tmp_path):
     paths, conn = perfil_listo
     key1 = tmp_path / "id1.txt"
@@ -237,6 +246,7 @@ def test_load_recipients_exige_archivo_con_claves(tmp_path):
         load_recipients(missing)
 
 
+@requires_age
 def test_cli_backup_escribe_seed_age(perfil_listo, tmp_path, capsys):
     paths, conn = perfil_listo
     conn.close()

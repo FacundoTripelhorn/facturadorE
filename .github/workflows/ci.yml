@@ -25,6 +25,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
+      # age/age-keygen: FAC-44 cifra el seed a recipients; los tests
+      # ejercitan round-trip real (sin loguear plaintext/secretos).
+      # Binario oficial: el paquete apt no es uniforme entre runners.
+      - name: Instalar age
+        run: |
+          curl -fsSL "https://dl.filippo.io/age/v1.2.1?for=linux/amd64" -o /tmp/age.tar.gz
+          tar -xzf /tmp/age.tar.gz -C /tmp
+          sudo install -m 755 /tmp/age/age /tmp/age/age-keygen /usr/local/bin/
+          age --version
+          age-keygen --version
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run mypy
