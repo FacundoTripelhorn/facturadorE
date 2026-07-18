@@ -182,7 +182,7 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
 6. **Verificación post-emisión:** pyafipws recomienda constatar el CAE. Implementar: tras autorizar, `FEXGetCMP` y comparar CAE + importe + número; opcionalmente WSCDC en producción.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.
 8. **Clock sync:** generación del TRA con ventana amplia (gen -10 min / exp +10 min) y NTP contra `time.afip.gov.ar`, como documenta el manual WSAA.
-9. **Manejo de la clave privada:** pyafipws soporta passphrase en la key; acá se DECIDIÓ no usarla (la app es local y sin operador que la tipee: la protegen los permisos 400, el home local y el cifrado del backup al salir de la máquina). Nunca loguear ni el CMS firmado ni el token/sign del TA (tratarlos como credenciales en los logs — redactar).
+9. **Manejo de la clave privada:** pyafipws soporta passphrase en la key; acá se DECIDIÓ no usarla (la app es local y sin operador que la tipee: la protegen los permisos 400 y el home local). La clave **no** viaja en el seed de backup (FAC-44); cada máquina tiene su propio par (FAC-64). Nunca loguear ni el CMS firmado ni el token/sign del TA (tratarlos como credenciales en los logs — redactar).
 
 ### 2.2 Modelo de datos (mínimo)
 
