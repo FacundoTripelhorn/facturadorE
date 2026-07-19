@@ -53,7 +53,7 @@ finishing.
 | Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |
 | Setup state / onboarding guard | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py`, `facturador/api/app.py` | `uv run pytest tests/test_setup.py tests/test_config.py` |
 | SQLite settings / emisor | `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` | `uv run pytest tests/test_settings.py` |
-| Backup / restore CLI | `facturador/backup.py`, `facturador/restore.py` | `uv run pytest tests/test_backup.py` |
+| Seed backup (FAC-44) / restore CLI | `facturador/seed_backup.py`, `facturador/backup.py`, `facturador/restore.py` | `uv run pytest tests/test_seed_backup.py tests/test_backup.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/migrations/`, `facturador/db.py` | `uv run pytest tests/test_migrations.py` then full `uv run pytest` (many modules touch the DB) |
 | Docker / launchers / profiles | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `facturador/profile.py`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py tests/test_profile.py tests/test_profile_isolation.py`; `docker build -t facturador:ci .` if image/entrypoint changed |
 | Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md`, `docs/adr/` | None required; spot-check links and Mermaid diagrams |

@@ -82,11 +82,12 @@ the backend — no hot switching. See setup docs and [`README.md`](README.md).
   [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
 - **App config:** emisor fields, punto de venta, and S3 backup settings live in
   the **profile SQLite** and are edited via `/configuracion` — they travel
-  inside encrypted backups, not in `.env`. Emisor environment is not user-
-  selectable (profile-local; `ambiente` is a seal).
-- **Backups:** `facturador.backup --env homo|prod` backs up one profile. On a
-  fresh machine with no DB yet, `facturador.restore --latest` needs
-  `--bucket`/`--prefix` on the CLI.
+  inside the encrypted **seed** (FAC-44), not in `.env`. Emisor environment is
+  not user-selectable (profile-local; `ambiente` is a seal).
+- **Backups (seed):** `facturador.backup --env homo|prod` writes
+  `backups/seed.age` (config + manifest, age-encrypted to `recipients.txt`).
+  ARCA is authoritative for the register; DB/PDFs are not in the bundle.
+  S3 upload is FAC-45; rebuild-from-ARCA is FAC-65.
 - **Certificates:** `secrets/cert.crt` and `secrets/cert.key` under the active
   profile (mode 400/600). Private keys have **no passphrase** (product
   decision). All gitignored. Paths resolve via `ProfilePaths`

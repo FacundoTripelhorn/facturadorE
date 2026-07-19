@@ -140,19 +140,18 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
   desde otra máquina): restaurar el último backup del perfil Producción antes
   de emitir. Forzar (`force_desync`) solo si se entiende exactamente por qué
   difiere.
-- **Backups.** El estado de un perfil es `data/` + `secrets/`. Hacer backup
-  después de cada emisión: nativo
-  `uv run python -m facturador.backup --env prod`; Docker
+- **Backups (seed).** ARCA es autoritativo; la DB y los PDFs son regenerables.
+  El backup es un seed de configuración cifrado con `age` a las claves de
+  `backups/recipients.txt` (sin DB, sin secretos, sin comprobantes). Nativo:
+  `uv run python -m facturador.backup --env prod`; Docker:
   `uv run python -m facturador.backup --root ~/facturador/profiles/prod`.
-  Para snapshots de la DB usar `sqlite3 .backup`, nunca copiar el archivo en
-  caliente. Si el backup sale de la máquina (p. ej. S3), **cifrar del lado
-  del cliente** antes de subir: el tarball contiene la clave fiscal.
-- **Una sola máquina emite.** Si se usan varias computadoras, una es la
-  primaria; en la secundaria se restaura el backup antes de emitir. Nunca
-  emitir desde dos copias en paralelo (el chequeo de registro desactualizado
-  ataja los olvidos, pero no es excusa para intentarlo).
+  Escribe `backups/seed.age` (overwrite). Upload S3 y rebuild del registro:
+  FAC-45 / FAC-65.
+- **Una sola máquina emite.** Cada máquina tiene su propio cert e identidad
+  `age` (FAC-64). Tras bootstrap, el registro se sincroniza desde ARCA — no
+  se copia la DB por S3. Nunca emitir desde dos copias en paralelo.
 - **La clave privada es la firma fiscal.** Permisos `400`, nunca en el repo ni
-  en backups sin cifrar. Si se sospecha filtración, revocar el certificado en
+  en el seed. Si se sospecha filtración, revocar el certificado en
   "Administración de Certificados Digitales" y emitir uno nuevo.
 - **Eventos de ARCA.** Las respuestas de WSFEX pueden traer bloques `Events`
   (mantenimientos, cambios normativos). La app los loguea como warnings:

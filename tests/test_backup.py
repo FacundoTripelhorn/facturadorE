@@ -188,10 +188,10 @@ def test_db_vieja_sin_tabla_settings_deja_el_backup_solo_local(perfil):
     assert backup_s3_settings(None) == ("", "facturador")
 
 
-def test_backup_rechaza_una_raiz_sin_secrets(tmp_path, capsys):
-    """Review PR #8: correr contra un directorio que no es la raíz de un
-    perfil debe fallar fuerte, no producir un backup vacío en silencio."""
+def test_backup_rechaza_una_raiz_sin_db(tmp_path, capsys):
+    """FAC-44: el seed necesita la DB del perfil; sin ella falla en claro."""
     from facturador.backup import main
 
     assert main(["--root", str(tmp_path)]) == 1
-    assert "no parece la raíz de un perfil" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "No hay DB" in err or "no existe" in err

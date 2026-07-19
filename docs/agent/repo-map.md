@@ -38,7 +38,7 @@ flowchart TB
     ARCA["facturador/arca/<br/>WSAA + WSFEX SOAP"]
     WEB["facturador/web/<br/>Jinja + HTMX routes"]
     PDF["facturador/pdf/<br/>WeasyPrint + QR"]
-    BAK["facturador/backup.py<br/>facturador/restore.py"]
+    BAK["facturador/seed_backup.py<br/>backup.py · restore.py"]
   end
 
   subgraph ui["UI assets"]
@@ -245,7 +245,8 @@ which one operates; PV selection when more than one is enabled. See
 | Container entrypoint (profile normalize + secrets copy) | `docker/entrypoint.sh` |
 | Process supervisor + chooser + switch | `facturador/launcher/` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
-| Encrypted backup/restore CLI | `facturador/backup.py`, `facturador/restore.py` |
+| Encrypted seed backup (FAC-44) | `facturador/seed_backup.py`, `facturador/backup.py` |
+| Restore CLI (legacy until FAC-65) | `facturador/restore.py` |
 | Homologación setup walkthrough | `docs/setup-homologacion.md` |
 | Production setup walkthrough | `docs/setup-produccion.md` |
 | Config / profile tests | `tests/test_config.py`, `tests/test_profile.py`, `tests/test_settings.py` |

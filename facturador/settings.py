@@ -2,10 +2,10 @@
 
 La app es dueña de su configuración: los datos del emisor que van al PDF,
 sus puntos de venta y la config de backups se editan desde la página
-Configuración y viajan en el backup cifrado junto con el resto del estado.
-En el ``.env`` de bootstrap queda SOLO lo que no puede vivir en la DB:
-``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1) y
-``FACTURADOR_PORT``.
+Configuración y viajan en el **seed** cifrado (FAC-44) — no en un dump
+de la DB. En el ``.env`` de bootstrap queda SOLO lo que no puede vivir
+en la DB: ``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1)
+y ``FACTURADOR_PORT``.
 
 El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001 /
 FAC-26): la DB entera pertenece a un solo ambiente, así que acá no se

@@ -18,8 +18,8 @@ Qué incluye:
 - **SQLite** como única fuente de verdad local; sin servicios externos.
 - **Empaquetado Docker** (misma imagen para Windows y macOS) con el puerto
   publicado solo en `127.0.0.1`, y launchers de doble click.
-- **Backups cifrados** del lado del cliente ([age](https://age-encryption.org))
-  con upload opcional a S3.
+- **Seed cifrado** del lado del cliente ([age](https://age-encryption.org)):
+  solo la config que ARCA no puede reproducir; DB/PDFs se regeneran.
 
 > El diseño completo, las decisiones tomadas y el mapeo campo por campo contra
 > WSFEX están documentados en [`docs/design.md`](docs/design.md).
@@ -122,7 +122,7 @@ Para desarrollo o scripts sin el chooser:
 La app es dueña de su configuración: casi todo se edita desde la página
 **Configuración** de la UI y se guarda en la DB del ambiente activo (datos del
 emisor que van al PDF, punto de venta, bucket S3 de backups), así viaja
-dentro del backup cifrado como parte del estado.
+dentro del seed cifrado (FAC-44).
 
 El ambiente lo elige el **launcher nativo** (Homologación / Producción) o, en
 Docker, `ARCA_ENV` en `<FACTURADOR_HOME>/.env` al arrancar el contenedor.
@@ -182,35 +182,34 @@ ARCA_ENV=homo uv run python scripts/check_wsfex.py    # FEXDummy + params
 ARCA_ENV=homo uv run python scripts/authorize_homo.py # emisión de prueba
 ```
 
-## Backups
+## Backups (seed)
 
-El estado del **ambiente activo** (DB — configuración incluida — + PDFs +
-secretos) se respalda cifrado del lado del cliente con age y, opcionalmente,
-se sube a un bucket S3 privado (se configura en la página Configuración). La
-passphrase es del usuario y no vive en ningún lado. Cada ambiente tiene sus
-propios backups. Correr en el **host** después de emitir (no dentro del
-contenedor):
+**ARCA es el ledger autoritativo.** La DB local y los PDFs son regenerables;
+el backup que sale de la máquina es un **seed** de configuración (emisores,
+CUIT, ambiente, PV/tipos, cliente default / UI, versión de esquema +
+manifiesto), cifrado con [age](https://age-encryption.org) a las claves
+públicas listadas en `backups/recipients.txt` del perfil (una por máquina).
+No incluye DB, certificados, claves privadas ni datos por comprobante.
 
 ```bash
+# Una clave pública age por línea (comentar con #). Ver FAC-64 para el
+# aprovisionamiento por máquina.
+echo "age1..." >> "$(perfil)/backups/recipients.txt"
+
 # Launcher nativo: --env resuelve el perfil en el app-data del SO
 uv run python -m facturador.backup --env homo
 
-# Docker (recomendado): apuntar a la raíz montada en el host
+# Docker: apuntar a la raíz montada en el host
 uv run python -m facturador.backup --root ~/facturador/profiles/homo
-
-uv run python -m facturador.restore --latest --bucket mi-bucket \
-  --root ~/facturador/profiles/homo   # o --env homo en nativo
 ```
 
-`--env` y `--root` son excluyentes: el primero usa el perfil oculto del
-launcher nativo; el segundo es obligatorio cuando los datos viven bajo
-`FACTURADOR_HOME/profiles/<env>/` (layout Docker). El bucket del backup sale
-de la DB (dentro del propio backup); el restore con `--latest` lo recibe por
-`--bucket` porque en una máquina nueva todavía no hay DB.
+El CLI escribe `backups/seed.age` (nombre fijo, overwrite). La clave lógica
+en el bucket del usuario es `{prefix}/{cuit}/{env}/seed.age` (upload: FAC-45;
+versioning del bucket como red de seguridad). El registro de comprobantes se
+reconstruye desde ARCA (FAC-65), no desde S3.
 
-Nunca correr dos copias emitiendo en paralelo: el chequeo de DB desactualizada
-contra ARCA bloquea la emisión si el registro local quedó viejo, pero el orden
-primaria → backup → restore → secundaria es responsabilidad del usuario.
+Nunca emitir desde dos máquinas en paralelo: el chequeo FAC-48 bloquea si el
+registro local quedó detrás de ARCA.
 
 ## Desarrollo
 
@@ -235,7 +234,8 @@ facturador/
   service.py    # lógica de dominio: numeración, idempotencia, estados
   config.py     # arranque: ambiente inyectado, certificados del perfil
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
-  backup.py     # backup cifrado (age → S3); restore.py es el inverso
+  backup.py     # CLI del seed cifrado (FAC-44); seed_backup.py arma/cifra
+  restore.py    # restore legacy; rebuild desde ARCA es FAC-65
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
@@ -256,8 +256,8 @@ docs/
 - El token/sign del WSAA y el CMS firmado nunca se loguean.
 - Homologación y Producción no se cruzan: cada proceso backend usa un solo
   ambiente inmutable; URLs y certificados salen del mismo perfil.
-- Los backups se cifran del lado del cliente **antes** de salir de la máquina;
-  el tarball con la clave fiscal nunca toca el disco ni S3 en claro.
+- El seed se cifra del lado del cliente con `age` (recipients por máquina)
+  **antes** de salir; DB, PDFs y la clave fiscal **no** viajan en el bundle.
 
 ## Licencia
 
