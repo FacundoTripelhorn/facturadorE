@@ -246,6 +246,7 @@ which one operates; PV selection when more than one is enabled. See
 | Process supervisor + chooser + switch | `facturador/launcher/` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Encrypted seed backup (FAC-44) | `facturador/seed_backup.py`, `facturador/backup.py` |
+| S3 seed adapter (FAC-45: `seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
 | Restore CLI (legacy until FAC-65) | `facturador/restore.py` |
 | Homologación setup walkthrough | `docs/setup-homologacion.md` |
 | Production setup walkthrough | `docs/setup-produccion.md` |
