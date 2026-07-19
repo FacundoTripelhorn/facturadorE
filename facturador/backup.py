@@ -196,8 +196,8 @@ def _environment_from_db(conn: sqlite3.Connection) -> str:
     if rows:
         return str(rows[0][0])
     raise BackupError(
-        "No hay emisores en la DB; no se puede determinar el ambiente del seed. "
-        "Usar --env homo|prod."
+        "Perfil incompleto: no hay emisores configurados. "
+        "Completar el setup antes de respaldar el seed."
     )
 
 

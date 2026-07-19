@@ -278,3 +278,70 @@ def test_serialize_envelope_es_json_estable(perfil_listo):
     # Bytes estables + newline final; apto para checksum/diff.
     assert raw.endswith(b"\n")
     assert json.loads(raw)["format"] == "facturador.seed"
+
+
+def test_guardia_permite_texto_libre_con_marcadores_inocuos(perfil_listo):
+    """Codex P2: no rechazar domicilio/descripcion que mencionen cert.key."""
+    paths, conn = perfil_listo
+    seed = assemble_seed(conn, environment="homo")
+    seed["emisores"][0]["domicilio"] = "Calle cert.key 123 — ver last_cmp"
+    seed["default_client"]["descripcion_default"] = (
+        "No incluir raw_request ni cbte_nro en el PDF"
+    )
+    envelope = build_envelope(
+        seed, build_manifest(seed, device_id=ensure_device_id(paths))
+    )
+    assert_seed_has_no_secrets(envelope)  # no debe fallar
+
+
+def test_guardia_rechaza_clave_privada_pem_y_claves_extra(perfil_listo):
+    paths, conn = perfil_listo
+    seed = assemble_seed(conn, environment="homo")
+    seed["emisores"][0]["domicilio"] = (
+        "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----"
+    )
+    envelope = build_envelope(
+        seed, build_manifest(seed, device_id=ensure_device_id(paths))
+    )
+    with pytest.raises(SeedBackupError, match="material privado"):
+        assert_seed_has_no_secrets(envelope)
+
+    seed = assemble_seed(conn, environment="homo")
+    dirty = dict(seed)
+    dirty["cbte_nro"] = 99
+    envelope = build_envelope(
+        dirty, build_manifest(seed, device_id="dev")
+    )
+    with pytest.raises(SeedBackupError, match="no permitidas"):
+        assert_seed_has_no_secrets(envelope)
+
+
+def test_create_encrypted_seed_rechaza_perfil_sin_emisor(tmp_path):
+    """Setup incompleto: CUIT sellado no basta; hace falta emisor activo."""
+    paths = ProfilePaths(root=tmp_path / "perfil")
+    paths.ensure_layout()
+    conn = connect(paths.db)
+    seal_fiscal_cuit(conn, TEST_CUIT)
+    recipients_path(paths).write_text(
+        "age1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SeedBackupError, match="Perfil incompleto"):
+        create_encrypted_seed(conn, paths, environment="homo")
+    conn.close()
+
+
+def test_cli_backup_falla_sin_emisores_sin_sugerir_env(tmp_path, capsys):
+    paths = ProfilePaths(root=tmp_path / "perfil")
+    paths.ensure_layout()
+    conn = connect(paths.db)
+    seal_fiscal_cuit(conn, TEST_CUIT)
+    conn.close()
+    recipients_path(paths).write_text(
+        "age1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+        encoding="utf-8",
+    )
+    assert backup_main(["--root", str(paths.root)]) == 1
+    err = capsys.readouterr().err
+    assert "Perfil incompleto" in err
+    assert "--env" not in err

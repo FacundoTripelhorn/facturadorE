@@ -284,26 +284,138 @@ def serialize_envelope(envelope: Mapping[str, Any]) -> bytes:
     ).encode("utf-8") + b"\n"
 
 
+# Forma del envelope (allowlist). Rechaza claves de DB/comprobantes/secretos
+# por estructura — no por substring en texto libre del usuario.
+_ENVELOPE_KEYS = frozenset({"format", "format_version", "seed", "manifest"})
+_SEED_KEYS = frozenset(
+    {
+        "schema_version",
+        "environment",
+        "fiscal_cuit",
+        "emisores",
+        "active_emisor_id",
+        "comprobante_tipos",
+        "default_client",
+        "ui",
+    }
+)
+_EMISOR_KEYS = frozenset(
+    {
+        "id",
+        "razon_social",
+        "domicilio",
+        "iibb",
+        "inicio_actividades",
+        "condicion_iva",
+        "ambiente",
+        "puntos_venta",
+    }
+)
+_CLIENT_KEYS = frozenset(
+    {
+        "id",
+        "razon_social",
+        "domicilio",
+        "pais_dst",
+        "cuit_pais",
+        "id_impositivo",
+        "moneda_default",
+        "incoterms_default",
+        "idioma_default",
+        "forma_pago_default",
+        "descripcion_default",
+    }
+)
+_UI_KEYS = frozenset(
+    {"backup_s3_bucket", "backup_s3_prefix", "pdf_render_version"}
+)
+_MANIFEST_KEYS = frozenset(
+    {"schema_version", "device_id", "timestamp", "checksum"}
+)
+
+# Solo marcadores de material privado real (PEM / age identity). No listar
+# nombres de archivo ni columnas de factura: un domicilio puede contenerlos.
+_SECRET_MARKERS = (
+    "-----BEGIN PRIVATE KEY-----",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "-----BEGIN EC PRIVATE KEY-----",
+    "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+    "AGE-SECRET-KEY-",
+)
+
+
+def _require_exact_keys(
+    obj: Mapping[str, Any], allowed: frozenset[str], *, where: str
+) -> None:
+    keys = frozenset(obj)
+    extra = keys - allowed
+    if extra:
+        raise SeedBackupError(
+            f"El seed tiene claves no permitidas en {where}: "
+            f"{', '.join(sorted(extra))}."
+        )
+    missing = allowed - keys
+    if missing:
+        raise SeedBackupError(
+            f"El seed carece de claves obligatorias en {where}: "
+            f"{', '.join(sorted(missing))}."
+        )
+
+
+def _assert_no_secret_markers(value: object, *, where: str) -> None:
+    """Recorre valores string buscando PEM/age identity; no escanea substrings
+    de nombres de archivo o columnas (texto libre del emisor/cliente)."""
+    if isinstance(value, str):
+        for marker in _SECRET_MARKERS:
+            if marker in value:
+                raise SeedBackupError(
+                    f"El seed contiene material privado en {where}."
+                )
+        return
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            _assert_no_secret_markers(child, where=f"{where}.{key}")
+        return
+    if isinstance(value, list):
+        for idx, child in enumerate(value):
+            _assert_no_secret_markers(child, where=f"{where}[{idx}]")
+
+
 def assert_seed_has_no_secrets(envelope: Mapping[str, Any]) -> None:
-    """Guardia de pruebas/CI: el plaintext no debe oler a material privado."""
-    blob = json.dumps(envelope, ensure_ascii=False).lower()
-    forbidden = (
-        "begin private key",
-        "begin rsa private key",
-        "begin age encrypted",
-        "age-secret-key-",
-        "cert.key",
-        "raw_request",
-        "raw_response",
-        "last_cmp",
-        "cbte_nro",
-        "facturador.db",
-    )
-    for token in forbidden:
-        if token in blob:
-            raise SeedBackupError(
-                f"El seed contiene material prohibido ({token!r})."
-            )
+    """Valida forma del envelope y ausencia de material privado real.
+
+    Allowlist de claves (sin invoices/raw_*/secrets) + marcadores PEM/age.
+    No rechaza texto libre que mencione p.ej. ``cert.key`` o ``last_cmp``.
+    """
+    _require_exact_keys(envelope, _ENVELOPE_KEYS, where="envelope")
+    seed = envelope["seed"]
+    manifest = envelope["manifest"]
+    if not isinstance(seed, Mapping) or not isinstance(manifest, Mapping):
+        raise SeedBackupError("Envelope inválido: seed/manifest deben ser objetos.")
+
+    _require_exact_keys(seed, _SEED_KEYS, where="seed")
+    _require_exact_keys(manifest, _MANIFEST_KEYS, where="manifest")
+
+    emisores = seed["emisores"]
+    if not isinstance(emisores, list):
+        raise SeedBackupError("seed.emisores debe ser una lista.")
+    for idx, emisor in enumerate(emisores):
+        if not isinstance(emisor, Mapping):
+            raise SeedBackupError(f"seed.emisores[{idx}] inválido.")
+        _require_exact_keys(emisor, _EMISOR_KEYS, where=f"seed.emisores[{idx}]")
+
+    client = seed["default_client"]
+    if client is not None:
+        if not isinstance(client, Mapping):
+            raise SeedBackupError("seed.default_client inválido.")
+        _require_exact_keys(client, _CLIENT_KEYS, where="seed.default_client")
+
+    ui = seed["ui"]
+    if not isinstance(ui, Mapping):
+        raise SeedBackupError("seed.ui inválido.")
+    _require_exact_keys(ui, _UI_KEYS, where="seed.ui")
+
+    _assert_no_secret_markers(envelope, where="envelope")
 
 
 def encrypt_to_recipients(
@@ -398,9 +510,23 @@ def create_encrypted_seed(
     El envelope en claro NO se escribe a disco; solo el ciphertext.
     """
     seed = assemble_seed(conn, environment=environment)
+    # Setup incompleto: el seed solo tiene sentido con identidad fiscal +
+    # al menos un emisor activo (FAC-35 ready-ish). No inventar un seed a
+    # medias ni sugerir workarounds de CLI.
     if not seed.get("fiscal_cuit"):
         raise SeedBackupError(
-            "El perfil no tiene CUIT fiscal sellado; no se puede armar el seed."
+            "Perfil incompleto: falta el CUIT fiscal sellado. "
+            "Completar el setup antes de respaldar."
+        )
+    if not seed.get("emisores"):
+        raise SeedBackupError(
+            "Perfil incompleto: no hay emisores configurados. "
+            "Completar el setup antes de respaldar."
+        )
+    if not seed.get("active_emisor_id"):
+        raise SeedBackupError(
+            "Perfil incompleto: no hay emisor activo. "
+            "Completar el setup antes de respaldar."
         )
     device_id = ensure_device_id(paths)
     manifest = build_manifest(seed, device_id=device_id)
