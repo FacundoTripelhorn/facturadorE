@@ -14,7 +14,8 @@ Escrituras por lote (sin resume)::
 
 1. Fetch del lote **fuera** de cualquier transacción (red nunca dentro).
 2. Transacción corta: insert / gap → COMMIT (milisegundos).
-3. Validación ``local_max == FEXGetLast_CMP`` **después** del último lote.
+3. Validación ``local_max == FEXGetLast_CMP`` **después** del último lote
+   (reconsulta fresca a ARCA, no el valor planificado al inicio).
 
 Un fallo a mitad de camino deja lotes previos commitidos. Ese registro
 parcial tiene ``local_max < arca_last`` → el guard FAC-48 bloquea emisión
@@ -556,8 +557,17 @@ def reconstruct_register(
 
         _run_write_txn(conn, _write_batch)
 
-    # Validación final (después del último lote).
-    for target, _start, _end, arca_last in planned:
+    # Validación final (después del último lote): reconsultar FEXGetLast_CMP
+    # para no reportar éxito si otra máquina emitió durante el rebuild.
+    for target, _start, _end, _planned_last in planned:
+        try:
+            arca_last = wsfex.get_last_cmp(target.punto_venta, target.cbte_tipo)
+        except (WsfexError, httpx.HTTPError, OSError) as exc:
+            raise ReconstructError(
+                f"No se pudo reconsultar FEXGetLast_CMP para PV "
+                f"{target.punto_venta} tipo {target.cbte_tipo}: {exc}"
+            ) from exc
+        report.last_cmp[(target.punto_venta, target.cbte_tipo)] = arca_last
         local_max = repo.max_authorized_cbte_nro(
             conn, target.punto_venta, target.cbte_tipo
         )

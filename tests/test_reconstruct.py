@@ -316,6 +316,33 @@ def test_last_number_gap_fails_final_validation(profile_wsfex):
         )
 
 
+def test_final_validation_requeries_arca_last(profile_wsfex):
+    """Si ARCA avanza durante el rebuild, la validación final lo detecta."""
+    _profile, conn, wsfex, arca = profile_wsfex
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=910)
+    calls = {"n": 0}
+    real_last = wsfex.get_last_cmp
+
+    def advancing_last(pv: int, tipo: int) -> int:
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            arca.seed_issued(tipo=19, pv=1, nro=2, arca_id=911)
+        return real_last(pv, tipo)
+
+    wsfex.get_last_cmp = advancing_last  # type: ignore[method-assign]
+    with pytest.raises(ReconstructError, match="Validación post-rebuild"):
+        reconstruct_register(
+            conn,
+            wsfex,
+            mode=ReconstructMode.FULL,
+            targets=[PvTipoTarget(1, 19)],
+            snapshot=_snapshot(conn),
+            retries=1,
+            retry_sleep_s=0,
+        )
+    assert calls["n"] >= 2
+
+
 def test_catch_up_appends_only_missing(profile_wsfex):
     profile, conn, wsfex, arca = profile_wsfex
     arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=401)
@@ -500,6 +527,71 @@ def test_launcher_restore_refuses_when_lock_held(
         assert code == 1
     finally:
         lock.release()
+
+
+def test_launcher_restore_refuses_displaced_orphan_backend(
+    profile_wsfex, tmp_path, monkeypatch
+):
+    """Flock libre + /health OK (launcher muerto): no wipe destructivo."""
+    import socket
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from facturador.constants import ArcaEnvironment
+    from facturador.launcher.lock import ProfileLock, read_lock_holder
+    from facturador.launcher.restore_flow import run_launcher_restore
+
+    profile, _conn, _wsfex, _arca = profile_wsfex
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        orphan_port = sock.getsockname()[1]
+
+    class _HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            body = b'{"status":"ok","environment":"homo"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", orphan_port), _HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        seed = ProfileLock(profile.paths.launcher_lock)
+        seed.acquire(port=orphan_port, environment="homo")
+        seed.release()
+        assert read_lock_holder(profile.paths.launcher_lock) is not None
+
+        restore_calls: list[object] = []
+
+        def _no_restore(*args: object, **kwargs: object) -> object:
+            restore_calls.append((args, kwargs))
+            raise AssertionError("no debería restaurar con huérfano sano")
+
+        monkeypatch.setattr(
+            "facturador.launcher.restore_flow.EnvironmentProfile.resolve",
+            lambda env, app_data_root=None: profile,
+        )
+        monkeypatch.setattr(
+            "facturador.launcher.restore_flow.run_restore", _no_restore
+        )
+        code = run_launcher_restore(
+            ArcaEnvironment.HOMO,
+            identity_path=tmp_path / "missing-identity.txt",
+        )
+        assert code == 1
+        assert restore_calls == []
+        leftover = read_lock_holder(profile.paths.launcher_lock)
+        assert leftover is not None
+        assert leftover.port == orphan_port
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_api_catch_up_unblocks_issuance(api, arca):
