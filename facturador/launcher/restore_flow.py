@@ -6,13 +6,19 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from ..certs import CertificateError
 from ..constants import ArcaEnvironment
+from ..fiscal_identity import FiscalIdentityError
 from ..profile import EnvironmentProfile, ProfileError
 from ..reconstruct import ReconstructError
 from ..restore import run_restore
 from ..seed_backup import SeedBackupError, seed_archive_path
 from ..seed_import import SeedIdentityError
 from .lock import ProfileLock, ProfileLockHeld
+
+# Puerto sentinel solo para tomar el flock mientras corre el restore
+# (no arranca un backend). Distinto de cualquier listen real.
+_RESTORE_LOCK_PORT = 1
 
 
 def run_launcher_restore(
@@ -35,7 +41,9 @@ def run_launcher_restore(
 
     lock = ProfileLock(profile.paths.launcher_lock)
     try:
-        lock.acquire(port=1, environment=environment.value)
+        lock.acquire(
+            port=_RESTORE_LOCK_PORT, environment=environment.value
+        )
     except ProfileLockHeld as exc:
         print_fn(
             "ERROR: el backend de este perfil está en marcha. "
@@ -59,7 +67,13 @@ def run_launcher_restore(
             f"{len(report.gaps)} huecos conocidos."
         )
         return 0
-    except (SeedBackupError, SeedIdentityError, ReconstructError) as exc:
+    except (
+        SeedBackupError,
+        SeedIdentityError,
+        ReconstructError,
+        FiscalIdentityError,
+        CertificateError,
+    ) as exc:
         print_fn(f"ERROR: {exc}", file=sys.stderr)
         return 1
     finally:

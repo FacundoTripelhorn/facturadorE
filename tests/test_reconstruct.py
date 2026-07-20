@@ -16,9 +16,9 @@ from facturador.migrations import latest_version
 from facturador.profile import EnvironmentProfile
 from facturador.reconstruct import (
     ProfileSnapshot,
-    PvTipoTarget,
     ReconstructError,
     ReconstructMode,
+    PvTipoTarget,
     profile_snapshot_from_conn,
     reconstruct_register,
 )
@@ -32,10 +32,12 @@ from facturador.seed_backup import (
 from facturador.seed_import import (
     SeedIdentityError,
     apply_seed,
+    assert_profile_ready,
     parse_envelope,
     validate_seed_identity,
 )
 from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
+from facturador.setup import SetupState, reconcile_setup_state
 from tests.arca_fake import FakeArca, FakeWsaa
 from tests.conftest import EMISOR_PRUEBA, TEST_CUIT, install_test_cert_pair
 
@@ -59,6 +61,7 @@ def profile_wsfex(tmp_path, test_cert_and_key):
         conn,
         conn.execute("SELECT id FROM emisores LIMIT 1").fetchone()["id"],
     )
+    assert reconcile_setup_state(profile, conn) is SetupState.READY
     arca = FakeArca()
     wsfex = WsfexClient(
         Config(env=ArcaEnvironment.HOMO, paths=profile.paths),
@@ -163,6 +166,7 @@ def test_full_rebuild_single_transaction(profile_wsfex):
         snapshot=_snapshot(conn),
         retries=1,
         retry_sleep_s=0,
+        batch_size=2,
     )
     assert report.inserted == 3
     assert report.gaps == []
@@ -200,12 +204,11 @@ def test_rebuild_records_known_gaps(profile_wsfex):
     assert [r["cbte_nro"] for r in gap_rows] == [2]
 
 
-def test_transient_error_aborts_and_rolls_back(profile_wsfex):
+def test_transient_error_aborts_after_prepare(profile_wsfex):
+    """Fetch failure aborts; prepare (clear) may already have committed."""
     _profile, conn, wsfex, arca = profile_wsfex
     arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=301)
     arca.seed_issued(tipo=19, pv=1, nro=2, arca_id=302)
-    before = conn.execute("SELECT COUNT(*) AS n FROM invoices").fetchone()["n"]
-
     arca.get_cmp_mode = "error"
     with pytest.raises(ReconstructError, match="no respondió"):
         reconstruct_register(
@@ -217,8 +220,100 @@ def test_transient_error_aborts_and_rolls_back(profile_wsfex):
             retries=2,
             retry_sleep_s=0,
         )
-    after = conn.execute("SELECT COUNT(*) AS n FROM invoices").fetchone()["n"]
-    assert after == before
+    # Clear ya corrió; sin inserts → registro vacío (FAC-48 bloquearía).
+    assert conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 0
+
+
+def test_partial_batch_then_rerun_succeeds(profile_wsfex):
+    """Lote 1 commitido + fallo en lote 2 → re-run full deja registro OK."""
+    _profile, conn, wsfex, arca = profile_wsfex
+    for n in (1, 2, 3, 4):
+        arca.seed_issued(tipo=19, pv=1, nro=n, arca_id=700 + n)
+
+    calls = {"n": 0}
+    real_get = wsfex.get_cmp_record
+
+    def flaky(tipo, pv, nro):
+        calls["n"] += 1
+        # Tras 2 fetches exitosos (lote batch_size=2), fallar el 3º.
+        if calls["n"] == 3:
+            raise httpx.ConnectTimeout("boom mid-rebuild")
+        return real_get(tipo, pv, nro)
+
+    wsfex.get_cmp_record = flaky  # type: ignore[method-assign]
+    with pytest.raises(ReconstructError):
+        reconstruct_register(
+            conn,
+            wsfex,
+            mode=ReconstructMode.FULL,
+            targets=[PvTipoTarget(1, 19)],
+            snapshot=_snapshot(conn),
+            retries=1,
+            retry_sleep_s=0,
+            batch_size=2,
+        )
+    # Lote 1 (nros 1–2) quedó; FAC-48 vería local_max=2 < arca_last=4.
+    assert (
+        conn.execute(
+            "SELECT COUNT(*) FROM invoices WHERE status='authorized'"
+        ).fetchone()[0]
+        == 2
+    )
+
+    wsfex.get_cmp_record = real_get  # type: ignore[method-assign]
+    report = reconstruct_register(
+        conn,
+        wsfex,
+        mode=ReconstructMode.FULL,
+        targets=[PvTipoTarget(1, 19)],
+        snapshot=_snapshot(conn),
+        retries=1,
+        retry_sleep_s=0,
+        batch_size=2,
+    )
+    assert report.inserted == 4
+    nros = [
+        r["cbte_nro"]
+        for r in conn.execute(
+            "SELECT cbte_nro FROM invoices ORDER BY cbte_nro"
+        )
+    ]
+    assert nros == [1, 2, 3, 4]
+
+
+def test_abort_on_any_gap(profile_wsfex):
+    _profile, conn, wsfex, arca = profile_wsfex
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=801)
+    arca.seed_issued(tipo=19, pv=1, nro=3, arca_id=803)
+    arca.last_cmp[(1, 19)] = 3
+    with pytest.raises(ReconstructError, match="abort_on_any_gap"):
+        reconstruct_register(
+            conn,
+            wsfex,
+            mode=ReconstructMode.FULL,
+            targets=[PvTipoTarget(1, 19)],
+            snapshot=_snapshot(conn),
+            retries=1,
+            retry_sleep_s=0,
+            abort_on_any_gap=True,
+        )
+
+
+def test_last_number_gap_fails_final_validation(profile_wsfex):
+    """last_CMP=N pero FEXGetCMP(N)→1521: validación final aborta."""
+    _profile, conn, wsfex, arca = profile_wsfex
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=901)
+    arca.last_cmp[(1, 19)] = 2  # ARCA dice 2, pero 2 no existe
+    with pytest.raises(ReconstructError, match="Validación post-rebuild"):
+        reconstruct_register(
+            conn,
+            wsfex,
+            mode=ReconstructMode.FULL,
+            targets=[PvTipoTarget(1, 19)],
+            snapshot=_snapshot(conn),
+            retries=1,
+            retry_sleep_s=0,
+        )
 
 
 def test_catch_up_appends_only_missing(profile_wsfex):
@@ -238,10 +333,11 @@ def test_catch_up_appends_only_missing(profile_wsfex):
     arca.seed_issued(tipo=19, pv=1, nro=4, arca_id=404)
 
     report = catch_up_register(
-        conn, wsfex, profile, retries=1, abort_on_any_gap=False
+        profile, wsfex, retries=1, abort_on_any_gap=False
     )
     assert report.mode is ReconstructMode.CATCH_UP
     assert report.inserted == 2
+    # Dedicated conn wrote; re-read via fixture conn.
     nros = [
         r["cbte_nro"]
         for r in conn.execute(
@@ -267,6 +363,16 @@ def test_identity_rejects_wrong_cuit(profile_wsfex):
         validate_seed_identity(seed, manifest, profile)
 
 
+def test_identity_rejects_seed_vs_sealed_mismatch(profile_wsfex):
+    profile, conn, _wsfex, _arca = profile_wsfex
+    envelope = _seed_envelope(cuit="20999999991")
+    # Bypass cert check path by only comparing sealed via conn after
+    # forcing seed cuit that != sealed (cert also rejects first).
+    seed, manifest = parse_envelope(envelope)
+    with pytest.raises(SeedIdentityError, match="CUIT"):
+        validate_seed_identity(seed, manifest, profile, conn=conn)
+
+
 def test_identity_rejects_bad_checksum(profile_wsfex):
     profile, _conn, _wsfex, _arca = profile_wsfex
     envelope = _seed_envelope()
@@ -287,12 +393,61 @@ def test_identity_rejects_future_schema(profile_wsfex):
         validate_seed_identity(seed, manifest, profile)
 
 
+def test_parse_envelope_missing_seed_key():
+    from facturador.seed_backup import SeedBackupError
+
+    with pytest.raises(SeedBackupError, match="falta la clave"):
+        parse_envelope(
+            {
+                "format": "facturador.seed",
+                "format_version": 1,
+                "manifest": {
+                    "schema_version": 1,
+                    "device_id": "x",
+                    "timestamp": "2026-01-01T00:00:00+00:00",
+                    "checksum": "sha256:" + ("a" * 64),
+                },
+            }
+        )
+
+
+def test_unsealed_profile_rejected_for_apply(tmp_path, test_cert_and_key):
+    """apply_seed sin sello falla en claro (no with-conn commit mid-txn)."""
+    profile = EnvironmentProfile.for_testing(
+        ArcaEnvironment.HOMO, tmp_path / "unsealed"
+    )
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+    conn = connect(profile.paths.db)
+    try:
+        envelope = _seed_envelope()
+        seed, _manifest = parse_envelope(envelope)
+        with pytest.raises(SeedIdentityError, match="sellado"):
+            apply_seed(conn, seed)
+    finally:
+        conn.close()
+
+
+def test_assert_profile_ready_blocks_incomplete(tmp_path, test_cert_and_key):
+    profile = EnvironmentProfile.for_testing(
+        ArcaEnvironment.HOMO, tmp_path / "incomplete"
+    )
+    cert_pem, key_pem = test_cert_and_key
+    install_test_cert_pair(profile.paths, cert_pem, key_pem)
+    conn = connect(profile.paths.db)
+    try:
+        with pytest.raises(SeedIdentityError, match="setup"):
+            assert_profile_ready(profile, conn)
+    finally:
+        conn.close()
+
+
 def test_restore_apply_seed_then_rebuild(profile_wsfex):
-    """Validate + apply_seed + rebuild in one transaction."""
+    """Validate + apply_seed + rebuild in batched writes."""
     profile, conn, wsfex, arca = profile_wsfex
     envelope = _seed_envelope()
     seed, manifest = parse_envelope(envelope)
-    validate_seed_identity(seed, manifest, profile)
+    validate_seed_identity(seed, manifest, profile, conn=conn)
     arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=501, cliente="From ARCA")
 
     report = reconstruct_register(
@@ -321,6 +476,30 @@ def test_restore_apply_seed_then_rebuild(profile_wsfex):
     assert emisor["razon_social"] == "Emisor Seed SA"
     inv = conn.execute("SELECT cliente, cae FROM invoices").fetchone()
     assert inv["cliente"] == "From ARCA"
+
+
+def test_launcher_restore_refuses_when_lock_held(
+    profile_wsfex, tmp_path, monkeypatch
+):
+    from facturador.constants import ArcaEnvironment
+    from facturador.launcher.lock import ProfileLock
+    from facturador.launcher.restore_flow import run_launcher_restore
+
+    profile, _conn, _wsfex, _arca = profile_wsfex
+    lock = ProfileLock(profile.paths.launcher_lock)
+    lock.acquire(port=8399, environment="homo")
+    try:
+        monkeypatch.setattr(
+            "facturador.launcher.restore_flow.EnvironmentProfile.resolve",
+            lambda env, app_data_root=None: profile,
+        )
+        code = run_launcher_restore(
+            ArcaEnvironment.HOMO,
+            identity_path=tmp_path / "missing-identity.txt",
+        )
+        assert code == 1
+    finally:
+        lock.release()
 
 
 def test_api_catch_up_unblocks_issuance(api, arca):

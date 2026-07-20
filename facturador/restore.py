@@ -3,12 +3,14 @@
 Reemplaza el restore legacy de tarball+DB. El bundle es solo el seed
 cifrado (FAC-44); la historia fiscal se reconsulta con FEXGetCMP.
 
-Uso (backend detenido)::
+Uso (backend detenido; perfil ya ``ready``)::
 
   uv run python -m facturador.restore --env homo \\
       --seed backups/seed.age --identity ~/.age/key.txt
 
-El launcher expone la misma operación como "Restaurar desde backup".
+Completar setup (cert, emisor, PV) **antes** de restaurar: ``apply_seed``
+sobrescribe la config de emisor/UI con la del seed. El launcher expone
+``--restore``.
 """
 
 from __future__ import annotations
@@ -24,10 +26,10 @@ import httpx
 from .arca.wsaa import WsaaClient
 from .arca.wsfex import WsfexClient
 from .backup import BackupError, resolve_profile_paths
-from .certs import load_certificate_metadata
+from .certs import CertificateError, load_certificate_metadata
 from .config import Config
 from .db import connect
-from .fiscal_identity import get_sealed_fiscal_cuit
+from .fiscal_identity import FiscalIdentityError, resolve_profile_fiscal_cuit
 from .profile import EnvironmentProfile, ProfileError, parse_environment
 from .reconstruct import (
     ProfileSnapshot,
@@ -43,6 +45,7 @@ from .seed_backup import SeedBackupError, seed_archive_path
 from .seed_import import (
     SeedIdentityError,
     apply_seed,
+    assert_profile_ready,
     load_envelope_from_age,
     parse_envelope,
     validate_seed_identity,
@@ -81,7 +84,9 @@ def _build_wsfex(profile: EnvironmentProfile) -> WsfexClient:
     return WsfexClient(config, wsaa=wsaa)
 
 
-def _snapshot_from_seed(seed: dict, *, environment: str) -> ProfileSnapshot:
+def _snapshot_from_seed(
+    seed: dict, *, environment: str, cuit_emisor: str
+) -> ProfileSnapshot:
     active = seed.get("active_emisor_id")
     chosen = None
     for emisor in seed.get("emisores") or []:
@@ -93,7 +98,7 @@ def _snapshot_from_seed(seed: dict, *, environment: str) -> ProfileSnapshot:
     if chosen is None:
         return ProfileSnapshot(
             environment=environment,
-            cuit_emisor=str(seed["fiscal_cuit"]),
+            cuit_emisor=cuit_emisor,
             emisor_id=None,
             emisor_razon_social="",
             emisor_domicilio="",
@@ -103,13 +108,15 @@ def _snapshot_from_seed(seed: dict, *, environment: str) -> ProfileSnapshot:
         )
     return ProfileSnapshot(
         environment=environment,
-        cuit_emisor=str(seed["fiscal_cuit"]),
+        cuit_emisor=cuit_emisor,
         emisor_id=str(chosen["id"]),
         emisor_razon_social=str(chosen.get("razon_social") or ""),
         emisor_domicilio=str(chosen.get("domicilio") or ""),
         emisor_condicion_iva=str(chosen.get("condicion_iva") or ""),
         emisor_iibb=str(chosen.get("iibb") or ""),
-        emisor_inicio_actividades=str(chosen.get("inicio_actividades") or ""),
+        emisor_inicio_actividades=str(
+            chosen.get("inicio_actividades") or ""
+        ),
     )
 
 
@@ -121,30 +128,34 @@ def restore_profile_from_seed(
     wsfex: WsfexClient | None = None,
     retries: int = 3,
     abort_on_any_gap: bool = False,
+    batch_size: int = 25,
 ) -> ReconstructReport:
-    """Valida identidad → aplica seed → rebuild full en una transacción.
+    """Valida identidad → aplica seed → rebuild full por lotes.
 
-    Fail-fast de identidad **antes** de cualquier llamada a ARCA.
+    Fail-fast de identidad y setup ``ready`` **antes** de cualquier llamada
+    a ARCA o wipe. Usa una conexión dedicada (no la del request app).
     """
     envelope = load_envelope_from_age(seed_path, identity_path)
     seed, manifest = parse_envelope(envelope)
-    validate_seed_identity(seed, manifest, profile, require_certificate=True)
 
-    client = wsfex or _build_wsfex(profile)
+    # Conexión dedicada: no compartir con el threadpool de FastAPI.
     conn = connect(profile.paths.db)
     try:
+        assert_profile_ready(profile, conn)
+        cuit = validate_seed_identity(
+            seed, manifest, profile, conn=conn, require_certificate=True
+        )
         meta = load_certificate_metadata(profile)
-        assert meta is not None  # validate_seed_identity lo exigió
-        base = _snapshot_from_seed(seed, environment=profile.environment.value)
-        snapshot = ProfileSnapshot(
-            environment=base.environment,
-            cuit_emisor=meta.cuit,
-            emisor_id=base.emisor_id,
-            emisor_razon_social=base.emisor_razon_social,
-            emisor_domicilio=base.emisor_domicilio,
-            emisor_condicion_iva=base.emisor_condicion_iva,
-            emisor_iibb=base.emisor_iibb,
-            emisor_inicio_actividades=base.emisor_inicio_actividades,
+        if meta is None:
+            raise SeedIdentityError(
+                "Falta el certificado del perfil tras validar identidad."
+            )
+
+        client = wsfex or _build_wsfex(profile)
+        snapshot = _snapshot_from_seed(
+            seed,
+            environment=profile.environment.value,
+            cuit_emisor=cuit,
         )
         return reconstruct_register(
             conn,
@@ -154,6 +165,7 @@ def restore_profile_from_seed(
             snapshot=snapshot,
             retries=retries,
             abort_on_any_gap=abort_on_any_gap,
+            batch_size=batch_size,
             on_begin=lambda c: apply_seed(c, seed),
         )
     finally:
@@ -161,33 +173,36 @@ def restore_profile_from_seed(
 
 
 def catch_up_register(
-    conn: sqlite3.Connection,
-    wsfex: WsfexClient,
     profile: EnvironmentProfile,
+    wsfex: WsfexClient,
     *,
     retries: int = 3,
     abort_on_any_gap: bool = False,
+    batch_size: int = 25,
 ) -> ReconstructReport:
-    """Catch-up FAC-48: append N_local+1..N_arca en una transacción."""
-    sealed = get_sealed_fiscal_cuit(conn)
-    meta = load_certificate_metadata(profile)
-    cuit = (meta.cuit if meta is not None else sealed) or ""
-    if not cuit:
-        raise ReconstructError(
-            "Sin CUIT fiscal (certificado o sello) para el catch-up."
+    """Catch-up FAC-48: append N_local+1..N_arca en lotes (conexión dedicada)."""
+    conn = connect(profile.paths.db)
+    try:
+        assert_profile_ready(profile, conn)
+        try:
+            cuit = resolve_profile_fiscal_cuit(conn, profile)
+        except (FiscalIdentityError, CertificateError) as exc:
+            raise SeedIdentityError(str(exc)) from exc
+        snapshot = profile_snapshot_from_conn(
+            conn, environment=profile.environment.value, cuit_emisor=cuit
         )
-    snapshot = profile_snapshot_from_conn(
-        conn, environment=profile.environment.value, cuit_emisor=cuit
-    )
-    return reconstruct_register(
-        conn,
-        wsfex,
-        mode=ReconstructMode.CATCH_UP,
-        targets=targets_from_conn(conn),
-        snapshot=snapshot,
-        retries=retries,
-        abort_on_any_gap=abort_on_any_gap,
-    )
+        return reconstruct_register(
+            conn,
+            wsfex,
+            mode=ReconstructMode.CATCH_UP,
+            targets=targets_from_conn(conn),
+            snapshot=snapshot,
+            retries=retries,
+            abort_on_any_gap=abort_on_any_gap,
+            batch_size=batch_size,
+        )
+    finally:
+        conn.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -220,6 +235,12 @@ def main(argv: list[str] | None = None) -> int:
         default=3,
         help="reintentos ante error transitorio de ARCA (default: 3)",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=25,
+        help="tamaño de lote de FEXGetCMP por transacción (default: 25)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -238,7 +259,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Perfil: {paths.root}")
         print(f"Ambiente: {profile.environment.value}")
         print(f"Seed: {seed_path}")
-        print("Validando identidad (cert → env → CUIT → schema → integrity)…")
+        print(
+            "Validando identidad (cert → env → CUIT → schema → integrity) "
+            "y setup ready…"
+        )
 
         report = restore_profile_from_seed(
             profile,
@@ -246,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             identity_path=identity_path,
             retries=args.retries,
             abort_on_any_gap=args.abort_on_any_gap,
+            batch_size=args.batch_size,
         )
         print(
             f"Rebuild OK: {report.inserted} comprobantes insertados; "
@@ -267,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
         SeedBackupError,
         SeedIdentityError,
         ReconstructError,
+        FiscalIdentityError,
+        CertificateError,
         ProfileError,
         httpx.HTTPError,
     ) as exc:

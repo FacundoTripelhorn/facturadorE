@@ -138,3 +138,15 @@ CREATE TABLE invoice_items (
     pro_precio_uni  TEXT NOT NULL,
     pro_total_item  TEXT NOT NULL
 );
+
+-- Huecos confirmados por ARCA durante rebuild/catch-up (FAC-65).
+-- No cuentan para max_authorized_cbte_nro (solo source=wsfex authorized).
+-- Intencional en el baseline (igual que FAC-10/52): no hay DBs desplegadas
+-- que migrar — NO agregar una migración v2 solo por esta tabla.
+CREATE TABLE registry_gaps (
+    punto_venta INTEGER NOT NULL,
+    cbte_tipo   INTEGER NOT NULL,
+    cbte_nro    INTEGER NOT NULL,
+    noted_at    TEXT NOT NULL,
+    PRIMARY KEY (punto_venta, cbte_tipo, cbte_nro)
+);

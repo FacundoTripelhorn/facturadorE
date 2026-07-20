@@ -352,7 +352,13 @@ def catch_up_ui(
                     error=str(exc),
                     force=True,
                 )
-        return RedirectResponse("/comprobantes", status_code=303)
+        # Sin invoice_id (p.ej. desde el listado): mostrar el error.
+        from urllib.parse import quote
+
+        return RedirectResponse(
+            f"/comprobantes?error={quote(str(exc), safe='')}",
+            status_code=303,
+        )
     if invoice_id:
         return RedirectResponse(
             f"/facturas/{invoice_id}/revisar?aviso=catchup&n={report.inserted}",
@@ -381,7 +387,14 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
 
 
 @router.get("/comprobantes", response_class=HTMLResponse)
-def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
+def comprobantes(
+    request: Request,
+    service: ServiceDep,
+    estado: str = "todas",
+    aviso: str = "",
+    n: str = "",
+    error: str = "",
+):
     if estado not in TAB_FILTERS:
         estado = "todas"
     counts = repo.count_invoices_by_status(service.conn)
@@ -393,6 +406,13 @@ def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
         )
         for tab, statuses in TAB_FILTERS.items()
     }
+    aviso_msg = None
+    if aviso == "catchup":
+        aviso_msg = (
+            f"Registro sincronizado desde ARCA ({n or '0'} comprobantes)."
+            if n
+            else "Registro sincronizado desde ARCA."
+        )
     return templates.TemplateResponse(
         request,
         "comprobantes.html",
@@ -400,6 +420,8 @@ def comprobantes(request: Request, service: ServiceDep, estado: str = "todas"):
             "tabs": TAB_LABELS,
             "tab_counts": tab_counts,
             "estado": estado,
+            "aviso": aviso_msg,
+            "error": error or None,
             "facturas": repo.list_invoices(
                 service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]
             ),

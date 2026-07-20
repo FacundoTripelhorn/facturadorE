@@ -1,15 +1,29 @@
 """Reconstrucción del registro local desde ARCA (FAC-65).
 
 ARCA es el ledger autoritativo. Este módulo re-consulta ``FEXGetLast_CMP`` +
-``FEXGetCMP`` por cada (PV, tipo) y escribe el registro local en **una**
-transacción SQLite. Dos modos comparten el loop:
+``FEXGetCMP`` por cada (PV, tipo) y escribe el registro local en **lotes
+cortos**. Dos modos comparten el loop:
 
 * **full** — vacía el registro y recorre ``1..N`` (restore desde launcher).
 * **catch-up** — append ``N_local+1..N_arca`` (remediación FAC-48).
 
+Full rebuild **borra todo el registro local**, incluidos históricos
+``source=imported``: ARCA es autoritativo; lo reinsertado es ``source=wsfex``.
+
+Escrituras por lote (sin resume)::
+
+1. Fetch del lote **fuera** de cualquier transacción (red nunca dentro).
+2. Transacción corta: insert / gap → COMMIT (milisegundos).
+3. Validación ``local_max == FEXGetLast_CMP`` **después** del último lote.
+
+Un fallo a mitad de camino deja lotes previos commitidos. Ese registro
+parcial tiene ``local_max < arca_last`` → el guard FAC-48 bloquea emisión
+(fail-closed). Remedio: re-ejecutar el restore (full wipe + rebuild), no
+reanudar.
+
 Gaps confirmados por ARCA (``CmpNotFoundError`` / ErrCode 1521) se
-persisten en ``registry_gaps`` y se listan en el reporte. Errores
-transitorios: reintento acotado y **abort** (nunca un gap inventado).
+persisten en ``registry_gaps``. Errores transitorios: reintento acotado y
+**abort** (nunca un gap inventado).
 """
 
 from __future__ import annotations
@@ -26,9 +40,10 @@ from typing import Any
 import httpx
 
 from . import repo
-from .arca.wsfex import CmpNotFoundError, CmpRecord, WsfexClient, WsfexError
+from .arca.wsfex import CmpItem, CmpNotFoundError, CmpRecord, WsfexClient, WsfexError
 from .constants import (
     PDF_RENDER_VERSION,
+    UMED_UNIDADES,
     InvoiceSource,
     InvoiceStatus,
 )
@@ -39,6 +54,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RETRIES = 3
 DEFAULT_RETRY_SLEEP_S = 0.5
+DEFAULT_BATCH_SIZE = 25
 
 
 class ReconstructMode(enum.StrEnum):
@@ -47,7 +63,7 @@ class ReconstructMode(enum.StrEnum):
 
 
 class ReconstructError(RuntimeError):
-    """Fallo del rebuild; la transacción no se confirma."""
+    """Fallo del rebuild; lotes previos pueden haber quedado commitidos."""
 
 
 @dataclass(frozen=True)
@@ -89,6 +105,9 @@ class ProfileSnapshot:
 
 ParamLookup = Callable[[str, object], str]
 
+# Un ítem del plan: (target, nro) a consultar.
+_WorkItem = tuple[PvTipoTarget, int]
+
 
 def targets_from_seed(
     seed: Mapping[str, Any],
@@ -111,7 +130,6 @@ def targets_from_seed(
             if isinstance(pv, int) and pv >= 1 and pv not in pvs:
                 pvs.append(pv)
     if not pvs:
-        # Sin filtro de activo: unión de todos los emisores.
         for emisor in seed.get("emisores") or []:
             if not isinstance(emisor, Mapping):
                 continue
@@ -233,23 +251,20 @@ def _cmp_to_invoice_payload(
     items_src = list(record.items)
     if not items_src:
         # Fallback: factura de una línea con el total (homologación mínima).
-        items_src = []
-        from .arca.wsfex import CmpItem
-
-        items_src.append(
+        items_src = [
             CmpItem(
                 pro_codigo="0001",
                 pro_ds=f.get("Obs") or "Ítem reconstruido",
                 pro_qty="1",
-                pro_umed="7",
+                pro_umed=str(UMED_UNIDADES),
                 pro_precio_uni=req("Imp_total"),
                 pro_total_item=req("Imp_total"),
             )
-        )
+        ]
 
     items: list[dict[str, Any]] = []
     for item in items_src:
-        umed = int(item.pro_umed or 7)
+        umed = int(item.pro_umed or UMED_UNIDADES)
         items.append(
             {
                 "pro_codigo": item.pro_codigo or "0001",
@@ -317,7 +332,7 @@ def _insert_authorized(
     data: Mapping[str, Any],
     items: Sequence[Mapping[str, Any]],
 ) -> str:
-    """Inserta una factura authorized sin autocommit (participa del rebuild)."""
+    """Inserta una factura authorized sin autocommit (participa del lote)."""
     invoice_id = new_id()
     ts = now()
     columns = (
@@ -399,9 +414,7 @@ def _clear_register(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM registry_gaps")
 
 
-def _note_gap(
-    conn: sqlite3.Connection, gap: RegistryGap
-) -> None:
+def _note_gap(conn: sqlite3.Connection, gap: RegistryGap) -> None:
     conn.execute(
         "INSERT INTO registry_gaps"
         " (punto_venta, cbte_tipo, cbte_nro, noted_at)"
@@ -410,6 +423,24 @@ def _note_gap(
         " noted_at = excluded.noted_at",
         (gap.punto_venta, gap.cbte_tipo, gap.cbte_nro, now()),
     )
+
+
+def _run_write_txn(
+    conn: sqlite3.Connection, fn: Callable[[sqlite3.Connection], None]
+) -> None:
+    """Transacción corta: no debe hacer I/O de red adentro."""
+    previous = conn.isolation_level
+    try:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            fn(conn)
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.isolation_level = previous
 
 
 def reconstruct_register(
@@ -423,21 +454,24 @@ def reconstruct_register(
     retries: int = DEFAULT_RETRIES,
     retry_sleep_s: float = DEFAULT_RETRY_SLEEP_S,
     abort_on_any_gap: bool = False,
+    batch_size: int = DEFAULT_BATCH_SIZE,
     on_begin: Callable[[sqlite3.Connection], None] | None = None,
 ) -> ReconstructReport:
-    """Rebuild o catch-up en una sola transacción.
+    """Rebuild o catch-up por lotes (fetch fuera de txn; writes cortas).
 
-    1. Resolver N por target vía ARCA (sin mutar la DB).
-    2. ``BEGIN IMMEDIATE`` → clear si full → ``on_begin`` (p.ej. apply_seed)
-       → insert/gap → validar last-CMP → ``COMMIT``.
-    Cualquier fallo = rollback = perfil intacto.
+    ``on_begin`` (p.ej. ``apply_seed``) corre en una txn corta **antes** de
+    los fetches, tras el clear en modo full. La validación last-CMP es al
+    final. Un abort a mitad deja lotes previos; re-ejecutar el restore.
     """
     if not targets:
         raise ReconstructError("Sin targets (PV, tipo) para reconstruir.")
+    if batch_size < 1:
+        raise ReconstructError(f"batch_size inválido: {batch_size}")
 
-    # Resolver rangos ANTES de abrir la escritura: si FEXGetLast_CMP falla,
-    # no tocamos la DB. Los FEXGetCMP del rango van dentro de la txn.
     planned: list[tuple[PvTipoTarget, int, int, int]] = []
+    work: list[_WorkItem] = []
+    report = ReconstructReport(mode=mode)
+
     for target in targets:
         try:
             arca_last = wsfex.get_last_cmp(target.punto_venta, target.cbte_tipo)
@@ -460,76 +494,80 @@ def reconstruct_register(
                     f"ARCA={arca_last}."
                 )
         planned.append((target, start, end, arca_last))
+        report.last_cmp[(target.punto_venta, target.cbte_tipo)] = arca_last
+        report.ranges[(target.punto_venta, target.cbte_tipo)] = (start, end)
+        if end >= start:
+            for nro in range(start, end + 1):
+                work.append((target, nro))
 
-    report = ReconstructReport(mode=mode)
-    previous_isolation = conn.isolation_level
-    try:
-        conn.isolation_level = None
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            if mode is ReconstructMode.FULL:
-                _clear_register(conn)
-            if on_begin is not None:
-                on_begin(conn)
+    def _prepare(c: sqlite3.Connection) -> None:
+        if mode is ReconstructMode.FULL:
+            _clear_register(c)
+        if on_begin is not None:
+            on_begin(c)
 
-            for target, start, end, arca_last in planned:
-                report.last_cmp[(target.punto_venta, target.cbte_tipo)] = arca_last
-                report.ranges[(target.punto_venta, target.cbte_tipo)] = (
-                    start,
-                    end,
+    _run_write_txn(conn, _prepare)
+
+    for offset in range(0, len(work), batch_size):
+        batch = work[offset : offset + batch_size]
+        # Fetch fuera de transacción.
+        fetched: list[
+            tuple[PvTipoTarget, int, CmpRecord | None]
+        ] = []
+        for target, nro in batch:
+            record = _fetch_cmp_with_retries(
+                wsfex,
+                target.cbte_tipo,
+                target.punto_venta,
+                nro,
+                retries=retries,
+                sleep_s=retry_sleep_s,
+            )
+            if record is None and abort_on_any_gap:
+                raise ReconstructError(
+                    f"Hueco en PV {target.punto_venta} tipo "
+                    f"{target.cbte_tipo} nro {nro}: abort_on_any_gap."
                 )
-                if end < start:
-                    # Nada que traer (catch-up ya alineado, o N=0).
+            fetched.append((target, nro, record))
+
+        def _write_batch(
+            c: sqlite3.Connection,
+            *,
+            _fetched: list[tuple[PvTipoTarget, int, CmpRecord | None]] = fetched,
+        ) -> None:
+            for target, nro, record in _fetched:
+                if record is None:
+                    gap = RegistryGap(
+                        target.punto_venta, target.cbte_tipo, nro
+                    )
+                    _note_gap(c, gap)
+                    report.gaps.append(gap)
                     continue
-                for nro in range(start, end + 1):
-                    record = _fetch_cmp_with_retries(
-                        wsfex,
-                        target.cbte_tipo,
-                        target.punto_venta,
-                        nro,
-                        retries=retries,
-                        sleep_s=retry_sleep_s,
-                    )
-                    if record is None:
-                        if abort_on_any_gap:
-                            raise ReconstructError(
-                                f"Hueco en PV {target.punto_venta} tipo "
-                                f"{target.cbte_tipo} nro {nro}: abort_on_any_gap."
-                            )
-                        gap = RegistryGap(
-                            target.punto_venta, target.cbte_tipo, nro
-                        )
-                        _note_gap(conn, gap)
-                        report.gaps.append(gap)
-                        continue
-                    data, items = _cmp_to_invoice_payload(
-                        record,
-                        snapshot=snapshot,
-                        param_lookup=param_lookup,
-                    )
-                    # Asegurar (PV, tipo, nro) del loop (no confiar solo en XML).
-                    data["punto_venta"] = target.punto_venta
-                    data["cbte_tipo"] = target.cbte_tipo
-                    data["cbte_nro"] = nro
-                    _insert_authorized(conn, data, items)
-                    report.inserted += 1
-
-                # Validación in-transaction: last authorized wsfex == ARCA.
-                local_max = repo.max_authorized_cbte_nro(
-                    conn, target.punto_venta, target.cbte_tipo
+                data, items = _cmp_to_invoice_payload(
+                    record,
+                    snapshot=snapshot,
+                    param_lookup=param_lookup,
                 )
-                if local_max != arca_last:
-                    raise ReconstructError(
-                        f"Validación post-rebuild falló: PV "
-                        f"{target.punto_venta} tipo {target.cbte_tipo} "
-                        f"local_max={local_max} != FEXGetLast_CMP={arca_last}."
-                    )
+                data["punto_venta"] = target.punto_venta
+                data["cbte_tipo"] = target.cbte_tipo
+                data["cbte_nro"] = nro
+                _insert_authorized(c, data, items)
+                report.inserted += 1
 
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
-    finally:
-        conn.isolation_level = previous_isolation
+        _run_write_txn(conn, _write_batch)
+
+    # Validación final (después del último lote).
+    for target, _start, _end, arca_last in planned:
+        local_max = repo.max_authorized_cbte_nro(
+            conn, target.punto_venta, target.cbte_tipo
+        )
+        if local_max != arca_last:
+            raise ReconstructError(
+                f"Validación post-rebuild falló: PV "
+                f"{target.punto_venta} tipo {target.cbte_tipo} "
+                f"local_max={local_max} != FEXGetLast_CMP={arca_last}. "
+                "Re-ejecutar el restore (el registro parcial queda bloqueado "
+                "por FAC-48)."
+            )
 
     return report

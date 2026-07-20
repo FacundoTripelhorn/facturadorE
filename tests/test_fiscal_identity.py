@@ -307,12 +307,8 @@ def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
             "emisor_inicio_actividades",
         ):
             assert name in cols
-        # FAC-10 vive en el baseline (v1); v2+ (p.ej. registry_gaps FAC-65)
-        # no mueve esas columnas a una migración de upgrade.
-        assert "emisor_razon_social" in {
-            r[1] for r in conn.execute("PRAGMA table_info(invoices)")
-        }
-        assert latest_version() >= 1
+        # Guardrail de review: sigue siendo una sola migración (baseline).
+        assert latest_version() == 1
     finally:
         conn.close()
 

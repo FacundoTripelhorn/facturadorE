@@ -12,10 +12,10 @@ La baseline (versión 1) es el esquema de perfiles aislados vigente. Toda
 DB vive bajo un perfil; no hay camino de compatibilidad para esquemas
 anteriores a este mecanismo.
 
-FAC-10 (snapshot de emisor) y FAC-52 (snapshot de render: descripciones
-de params + ``pdf_render_version``) amplían el baseline a propósito: no hay
-DBs desplegadas que migrar, así que NO corresponde una migración v2 solo
-por esas columnas.
+FAC-10 (snapshot de emisor), FAC-52 (snapshot de render: descripciones
+de params + ``pdf_render_version``) y FAC-65 (``registry_gaps``) amplían
+el baseline a propósito: no hay DBs desplegadas que migrar, así que NO
+corresponde una migración v2 solo por esas tablas/columnas.
 """
 
 from __future__ import annotations
@@ -88,21 +88,6 @@ def _load_baseline_sql() -> str:
 
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="baseline", sql=_load_baseline_sql()),
-    Migration(
-        version=2,
-        name="registry_gaps",
-        sql="""
--- Huecos confirmados por ARCA durante rebuild/catch-up (FAC-65).
--- No cuentan para max_authorized_cbte_nro (solo source=wsfex authorized).
-CREATE TABLE registry_gaps (
-    punto_venta INTEGER NOT NULL,
-    cbte_tipo   INTEGER NOT NULL,
-    cbte_nro    INTEGER NOT NULL,
-    noted_at    TEXT NOT NULL,
-    PRIMARY KEY (punto_venta, cbte_tipo, cbte_nro)
-);
-""",
-    ),
 )
 
 

@@ -51,6 +51,7 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
+from .seed_import import SeedIdentityError
 from .settings import (
     Emisor,
     Settings,
@@ -491,19 +492,25 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def catch_up_from_arca(self) -> ReconstructReport:
-        """FAC-65 / FAC-48: append N_local+1..N_arca en una transacción.
+        """FAC-65 / FAC-48: append N_local+1..N_arca en lotes.
 
         Remediación cuando el guard de registro desactualizado bloquea la
-        emisión. Solo append (no wipe); puede correr con el backend vivo.
+        emisión. Solo append (no wipe); usa conexión dedicada.
         """
         with _AUTHORIZE_LOCK:
             profile = EnvironmentProfile(
                 environment=self.config.env, paths=self.config.paths
             )
             try:
-                return catch_up_register(self.conn, self.wsfex, profile)
+                return catch_up_register(profile, self.wsfex)
             except ReconstructError as exc:
                 raise ConflictError(str(exc)) from exc
+            except SeedIdentityError as exc:
+                raise ConflictError(str(exc)) from exc
+            except (CertificateError, httpx.HTTPError, OSError) as exc:
+                raise ArcaUnavailableError(
+                    f"No se pudo sincronizar desde ARCA: {exc}"
+                ) from exc
 
     def authorize(self, invoice_id: str, force_desync: bool = False) -> sqlite3.Row:
         # Serializa el authorize completo (ver _AUTHORIZE_LOCK): numeración

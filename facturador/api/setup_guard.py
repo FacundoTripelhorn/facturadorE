@@ -51,6 +51,10 @@ def requires_ready_profile(method: str, path: str) -> bool:
         return True
     if path.startswith("/params"):
         return True
+    if path == "/registry" or path.startswith("/registry/"):
+        return True
+    if path.startswith("/ui/registry"):
+        return True
     if path == "/health/arca" or path.startswith("/health/arca/"):
         return True
     # Home: el form pide cotización ARCA; sin setup listo no es usable.

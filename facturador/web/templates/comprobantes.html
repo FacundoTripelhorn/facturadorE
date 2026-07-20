@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if error %}
+<div class="panel error">
+  <div><strong>No se pudo sincronizar.</strong> {{ error }}</div>
+</div>
+{% endif %}
+{% if aviso %}
+<div class="panel ok">
+  <div>{{ aviso }}</div>
+</div>
+{% endif %}
+
 <section class="card">
   <h2>Comprobantes</h2>
   <nav class="tabs">

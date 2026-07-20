@@ -4,9 +4,14 @@ Orden fijo de rechazo (fail-fast, sin override)::
 
     cert → environment → CUIT → schema → integrity
 
-Ningún fetch a ARCA ocurre hasta que este módulo acepta el envelope.
-El seed solo restaura config (emisores, cliente default, UI); el registro
-de comprobantes lo reconstruye ``facturador.reconstruct``.
+El CUIT se valida en tres vías cuando hay DB: **sello == certificado ==
+seed**. Ningún fetch a ARCA ni wipe del registro ocurre hasta que este
+módulo acepta el envelope. El seed solo restaura config (emisores, cliente
+default, UI); el registro lo reconstruye ``facturador.reconstruct``.
+
+Workflow: completar setup manualmente (cert, emisor, PV → ``ready``) y
+*después* restaurar; ``apply_seed`` sobrescribe la config de emisor/UI
+del perfil con la del seed (esperado; documentado).
 """
 
 from __future__ import annotations
@@ -19,9 +24,14 @@ from typing import Any
 
 from . import repo
 from .certs import CertificateError, load_certificate_metadata
-from .fiscal_identity import seal_fiscal_cuit
+from .fiscal_identity import (
+    FiscalIdentityError,
+    get_sealed_fiscal_cuit,
+    resolve_profile_fiscal_cuit,
+)
 from .migrations import latest_version
 from .profile import EnvironmentProfile
+from .repo._common import now
 from .seed_backup import (
     SEED_FORMAT,
     SEED_FORMAT_VERSION,
@@ -35,6 +45,7 @@ from .settings import (
     BACKUP_PREFIX_DEFAULT,
     CONDICION_IVA_DEFAULT,
 )
+from .setup import SetupState, is_ready, reconcile_setup_state
 
 
 class SeedIdentityError(SeedBackupError):
@@ -83,9 +94,32 @@ def parse_envelope(
         raise SeedBackupError(
             f"Versión de formato de seed no soportada: {format_version}."
         )
-    seed = dict(envelope["seed"])
-    manifest = dict(envelope["manifest"])
-    return seed, manifest
+    try:
+        raw_seed = envelope["seed"]
+        raw_manifest = envelope["manifest"]
+    except KeyError as exc:
+        raise SeedBackupError(
+            f"Envelope incompleto: falta la clave {exc.args[0]!r}."
+        ) from exc
+    if not isinstance(raw_seed, Mapping) or not isinstance(raw_manifest, Mapping):
+        raise SeedBackupError(
+            "Envelope inválido: seed/manifest deben ser objetos."
+        )
+    return dict(raw_seed), dict(raw_manifest)
+
+
+def assert_profile_ready(
+    profile: EnvironmentProfile, conn: sqlite3.Connection
+) -> SetupState:
+    """Exige setup ``ready`` antes de rebuild/catch-up (FAC-65)."""
+    state = reconcile_setup_state(profile, conn)
+    if not is_ready(state):
+        raise SeedIdentityError(
+            f"El perfil aún no completó el setup (paso: {state.value}). "
+            "Completar certificado, emisor y punto de venta antes de "
+            "restaurar o sincronizar desde ARCA."
+        )
+    return state
 
 
 def validate_seed_identity(
@@ -93,13 +127,13 @@ def validate_seed_identity(
     manifest: Mapping[str, Any],
     profile: EnvironmentProfile,
     *,
+    conn: sqlite3.Connection | None = None,
     require_certificate: bool = True,
-) -> None:
-    """Validación de identidad en orden cert → env → CUIT → schema → integrity.
+) -> str:
+    """Validación cert → env → CUIT → schema → integrity.
 
-    ``require_certificate`` es True en restore real (la máquina define la
-    identidad). Los tests de forma pura pueden pasar False solo tras haber
-    sellado CUIT de otra vía — no hay override de mismatch.
+    Devuelve el CUIT fiscal aceptado (sello == cert == seed cuando ``conn``
+    está presente y el perfil está listo).
     """
     # 1. Certificado instalado (identidad de la máquina).
     meta = load_certificate_metadata(profile)
@@ -126,7 +160,7 @@ def validate_seed_identity(
             f"{profile.environment.value} (sin override)."
         )
 
-    # 3. CUIT del seed vs certificado (o sello si aún no hay cert en tests).
+    # 3. CUIT: seed vs cert; con conn, también vs sello (tres vías).
     seed_cuit = str(seed.get("fiscal_cuit") or "").strip()
     if not seed_cuit.isdigit() or len(seed_cuit) != 11:
         raise SeedIdentityError(
@@ -137,6 +171,19 @@ def validate_seed_identity(
             f"CUIT del seed ({seed_cuit}) no coincide con el certificado "
             f"({meta.cuit}). Sin override."
         )
+    accepted = seed_cuit
+    if conn is not None:
+        try:
+            profile_cuit = resolve_profile_fiscal_cuit(conn, profile)
+        except (FiscalIdentityError, CertificateError) as exc:
+            raise SeedIdentityError(str(exc)) from exc
+        if profile_cuit != seed_cuit:
+            raise SeedIdentityError(
+                f"CUIT del seed ({seed_cuit}) no coincide con el CUIT "
+                f"sellado/certificado del perfil ({profile_cuit}). "
+                "Sin override."
+            )
+        accepted = profile_cuit
 
     # 4. Schema: el seed no puede ser más nuevo que esta app.
     try:
@@ -145,7 +192,9 @@ def validate_seed_identity(
         raise SeedIdentityError("schema_version del seed inválido.") from exc
     app_schema = latest_version()
     if seed_schema < 1:
-        raise SeedIdentityError(f"schema_version del seed inválido: {seed_schema}.")
+        raise SeedIdentityError(
+            f"schema_version del seed inválido: {seed_schema}."
+        )
     if seed_schema > app_schema:
         raise SeedIdentityError(
             f"El seed pide schema_version={seed_schema} pero esta app solo "
@@ -173,18 +222,31 @@ def validate_seed_identity(
             "checksum del seed no coincide con el manifiesto "
             "(integridad fallida)."
         )
+    return accepted
 
 
 def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
     """Reemplaza config del perfil con el seed (emisores / settings / cliente).
 
-    No toca el registro de facturas ni ``arca_params``. Debe llamarse dentro
-    de la misma transacción que el rebuild cuando se hace restore completo.
+    No toca el registro de facturas ni ``arca_params``. No sella el CUIT:
+    el perfil debe estar ``ready`` (CUIT ya sellado y validado en pre-flight).
+    Seguro dentro de una transacción corta (sin ``with conn:`` interno).
     """
     env = str(seed["environment"]).strip().lower()
-    cuit = str(seed["fiscal_cuit"]).strip()
-    seal_fiscal_cuit(conn, cuit)
+    seed_cuit = str(seed["fiscal_cuit"]).strip()
+    sealed = get_sealed_fiscal_cuit(conn)
+    if sealed is None:
+        raise SeedIdentityError(
+            "Perfil sin CUIT fiscal sellado; completar el setup antes de "
+            "aplicar el seed."
+        )
+    if sealed != seed_cuit:
+        raise SeedIdentityError(
+            f"CUIT del seed ({seed_cuit}) no coincide con el sello del "
+            f"perfil ({sealed}). Sin override."
+        )
 
+    ts = now()
     # Emisores: wipe + reinsert con ids del seed (estables entre máquinas).
     conn.execute("DELETE FROM emisores")
     for emisor in seed.get("emisores") or []:
@@ -197,10 +259,6 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
         if not clean_pv:
             clean_pv = [1]
         emisor_id = str(emisor["id"])
-        ts_row = conn.execute(
-            "SELECT datetime('now') AS t"
-        ).fetchone()
-        ts = str(ts_row["t"] if ts_row else "")
         conn.execute(
             "INSERT INTO emisores ("
             "  id, razon_social, domicilio, iibb, inicio_actividades,"
@@ -241,7 +299,6 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
             (key, value),
         )
 
-    # Cliente default: wipe defaults y recrear el del seed (si hay).
     conn.execute("UPDATE clients SET is_default = 0")
     client = seed.get("default_client")
     if client is not None:
@@ -267,9 +324,6 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
             "is_default": 1,
         }
         if existing is None:
-            # Insert con id estable del seed (no usar create_client uuid).
-            ts_row = conn.execute("SELECT datetime('now') AS t").fetchone()
-            ts = str(ts_row["t"] if ts_row else "")
             fields = (
                 "razon_social",
                 "domicilio",
@@ -296,7 +350,7 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
                 " id_impositivo = ?, moneda_default = ?, incoterms_default = ?,"
                 " idioma_default = ?, forma_pago_default = ?,"
                 " descripcion_default = ?, is_default = 1,"
-                " updated_at = datetime('now')"
+                " updated_at = ?"
                 " WHERE id = ?",
                 (
                     payload["razon_social"],
@@ -309,6 +363,7 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
                     payload["idioma_default"],
                     payload["forma_pago_default"],
                     payload["descripcion_default"],
+                    ts,
                     client_id,
                 ),
             )
@@ -325,7 +380,11 @@ def import_seed_envelope(
     seed, manifest = parse_envelope(envelope)
     try:
         validate_seed_identity(
-            seed, manifest, profile, require_certificate=require_certificate
+            seed,
+            manifest,
+            profile,
+            conn=conn,
+            require_certificate=require_certificate,
         )
     except CertificateError as exc:
         raise SeedIdentityError(str(exc)) from exc
