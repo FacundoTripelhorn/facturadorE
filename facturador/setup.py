@@ -162,6 +162,8 @@ def evaluate_setup_state(
 def reconcile_setup_state(
     profile: EnvironmentProfile,
     conn: sqlite3.Connection,
+    *,
+    on_became_ready: Callable[[], None] | None = None,
 ) -> SetupState:
     """Evalúa hechos, persiste el paso y lo devuelve.
 
@@ -171,23 +173,43 @@ def reconcile_setup_state(
 
     Si ``onboarding.json`` está corrupto, se ignora y se re-deriva el
     estado desde hechos (nunca 500 por el archivo de estado).
+
+    ``on_became_ready`` (FAC-47): se invoca solo al cruzar a ``ready`` desde
+    otro paso (p.ej. fin de onboarding). El reconcile inicial de
+    ``create_app`` no pasa callback — perfiles ya listos no disparan backup
+    en cada arranque.
     """
+    previous: SetupState | None
     try:
-        load_setup_state(profile.paths)
+        previous = load_setup_state(profile.paths)
     except SetupError:
         logger.warning(
             "onboarding.json corrupto en %s; se re-deriva el estado",
             profile.paths.onboarding,
             exc_info=True,
         )
+        previous = None
     state = evaluate_setup_state(profile, conn)
     save_setup_state(profile.paths, state)
+    if (
+        on_became_ready is not None
+        and state is SetupState.READY
+        and previous is not SetupState.READY
+    ):
+        try:
+            on_became_ready()
+        except Exception:
+            logger.exception(
+                "Callback on_became_ready falló; el setup quedó en ready"
+            )
     return state
 
 
 def make_setup_state_provider(
     profile: EnvironmentProfile,
     conn: sqlite3.Connection,
+    *,
+    on_became_ready: Callable[[], None] | None = None,
 ) -> SetupStateProvider:
     """Callable para la guardia HTTP: re-reconcilia el perfil en cada llamada.
 
@@ -197,6 +219,8 @@ def make_setup_state_provider(
     """
 
     def get_state() -> SetupState:
-        return reconcile_setup_state(profile, conn)
+        return reconcile_setup_state(
+            profile, conn, on_became_ready=on_became_ready
+        )
 
     return get_state

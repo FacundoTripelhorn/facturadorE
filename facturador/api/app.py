@@ -5,6 +5,8 @@ Servida solo en localhost (design.md §2.5)."""
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -14,6 +16,7 @@ from .. import db, web
 from ..arca.wsfex import WsfexClient
 from ..config import Config, load_config
 from ..profile import EnvironmentProfile, ProfileError
+from ..seed_backup_sync import SeedBackupCoordinator
 from ..service import (
     ArcaUnavailableError,
     ConflictError,
@@ -22,7 +25,7 @@ from ..service import (
     NotFoundError,
 )
 from ..setup import make_setup_state_provider, reconcile_setup_state
-from . import clients, health, invoices, params, registry, setup
+from . import backup, clients, health, invoices, params, registry, setup
 from .csrf import CsrfCookieMiddleware
 from .localhost_policy import (
     LocalhostPolicyMiddleware,
@@ -47,6 +50,7 @@ def create_app(
     *,
     port: int | None = None,
     public_port: int | None = None,
+    seed_backup: SeedBackupCoordinator | None = None,
 ) -> FastAPI:
     """Construye la app contra UN perfil de ambiente explícito e inmutable.
 
@@ -61,7 +65,8 @@ def create_app(
     del 8399 interno). FAC-42: cookie CSRF emitida en respuestas; los
     POST ``/ui/…`` la validan vía dependency del router HTML. FAC-35:
     setup state por perfil + guardia que bloquea factura/ARCA hasta
-    ``ready`` (``GET /health`` y ``/setup`` quedan libres).
+    ``ready`` (``GET /health`` y ``/setup`` quedan libres). FAC-47: seed
+    backup coordinator (config-change trigger + retry on launch).
     """
     if config is None:
         config = load_config(profile)
@@ -79,11 +84,35 @@ def create_app(
     wsfex = wsfex or WsfexClient(config)
     listen_port = resolve_listen_port(port)
     policy_ports = resolve_policy_ports(listen_port, public_port)
+    # Sin callback: un perfil ya ready no dispara backup en cada arranque.
     setup_state = reconcile_setup_state(profile, conn)
 
-    app = FastAPI(title="facturador", version="0.1.0")
+    coordinator = seed_backup or SeedBackupCoordinator(
+        conn,
+        profile.paths,
+        environment=profile.environment.value,
+    )
+
+    def _on_became_ready() -> None:
+        coordinator.notify_config_changed("onboarding_completed")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Retry pending/failed seed upload from a prior session (FAC-47).
+        try:
+            coordinator.retry_if_pending()
+        except Exception:
+            # Cinturón: retry_if_pending ya no debería propagar.
+            pass
+        yield
+        coordinator.shutdown()
+
+    app = FastAPI(title="facturador", version="0.1.0", lifespan=lifespan)
     app.state.profile = profile
-    app.state.service = InvoiceService(config, conn, wsfex)
+    app.state.seed_backup = coordinator
+    app.state.service = InvoiceService(
+        config, conn, wsfex, seed_backup=coordinator
+    )
     app.state.listen_port = listen_port
     app.state.policy_ports = policy_ports
     app.state.setup_state = setup_state
@@ -93,7 +122,9 @@ def create_app(
     # Orden de request: LocalhostPolicy → CsrfCookie → SetupGuard → routers.
     app.add_middleware(
         SetupGuardMiddleware,
-        get_state=make_setup_state_provider(profile, conn),
+        get_state=make_setup_state_provider(
+            profile, conn, on_became_ready=_on_became_ready
+        ),
     )
     app.add_middleware(CsrfCookieMiddleware)
     app.add_middleware(LocalhostPolicyMiddleware, ports=policy_ports)
@@ -113,6 +144,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(setup.router)
     app.include_router(registry.router)
+    app.include_router(backup.router)
 
     # Frontend HTML (§2.4): mismas dependencias vía app.state.service. Los
     # errores de dominio del frontend se renderizan en partials, no acá.
