@@ -25,6 +25,7 @@ BASELINE_TABLES = {
     "clients",
     "invoices",
     "invoice_items",
+    "registry_gaps",
 }
 
 

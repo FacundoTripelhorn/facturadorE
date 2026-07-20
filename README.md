@@ -236,7 +236,9 @@ facturador/
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
   backup.py     # CLI del seed cifrado (FAC-44); seed_backup.py arma/cifra
   s3_seed.py    # adapter S3 del seed (FAC-45: seed.age + recipients.txt)
-  restore.py    # restore legacy; rebuild desde ARCA es FAC-65
+  restore.py    # seed import + rebuild desde ARCA (FAC-65)
+  reconstruct.py # loop FEXGetCMP full/catch-up (FAC-65)
+  seed_import.py # identidad cert→env→CUIT→schema→integrity
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)

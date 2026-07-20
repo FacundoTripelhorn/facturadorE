@@ -54,6 +54,7 @@ class FakeArca:
         self.last_cmp: dict[tuple[int, int], int] = {}
         self.issued: dict[tuple[int, int, int], dict] = {}
         self.authorize_mode = "ok"  # ok | reject | timeout | timeout_but_issued
+        self.get_cmp_mode = "ok"  # ok | timeout | error (FAC-65)
         self.reject_code = "1068"
         self.reject_msg = "Campo Id_impositivo invalido"
         self.ctz = "1145.5690"
@@ -169,20 +170,72 @@ class FakeArca:
             ),
         )
 
-    def _register(self, key, arca_id, imp_total):
+    def _register(self, key, arca_id, imp_total, **extra):
         tipo, pv, nro = key
-        self.issued[key] = {
+        row = {
             "arca_id": arca_id,
             "cae": f"761{nro:011d}",
             "imp_total": imp_total,
+            "fecha_cbte": extra.get("fecha_cbte", "20260703"),
+            "fecha_pago": extra.get("fecha_pago", "20260703"),
+            "cliente": extra.get("cliente", "Cliente Fake"),
+            "cuit_pais_cliente": extra.get("cuit_pais_cliente", "55000002002"),
+            "domicilio_cliente": extra.get("domicilio_cliente", "Abroad 1"),
+            "id_impositivo": extra.get("id_impositivo", "12-345"),
+            "dst_cmp": extra.get("dst_cmp", "225"),
+            "moneda_id": extra.get("moneda_id", "DOL"),
+            "moneda_ctz": extra.get("moneda_ctz", "1000"),
+            "forma_pago": extra.get("forma_pago", "WIRE"),
+            "tipo_expo": extra.get("tipo_expo", "2"),
+            "idioma_cbte": extra.get("idioma_cbte", "1"),
+            "items": extra.get(
+                "items",
+                [
+                    {
+                        "pro_codigo": "0001",
+                        "pro_ds": "Servicio",
+                        "pro_qty": "1",
+                        "pro_umed": "7",
+                        "pro_precio_uni": str(imp_total),
+                        "pro_total_item": str(imp_total),
+                    }
+                ],
+            ),
         }
+        self.issued[key] = row
         self.last_cmp[(pv, tipo)] = max(self.last_cmp.get((pv, tipo), 0), nro)
         self.last_id = max(self.last_id, arca_id)
+
+    def seed_issued(
+        self,
+        *,
+        tipo: int,
+        pv: int,
+        nro: int,
+        arca_id: int | None = None,
+        imp_total: str = "100.00",
+        **extra,
+    ) -> None:
+        """Registra un comprobante como si ya estuviera en ARCA (rebuild tests)."""
+        reserved = arca_id if arca_id is not None else (10_000 + nro)
+        self._register((tipo, pv, nro), reserved, imp_total, **extra)
 
     def _fexgetcmp(self, body):
         tipo = int(_findtext(body, "Cbte_tipo"))
         pv = int(_findtext(body, "Punto_vta"))
         nro = int(_findtext(body, "Cbte_nro"))
+        # Fallo de transporte configurable (FAC-65 retries / abort).
+        if getattr(self, "get_cmp_mode", "ok") == "timeout":
+            raise httpx.ConnectTimeout("timeout simulado FEXGetCMP")
+        if getattr(self, "get_cmp_mode", "ok") == "error":
+            return httpx.Response(
+                200,
+                text=soap_response(
+                    "FEXGetCMP",
+                    "<FEXErr><ErrCode>500</ErrCode>"
+                    "<ErrMsg>Error interno simulado</ErrMsg></FEXErr>",
+                ),
+            )
         emitido = self.issued.get((tipo, pv, nro))
         if emitido is None:
             return httpx.Response(
@@ -193,16 +246,45 @@ class FakeArca:
                     "<ErrMsg>No existen datos para el comprobante</ErrMsg></FEXErr>",
                 ),
             )
+        items_xml = "".join(
+            "<Item>"
+            f"<Pro_codigo>{it['pro_codigo']}</Pro_codigo>"
+            f"<Pro_ds>{it['pro_ds']}</Pro_ds>"
+            f"<Pro_qty>{it['pro_qty']}</Pro_qty>"
+            f"<Pro_umed>{it['pro_umed']}</Pro_umed>"
+            f"<Pro_precio_uni>{it['pro_precio_uni']}</Pro_precio_uni>"
+            "<Pro_bonificacion>0</Pro_bonificacion>"
+            f"<Pro_total_item>{it['pro_total_item']}</Pro_total_item>"
+            "</Item>"
+            for it in emitido["items"]
+        )
         return httpx.Response(
             200,
             text=soap_response(
                 "FEXGetCMP",
                 "<FEXResultGet>"
                 f"<Id>{emitido['arca_id']}</Id>"
+                f"<Fecha_cbte>{emitido['fecha_cbte']}</Fecha_cbte>"
                 f"<Cbte_tipo>{tipo}</Cbte_tipo><Punto_vta>{pv}</Punto_vta>"
-                f"<Cbte_nro>{nro}</Cbte_nro><Cae>{emitido['cae']}</Cae>"
+                f"<Cbte_nro>{nro}</Cbte_nro>"
+                f"<Tipo_expo>{emitido['tipo_expo']}</Tipo_expo>"
+                "<Permiso_existente></Permiso_existente>"
+                f"<Dst_cmp>{emitido['dst_cmp']}</Dst_cmp>"
+                f"<Cliente>{emitido['cliente']}</Cliente>"
+                f"<Cuit_pais_cliente>{emitido['cuit_pais_cliente']}</Cuit_pais_cliente>"
+                f"<Domicilio_cliente>{emitido['domicilio_cliente']}</Domicilio_cliente>"
+                f"<Id_impositivo>{emitido['id_impositivo']}</Id_impositivo>"
+                f"<Moneda_Id>{emitido['moneda_id']}</Moneda_Id>"
+                f"<Moneda_ctz>{emitido['moneda_ctz']}</Moneda_ctz>"
                 f"<Imp_total>{emitido['imp_total']}</Imp_total>"
+                f"<Forma_pago>{emitido['forma_pago']}</Forma_pago>"
+                "<Incoterms></Incoterms>"
+                f"<Idioma_cbte>{emitido['idioma_cbte']}</Idioma_cbte>"
+                f"<Items>{items_xml}</Items>"
+                f"<Fecha_pago>{emitido['fecha_pago']}</Fecha_pago>"
+                f"<Cae>{emitido['cae']}</Cae>"
                 "<Fch_venc_Cae>20260713</Fch_venc_Cae>"
-                "</FEXResultGet>",
+                "</FEXResultGet>"
+                "<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>",
             ),
         )

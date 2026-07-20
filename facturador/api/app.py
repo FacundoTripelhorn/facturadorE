@@ -22,7 +22,7 @@ from ..service import (
     NotFoundError,
 )
 from ..setup import make_setup_state_provider, reconcile_setup_state
-from . import clients, health, invoices, params, setup
+from . import clients, health, invoices, params, registry, setup
 from .csrf import CsrfCookieMiddleware
 from .localhost_policy import (
     LocalhostPolicyMiddleware,
@@ -112,6 +112,7 @@ def create_app(
     app.include_router(params.router)
     app.include_router(health.router)
     app.include_router(setup.router)
+    app.include_router(registry.router)
 
     # Frontend HTML (§2.4): mismas dependencias vía app.state.service. Los
     # errores de dominio del frontend se renderizan en partials, no acá.
