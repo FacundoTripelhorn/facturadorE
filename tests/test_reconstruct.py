@@ -16,9 +16,9 @@ from facturador.migrations import latest_version
 from facturador.profile import EnvironmentProfile
 from facturador.reconstruct import (
     ProfileSnapshot,
+    PvTipoTarget,
     ReconstructError,
     ReconstructMode,
-    PvTipoTarget,
     profile_snapshot_from_conn,
     reconstruct_register,
 )
@@ -396,7 +396,7 @@ def test_identity_rejects_future_schema(profile_wsfex):
 def test_parse_envelope_missing_seed_key():
     from facturador.seed_backup import SeedBackupError
 
-    with pytest.raises(SeedBackupError, match="falta la clave"):
+    with pytest.raises(SeedBackupError, match="carece de claves obligatorias"):
         parse_envelope(
             {
                 "format": "facturador.seed",

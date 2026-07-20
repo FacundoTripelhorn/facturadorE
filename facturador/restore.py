@@ -16,7 +16,6 @@ sobrescribe la config de emisor/UI con la del seed. El launcher expone
 from __future__ import annotations
 
 import argparse
-import sqlite3
 import sys
 from collections.abc import Callable
 from pathlib import Path
