@@ -49,6 +49,32 @@ from .seed_import import (
 )
 
 
+def extract(tar_bytes: bytes, root: Path) -> list[str]:
+    """Legacy: extrae un tarball gz en la raíz del perfil (tests / backup.py).
+
+    Usa el filtro ``data`` de tarfile (bloquea paths absolutos, ``..`` y
+    symlinks fuera del árbol). Conservado mientras ``build_tar`` exista.
+    """
+    import io
+    import stat
+    import tarfile
+
+    from .profile import ProfilePaths
+
+    extraidos: list[str] = []
+    with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            extraidos.append(member.name)
+        tar.extractall(root, filter="data")
+    secrets_dir = ProfilePaths(root=root).secrets_dir
+    if sys.platform != "win32" and secrets_dir.is_dir():
+        secrets_dir.chmod(0o700)
+        for path in secrets_dir.iterdir():
+            if path.is_file():
+                path.chmod(stat.S_IRUSR)
+    return extraidos
+
+
 def _build_wsfex(profile: EnvironmentProfile) -> WsfexClient:
     config = Config(env=profile.environment, paths=profile.paths)
     wsaa = WsaaClient(config)

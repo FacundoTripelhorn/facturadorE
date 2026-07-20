@@ -14,6 +14,7 @@ from facturador import repo
 from facturador.backup import main as backup_main
 from facturador.db import connect
 from facturador.fiscal_identity import seal_fiscal_cuit
+from facturador.migrations import latest_version
 from facturador.profile import ProfilePaths
 from facturador.seed_backup import (
     SeedBackupError,
@@ -148,7 +149,7 @@ def test_assemble_seed_tiene_config_y_excluye_comprobantes(perfil_listo):
     paths, conn = perfil_listo
     seed = assemble_seed(conn, environment="homo")
 
-    assert seed["schema_version"] == 1
+    assert seed["schema_version"] == latest_version()
     assert seed["environment"] == "homo"
     assert seed["fiscal_cuit"] == TEST_CUIT
     assert seed["comprobante_tipos"] == [19, 20, 21]

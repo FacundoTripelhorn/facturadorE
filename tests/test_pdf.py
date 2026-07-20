@@ -478,7 +478,8 @@ def test_baseline_incluye_snapshot_de_render(tmp_path):
         ):
             assert name in inv_cols
         assert "pro_umed_ds" in item_cols
-        assert latest_version() == 1
+        # FAC-52 vive en el baseline (v1); migraciones posteriores no lo mueven.
+        assert latest_version() >= 1
     finally:
         conn.close()
 
