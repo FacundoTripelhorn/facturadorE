@@ -42,6 +42,37 @@ class WsfexError(RuntimeError):
         self.message = message
 
 
+# FAC-65 / docs/wsfex-gap-vs-error.md: FEXGetCMP ErrCode when the requested
+# (tipo, PV, nro) is not on ARCA's ledger. Distinct from transport/SOAP faults
+# and from other business ErrCodes (which abort a rebuild after retries).
+CMP_NOT_FOUND_CODES = frozenset({"1521"})
+
+
+class CmpNotFoundError(WsfexError):
+    """ARCA confirmed the comprobante does not exist (known gap, not a fault)."""
+
+
+@dataclass(frozen=True)
+class CmpItem:
+    """Línea de ítem devuelta por FEXGetCMP (FAC-65 rebuild)."""
+
+    pro_codigo: str
+    pro_ds: str
+    pro_qty: str
+    pro_umed: str
+    pro_precio_uni: str
+    pro_total_item: str
+    pro_bonificacion: str = "0"
+
+
+@dataclass(frozen=True)
+class CmpRecord:
+    """Respuesta estructurada de FEXGetCMP: campos planos + ítems anidados."""
+
+    fields: dict[str, str]
+    items: tuple[CmpItem, ...]
+
+
 @dataclass(frozen=True)
 class ParamRecord:
     code: str
@@ -223,6 +254,61 @@ def parse_auth_result(result: ET.Element) -> AuthResult:
     )
 
 
+def parse_cmp_record(result: ET.Element) -> CmpRecord:
+    """Parsea ``FEXGetCMPResult`` en campos planos + ítems (FAC-65).
+
+    Los tags bajo ``Items/Item`` no se aplastan en ``fields`` (evitarían
+    colisiones entre líneas). El resto de hojas de ``FEXResultGet`` sí.
+    """
+    result_get: ET.Element | None = None
+    for elem in result.iter():
+        if _local(elem.tag) == "FEXResultGet":
+            result_get = elem
+            break
+    if result_get is None:
+        raise WsfexError("?", "FEXGetCMP sin FEXResultGet")
+
+    fields: dict[str, str] = {}
+    items: list[CmpItem] = []
+    for child in list(result_get):
+        name = _local(child.tag)
+        if name == "Items":
+            for item_el in child:
+                if _local(item_el.tag) != "Item":
+                    continue
+                leaf: dict[str, str] = {}
+                for leaf_el in item_el:
+                    text = (leaf_el.text or "").strip()
+                    if text:
+                        leaf[_local(leaf_el.tag)] = text
+                items.append(
+                    CmpItem(
+                        pro_codigo=leaf.get("Pro_codigo", "0001"),
+                        pro_ds=leaf.get("Pro_ds", ""),
+                        pro_qty=leaf.get("Pro_qty", "1"),
+                        pro_umed=leaf.get("Pro_umed", str(UMED_UNIDADES)),
+                        pro_precio_uni=leaf.get("Pro_precio_uni", "0"),
+                        pro_total_item=leaf.get("Pro_total_item", "0"),
+                        pro_bonificacion=leaf.get("Pro_bonificacion", "0"),
+                    )
+                )
+            continue
+        # Hojas directas y subárboles no-Items: tomar texto de hojas.
+        if len(child) == 0:
+            text = (child.text or "").strip()
+            if text:
+                fields[name] = text
+            continue
+        for leaf_el in child.iter():
+            if leaf_el is child:
+                continue
+            if len(leaf_el) == 0:
+                text = (leaf_el.text or "").strip()
+                if text:
+                    fields[_local(leaf_el.tag)] = text
+    return CmpRecord(fields=fields, items=tuple(items))
+
+
 def _match_request(auth_result: AuthResult, invoice: Invoice) -> list[str]:
     """Discrepancias respuesta vs request; nunca aceptar un CAE ajeno."""
     mismatches = []
@@ -357,8 +443,11 @@ class WsfexClient:
             if _local(elem.tag) == "FEXErr":
                 code = elem.findtext("{*}ErrCode") or elem.findtext("ErrCode") or "?"
                 msg = elem.findtext("{*}ErrMsg") or elem.findtext("ErrMsg") or ""
-                if code.strip() not in ("0", "", "?"):
-                    raise WsfexError(code.strip(), msg)
+                clean = code.strip()
+                if clean not in ("0", "", "?"):
+                    if clean in CMP_NOT_FOUND_CODES:
+                        raise CmpNotFoundError(clean, msg)
+                    raise WsfexError(clean, msg)
                 return
 
     # --- métodos de negocio ---
@@ -431,23 +520,29 @@ class WsfexClient:
         return auth_result
 
     def get_cmp(self, cbte_tipo: int, punto_vta: int, cbte_nro: int) -> dict[str, str]:
-        """FEXGetCMP: comprobante registrado en ARCA, plano tag->texto.
+        """FEXGetCMP: campos planos tag→texto (sin ítems anidados).
+
         Base de la verificación post-emisión (checklist punto 6) y de la
-        reconciliación tras timeouts (§1.5)."""
+        reconciliación tras timeouts (§1.5). Para rebuild con ítems usar
+        :meth:`get_cmp_record`.
+        """
+        return dict(self.get_cmp_record(cbte_tipo, punto_vta, cbte_nro).fields)
+
+    def get_cmp_record(
+        self, cbte_tipo: int, punto_vta: int, cbte_nro: int
+    ) -> CmpRecord:
+        """FEXGetCMP estructurado: campos + ``Items/Item`` (FAC-65).
+
+        Raises:
+            CmpNotFoundError: ARCA confirma que el número no existe (gap).
+            WsfexError / httpx errors: fallo de negocio o transporte.
+        """
         cmp_el = ET.Element(f"{{{FEX_NS}}}Cmp")
         ET.SubElement(cmp_el, f"{{{FEX_NS}}}Cbte_tipo").text = str(cbte_tipo)
         ET.SubElement(cmp_el, f"{{{FEX_NS}}}Punto_vta").text = str(punto_vta)
         ET.SubElement(cmp_el, f"{{{FEX_NS}}}Cbte_nro").text = str(cbte_nro)
         result = self.call("FEXGetCMP", self._auth_element(), cmp_el)
-        registrado: dict[str, str] = {}
-        for elem in result.iter():
-            if _local(elem.tag) == "FEXResultGet":
-                for child in elem.iter():
-                    text = (child.text or "").strip()
-                    if text and len(child) == 0:
-                        registrado[_local(child.tag)] = text
-                break
-        return registrado
+        return parse_cmp_record(result)
 
     def verify_issued(self, invoice: Invoice, auth_result: AuthResult) -> list[str]:
         """Constata contra FEXGetCMP que el CAE quedó registrado con los

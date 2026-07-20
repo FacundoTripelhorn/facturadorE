@@ -334,6 +334,35 @@ def autorizar(
     return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
 
 
+@router.post("/ui/registry/catch-up")
+def catch_up_ui(
+    request: Request,
+    service: ServiceDep,
+    invoice_id: str = Form(""),
+):
+    """FAC-65: remediación del guard FAC-48 — catch-up desde ARCA."""
+    try:
+        report = service.catch_up_from_arca()
+    except ServiceError as exc:
+        if invoice_id:
+            inv = _factura_o_redirect(service, invoice_id)
+            if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
+                return _pagina_revisar(
+                    request, service, inv,
+                    error=str(exc),
+                    force=True,
+                )
+        return RedirectResponse("/comprobantes", status_code=303)
+    if invoice_id:
+        return RedirectResponse(
+            f"/facturas/{invoice_id}/revisar?aviso=catchup&n={report.inserted}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/comprobantes?aviso=catchup&n={report.inserted}", status_code=303
+    )
+
+
 @router.post("/ui/facturas/{invoice_id}/descartar")
 def descartar(request: Request, service: ServiceDep, invoice_id: str):
     try:

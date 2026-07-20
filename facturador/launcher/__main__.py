@@ -101,6 +101,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=60.0,
         help="Segundos máximos esperando readiness (default: 60).",
     )
+    parser.add_argument(
+        "--restore",
+        action="store_true",
+        help=(
+            "FAC-65: restaurar el perfil desde seed.age + rebuild ARCA "
+            "(backend debe estar detenido). Requiere --env e --identity."
+        ),
+    )
+    parser.add_argument(
+        "--identity",
+        help="Ruta a la identidad age privada (requerida con --restore).",
+    )
+    parser.add_argument(
+        "--seed",
+        help="Ruta a seed.age (default: backups/seed.age del perfil).",
+    )
     return parser
 
 
@@ -116,6 +132,28 @@ def main(
     factory = supervisor_factory or ProcessSupervisor
     chooser = choose or choose_environment
     fail = report_failure or _report_failure
+
+    if args.restore:
+        if args.env is None:
+            fail("--restore requiere --env homo|prod.")
+            return 2
+        if not args.identity:
+            fail("--restore requiere --identity <ruta-a-age-key>.")
+            return 2
+        from pathlib import Path
+
+        from .restore_flow import run_launcher_restore
+
+        try:
+            env = resolve_launch_environment(args.env)
+        except ProfileError as exc:
+            fail(str(exc))
+            return 2
+        return run_launcher_restore(
+            env,
+            identity_path=Path(args.identity),
+            seed_path=Path(args.seed) if args.seed else None,
+        )
 
     # Sesión inicial: --env fija el primer perfil; sin flag, el chooser.
     if args.env is not None:

@@ -42,6 +42,8 @@ from .mappers import (
     wsfex_invoice_to_raw,
 )
 from .profile import EnvironmentProfile
+from .reconstruct import ReconstructError, ReconstructReport
+from .restore import catch_up_register
 from .schemas import (
     BackupSettingsIn,
     ClientIn,
@@ -488,6 +490,21 @@ class InvoiceService:
     # Authorize (reglas §2.3)
     # ------------------------------------------------------------------
 
+    def catch_up_from_arca(self) -> ReconstructReport:
+        """FAC-65 / FAC-48: append N_local+1..N_arca en una transacción.
+
+        Remediación cuando el guard de registro desactualizado bloquea la
+        emisión. Solo append (no wipe); puede correr con el backend vivo.
+        """
+        with _AUTHORIZE_LOCK:
+            profile = EnvironmentProfile(
+                environment=self.config.env, paths=self.config.paths
+            )
+            try:
+                return catch_up_register(self.conn, self.wsfex, profile)
+            except ReconstructError as exc:
+                raise ConflictError(str(exc)) from exc
+
     def authorize(self, invoice_id: str, force_desync: bool = False) -> sqlite3.Row:
         # Serializa el authorize completo (ver _AUTHORIZE_LOCK): numeración
         # secuencial de ARCA + conexión SQLite compartida no reentrante.
@@ -557,16 +574,16 @@ class InvoiceService:
             raise StaleRegistryError(
                 f"Registro local desactualizado: ARCA reporta último comprobante "
                 f"{last_cmp} para PV {pv} tipo {tipo} pero el registro local "
-                f"autorizado (wsfex) llega a {local_max}. Restaurar el último "
-                "backup antes de emitir (o forzar con force_desync=true si es "
+                f"autorizado (wsfex) llega a {local_max}. Sincronizar desde ARCA "
+                "(catch-up) antes de emitir (o forzar con force_desync=true si es "
                 "intencional, p.ej. homologación)."
             )
         if local_max > last_cmp:
             raise ConflictError(
                 f"Registro local inconsistente: la DB local tiene comprobante "
                 f"{local_max} para PV {pv} tipo {tipo} pero ARCA reporta último "
-                f"{last_cmp}. No emitir: restaurar un backup coherente o "
-                "investigar antes de continuar."
+                f"{last_cmp}. No emitir: sincronizar o investigar antes de "
+                "continuar."
             )
 
     def _authorize_first_time(

@@ -247,7 +247,9 @@ which one operates; PV selection when more than one is enabled. See
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Encrypted seed backup (FAC-44) | `facturador/seed_backup.py`, `facturador/backup.py` |
 | S3 seed adapter (FAC-45: `seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
-| Restore CLI (legacy until FAC-65) | `facturador/restore.py` |
+| Rebuild from ARCA / catch-up (FAC-65) | `facturador/reconstruct.py`, `facturador/seed_import.py`, `facturador/restore.py`, `facturador/launcher/restore_flow.py`, `facturador/api/registry.py` |
+| Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |
+| Restore CLI (seed + rebuild) | `facturador/restore.py` (`python -m facturador.restore`) |
 | Homologación setup walkthrough | `docs/setup-homologacion.md` |
 | Production setup walkthrough | `docs/setup-produccion.md` |
 | Config / profile tests | `tests/test_config.py`, `tests/test_profile.py`, `tests/test_settings.py` |

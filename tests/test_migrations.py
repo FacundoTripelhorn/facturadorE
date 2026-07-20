@@ -27,6 +27,8 @@ BASELINE_TABLES = {
     "invoice_items",
 }
 
+LATEST_TABLES = BASELINE_TABLES | {"registry_gaps"}
+
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
@@ -40,7 +42,7 @@ def test_fresh_profile_creates_latest_schema(tmp_path: Path) -> None:
     try:
         assert current_version(conn) == latest_version()
         assert current_version(conn) == MIGRATIONS[-1].version
-        assert BASELINE_TABLES <= _tables(conn)
+        assert LATEST_TABLES <= _tables(conn)
         rows = conn.execute(
             "SELECT version, name FROM schema_migrations ORDER BY version"
         ).fetchall()

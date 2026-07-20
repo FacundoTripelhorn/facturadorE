@@ -88,6 +88,21 @@ def _load_baseline_sql() -> str:
 
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="baseline", sql=_load_baseline_sql()),
+    Migration(
+        version=2,
+        name="registry_gaps",
+        sql="""
+-- Huecos confirmados por ARCA durante rebuild/catch-up (FAC-65).
+-- No cuentan para max_authorized_cbte_nro (solo source=wsfex authorized).
+CREATE TABLE registry_gaps (
+    punto_venta INTEGER NOT NULL,
+    cbte_tipo   INTEGER NOT NULL,
+    cbte_nro    INTEGER NOT NULL,
+    noted_at    TEXT NOT NULL,
+    PRIMARY KEY (punto_venta, cbte_tipo, cbte_nro)
+);
+""",
+    ),
 )
 
 
