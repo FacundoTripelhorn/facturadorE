@@ -262,7 +262,13 @@ def _factura_o_redirect(service, invoice_id: str, reconcile: bool = False):
 
 
 @router.get("/facturas/{invoice_id}/revisar", response_class=HTMLResponse)
-def revisar(request: Request, service: ServiceDep, invoice_id: str):
+def revisar(
+    request: Request,
+    service: ServiceDep,
+    invoice_id: str,
+    aviso: str = "",
+    n: str = "",
+):
     """Qué se va a enviar a ARCA. Solo para borradores: cualquier otro
     estado ya tiene historia y se ve en el detalle."""
     inv = _factura_o_redirect(service, invoice_id)
@@ -270,11 +276,29 @@ def revisar(request: Request, service: ServiceDep, invoice_id: str):
         return RedirectResponse("/comprobantes", status_code=303)
     if inv["status"] != InvoiceStatus.DRAFT:
         return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
-    return _pagina_revisar(request, service, inv)
+    return _pagina_revisar(
+        request,
+        service,
+        inv,
+        aviso=_catchup_aviso(aviso, n),
+    )
+
+
+def _catchup_aviso(aviso: str, n: str) -> str | None:
+    if aviso != "catchup":
+        return None
+    if n:
+        return f"Registro sincronizado desde ARCA: {n} comprobantes."
+    return "Registro sincronizado desde ARCA."
 
 
 def _pagina_revisar(
-    request: Request, service, inv, error: str | None = None, force: bool = False
+    request: Request,
+    service,
+    inv,
+    error: str | None = None,
+    force: bool = False,
+    aviso: str | None = None,
 ):
     return templates.TemplateResponse(
         request,
@@ -283,6 +307,7 @@ def _pagina_revisar(
             "f": inv,
             "items": repo.get_invoice_items(service.conn, inv["id"]),
             "error": error,
+            "aviso": aviso,
             "ofrecer_force": force,
         },
         status_code=409 if error else 200,
@@ -352,7 +377,7 @@ def catch_up_ui(
                     error=str(exc),
                     force=True,
                 )
-        # Sin invoice_id (p.ej. desde el listado): mostrar el error.
+        # Sin invoice_id: PRG al listado (error en query; GET /comprobantes lo muestra).
         from urllib.parse import quote
 
         return RedirectResponse(
@@ -406,13 +431,6 @@ def comprobantes(
         )
         for tab, statuses in TAB_FILTERS.items()
     }
-    aviso_msg = None
-    if aviso == "catchup":
-        aviso_msg = (
-            f"Registro sincronizado desde ARCA ({n or '0'} comprobantes)."
-            if n
-            else "Registro sincronizado desde ARCA."
-        )
     return templates.TemplateResponse(
         request,
         "comprobantes.html",
@@ -420,7 +438,7 @@ def comprobantes(
             "tabs": TAB_LABELS,
             "tab_counts": tab_counts,
             "estado": estado,
-            "aviso": aviso_msg,
+            "aviso": _catchup_aviso(aviso, n),
             "error": error or None,
             "facturas": repo.list_invoices(
                 service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]

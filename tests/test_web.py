@@ -252,6 +252,68 @@ def test_db_desactualizada_reabre_revision_con_force(api, arca):
     assert "autorizada" in api.get(f"/facturas/{invoice_id}").text
 
 
+def test_ui_catch_up_sin_invoice_id_muestra_error_en_listado(api, monkeypatch):
+    """Ítem 6 review: POST catch-up sin invoice_id → error visible en /comprobantes."""
+    from facturador.service import ConflictError, InvoiceService
+
+    def boom(self):
+        raise ConflictError("fallo de prueba catch-up")
+
+    monkeypatch.setattr(InvoiceService, "catch_up_from_arca", boom)
+
+    r = api.post(
+        "/ui/registry/catch-up",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    location = r.headers["location"]
+    assert location.startswith("/comprobantes?error=")
+    page = api.get(location)
+    assert page.status_code == 200
+    assert "No se pudo sincronizar" in page.text
+    assert "fallo de prueba catch-up" in page.text
+    assert "panel error" in page.text
+
+
+def test_ui_catch_up_sin_invoice_id_muestra_aviso_en_listado(api, arca):
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=701)
+    arca.last_cmp[(1, 19)] = 1
+
+    r = api.post(
+        "/ui/registry/catch-up",
+        data=with_csrf(api),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    location = r.headers["location"]
+    assert location.startswith("/comprobantes?aviso=catchup")
+    page = api.get(location)
+    assert page.status_code == 200
+    assert "Registro sincronizado desde ARCA: 1 comprobantes." in page.text
+    assert "panel ok" in page.text
+
+
+def test_ui_catch_up_con_invoice_id_muestra_aviso_en_revisar(api, arca):
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=702)
+    arca.last_cmp[(1, 19)] = 1
+
+    r = api.post(
+        "/ui/registry/catch-up",
+        data=with_csrf(api, {"invoice_id": invoice_id}),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    location = r.headers["location"]
+    assert location.startswith(f"/facturas/{invoice_id}/revisar?aviso=catchup")
+    page = api.get(location)
+    assert page.status_code == 200
+    assert "Registro sincronizado desde ARCA: 1 comprobantes." in page.text
+    assert "panel ok" in page.text
+
+
 # --- unknown: reintento desde el detalle ---
 
 

@@ -8,6 +8,11 @@
   </div>
 </div>
 {% endif %}
+{% if aviso %}
+<div class="panel ok">
+  <div>{{ aviso }}</div>
+</div>
+{% endif %}
 
 {% if env == "prod" %}
 <div class="panel neutro">
