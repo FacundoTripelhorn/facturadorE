@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import sqlite3
 
-# Claves que solo escriben helpers dedicados (FAC-39: identidad fiscal).
-# ``save_settings`` las rechaza para que la config de emisor/backups no
-# pueda sobrescribir el CUIT del perfil.
-PROTECTED_KEYS = frozenset({"fiscal_cuit"})
+# Claves que solo escriben helpers dedicados (FAC-39: identidad fiscal;
+# FAC-47: estado de seed backup). ``save_settings`` las rechaza para que
+# la config de emisor/backups no pueda sobrescribirlas. Los nombres deben
+# coincidir con ``SEED_BACKUP_STATE_KEYS`` en ``seed_backup_sync``.
+PROTECTED_KEYS = frozenset(
+    {
+        "fiscal_cuit",
+        "seed_backup_status",
+        "seed_backup_last_success_at",
+        "seed_backup_last_attempt_at",
+        "seed_backup_last_error",
+        "seed_backup_pending_reason",
+    }
+)
 
 
 def get_settings(conn: sqlite3.Connection) -> dict[str, str]:

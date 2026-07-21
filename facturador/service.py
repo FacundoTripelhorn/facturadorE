@@ -51,6 +51,7 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
+from .seed_backup_sync import SeedBackupCoordinator, SeedBackupState
 from .seed_import import SeedIdentityError
 from .settings import (
     Emisor,
@@ -102,10 +103,35 @@ class ArcaUnavailableError(ServiceError):
 
 
 class InvoiceService:
-    def __init__(self, config: Config, conn: sqlite3.Connection, wsfex: WsfexClient):
+    def __init__(
+        self,
+        config: Config,
+        conn: sqlite3.Connection,
+        wsfex: WsfexClient,
+        seed_backup: SeedBackupCoordinator | None = None,
+    ):
         self.config = config
         self.conn = conn
         self.wsfex = wsfex
+        # FAC-47: opcional para tests unitarios del service sin coordinator.
+        self.seed_backup = seed_backup
+
+    def _notify_seed_backup(self, reason: str) -> None:
+        """Config-change hook (FAC-47). Never raises; never called from authorize."""
+        if self.seed_backup is None:
+            return
+        try:
+            self.seed_backup.notify_config_changed(reason)
+        except Exception:
+            logger.exception(
+                "Fallo al notificar seed backup (%s); el cambio de config "
+                "ya quedó persistido",
+                reason,
+            )
+
+    def notify_seed_backup(self, reason: str) -> None:
+        """Public config-change hook (onboarding ready, recipients, tests)."""
+        self._notify_seed_backup(reason)
 
     # ------------------------------------------------------------------
     # Configuración de dominio (vive en la DB, se edita desde la UI)
@@ -141,6 +167,7 @@ class InvoiceService:
                 "backup_s3_prefix": payload.backup_s3_prefix,
             },
         )
+        self._notify_seed_backup("ui_config")
         return Settings(
             emisor=actual.emisor,
             backup_s3_bucket=payload.backup_s3_bucket,
@@ -167,6 +194,7 @@ class InvoiceService:
         )
         if get_active_emisor_id(self.conn) is None:
             set_active_emisor(self.conn, row["id"])
+        self._notify_seed_backup("emisor")
         return row
 
     def update_emisor(self, emisor_id: str, payload: EmisorUpdateIn) -> sqlite3.Row:
@@ -186,6 +214,7 @@ class InvoiceService:
         )
         if row is None:
             raise NotFoundError(f"Emisor {emisor_id} no existe")
+        self._notify_seed_backup("emisor")
         return row
 
     def activate_emisor(self, emisor_id: str) -> None:
@@ -199,6 +228,31 @@ class InvoiceService:
                 f"{self.config.env}: no se puede activar para emitir."
             )
         set_active_emisor(self.conn, emisor_id)
+        self._notify_seed_backup("active_emisor")
+
+    def get_seed_backup_state(self) -> SeedBackupState:
+        """Estado queryable del seed backup (FAC-47 → FAC-49)."""
+        if self.seed_backup is None:
+            from .seed_backup_sync import load_seed_backup_state
+
+            return load_seed_backup_state(self.conn)
+        return self.seed_backup.get_state()
+
+    def run_seed_backup_now(self) -> SeedBackupState:
+        """Disparo manual / flush del seed backup (FAC-47)."""
+        if self.seed_backup is None:
+            raise ConflictError(
+                "Seed backup no está habilitado en este proceso."
+            )
+        return self.seed_backup.backup_now()
+
+    def replace_seed_recipients(self, text: str) -> SeedBackupState:
+        """Actualiza recipients.txt local y dispara backup (FAC-47)."""
+        if self.seed_backup is None:
+            raise ConflictError(
+                "Seed backup no está habilitado en este proceso."
+            )
+        return self.seed_backup.replace_recipients(text)
 
     # ------------------------------------------------------------------
     # Parámetros (cache con refresh lazy de 24 h — design.md §6.2)
@@ -250,14 +304,22 @@ class InvoiceService:
 
     def create_client(self, payload: ClientIn) -> sqlite3.Row:
         self._validate_client_codes(payload)
-        return repo.create_client(self.conn, payload.model_dump())
+        row = repo.create_client(self.conn, payload.model_dump())
+        # Solo el cliente default viaja en el seed (FAC-44 / FAC-47).
+        if row["is_default"]:
+            self._notify_seed_backup("default_client")
+        return row
 
     def update_client(self, client_id: str, payload: ClientIn) -> sqlite3.Row:
         self._validate_client_codes(payload)
+        before = repo.get_client(self.conn, client_id)
+        was_default = bool(before["is_default"]) if before is not None else False
         row = repo.update_client(self.conn, client_id, payload.model_dump())
         if row is None:
             raise NotFoundError(f"Cliente {client_id} no existe")
         # No toca facturas: los datos viajan snapshoteados en cada invoice.
+        if row["is_default"] or was_default:
+            self._notify_seed_backup("default_client")
         return row
 
     def _validate_client_codes(self, payload: ClientIn) -> None:

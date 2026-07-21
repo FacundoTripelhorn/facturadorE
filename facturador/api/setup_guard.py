@@ -37,6 +37,9 @@ def is_setup_exempt(method: str, path: str) -> bool:
         return True
     if path.startswith("/ui/clientes"):
         return True
+    # Seed backup status / manual trigger (FAC-47): no depende de ARCA.
+    if path == "/backup" or path.startswith("/backup/"):
+        return True
     return False
 
 

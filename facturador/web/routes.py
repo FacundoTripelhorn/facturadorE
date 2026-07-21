@@ -795,6 +795,9 @@ async def guardar_emisor_setup(
         )
 
     new_state = reconcile_setup_state(profile, service.conn)
+    if new_state is SetupState.READY and state is not SetupState.READY:
+        # FAC-47: fin de onboarding (/setup is setup-guard exempt).
+        service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "emisor"
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
 
@@ -872,6 +875,9 @@ async def guardar_punto_venta_setup(
         )
 
     new_state = reconcile_setup_state(profile, service.conn)
+    if new_state is SetupState.READY and state is not SetupState.READY:
+        # FAC-47: fin de onboarding (/setup is setup-guard exempt).
+        service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "punto_venta"
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
 

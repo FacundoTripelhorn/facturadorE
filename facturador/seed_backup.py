@@ -93,6 +93,28 @@ def recipients_path(paths: ProfilePaths) -> Path:
     return paths.backups_dir / RECIPIENTS_FILENAME
 
 
+def write_recipients_file(paths: ProfilePaths, text: str) -> Path:
+    """Escribe ``recipients.txt`` local (overwrite atómico) y valida el cuerpo.
+
+    Disparo de backup: FAC-47 (``SeedBackupCoordinator.replace_recipients``).
+    """
+    # Validar antes de tocar disco: parse_recipients exige claves age1…
+    body = text if text.endswith("\n") or text == "" else text + "\n"
+    parsed = parse_recipients(body)
+    if not parsed:
+        raise SeedBackupError(
+            f"{RECIPIENTS_FILENAME} no lista ninguna clave age. "
+            "Sin recipients no se puede cifrar el seed."
+        )
+    paths.backups_dir.mkdir(parents=True, exist_ok=True)
+    dest = recipients_path(paths)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    tmp.write_text(body, encoding="utf-8")
+    tmp.chmod(0o600)
+    tmp.replace(dest)
+    return dest
+
+
 def seed_archive_path(paths: ProfilePaths) -> Path:
     """``seed.age`` local: nombre fijo, se sobrescribe en cada backup."""
     return paths.backups_dir / SEED_FILENAME

@@ -68,6 +68,17 @@ class BackupSettingsIn(BaseModel):
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 
+class SeedBackupStateOut(BaseModel):
+    """Estado queryable del seed backup (FAC-47 → FAC-49)."""
+
+    status: str
+    last_success_at: str | None = None
+    last_attempt_at: str | None = None
+    last_error: str | None = None
+    pending_reason: str | None = None
+    needs_retry: bool = False
+
+
 class ClientIn(BaseModel):
     razon_social: str = Field(min_length=1, max_length=200)
     domicilio: str = ""
