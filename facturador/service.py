@@ -51,11 +51,8 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
-<<<<<<< HEAD
-from .seed_import import SeedIdentityError
-=======
 from .seed_backup_sync import SeedBackupCoordinator, SeedBackupState
->>>>>>> 9ac196e (FAC-47: Trigger encrypted seed backup on profile config changes)
+from .seed_import import SeedIdentityError
 from .settings import (
     Emisor,
     Settings,
