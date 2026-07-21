@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import time
 from decimal import Decimal
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -417,3 +419,44 @@ def test_protected_settings_reject_backup_state_keys(profile_conn):
     _, conn = profile_conn
     with pytest.raises(ValueError, match="identidad fiscal|seed_backup"):
         repo.save_settings(conn, {"seed_backup_status": "ok"})
+
+
+def test_backup_worker_uses_dedicated_db_connection(profile_conn):
+    """Codex: never share the request-thread SQLite connection with the worker."""
+    profile, conn = profile_conn
+    opened: list[sqlite3.Connection] = []
+
+    def connect_factory() -> sqlite3.Connection:
+        worker = db.connect(profile.paths.db)
+        opened.append(worker)
+        return worker
+
+    seen_conn: list[object] = []
+
+    def tracking_run(worker_conn, paths, *, environment, store=None):
+        seen_conn.append(worker_conn)
+        assert worker_conn is not conn
+        return "s3://ok"
+
+    coord = SeedBackupCoordinator(
+        conn,
+        profile.paths,
+        environment="homo",
+        debounce_s=60.0,
+        connect=connect_factory,
+    )
+    try:
+        with patch(
+            "facturador.seed_backup_sync.run_seed_backup", tracking_run
+        ):
+            state = coord.backup_now()
+        assert state.status is SeedBackupStatus.OK
+        assert len(opened) == 1
+        assert seen_conn == opened
+        # Worker connection must be closed after execute.
+        with pytest.raises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")
+        # Request-thread connection still usable.
+        assert load_seed_backup_state(conn).status is SeedBackupStatus.OK
+    finally:
+        coord.shutdown()

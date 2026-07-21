@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from .db import connect as connect_db
 from .fiscal_identity import get_sealed_fiscal_cuit
 from .profile import ProfilePaths
 from .s3_seed import (
@@ -230,6 +231,10 @@ class SeedBackupCoordinator:
 
     ``notify_config_changed`` is safe to call from request threads: it only
     marks pending and (re)schedules a debounced run. Failures never raise.
+
+    Backup work (``_execute``) always opens its **own** SQLite connection so
+    the FastAPI request thread's shared ``conn`` is never used from the
+    debounced worker thread.
     """
 
     def __init__(
@@ -243,27 +248,22 @@ class SeedBackupCoordinator:
         debounce_s: float = DEFAULT_DEBOUNCE_S,
         now: Callable[[], str] = _utcnow_iso,
         timer_factory: Callable[..., threading.Timer] | None = None,
+        connect: Callable[[], sqlite3.Connection] | None = None,
     ) -> None:
         self._conn = conn
         self._paths = paths
         self._environment = environment.strip().lower()
         self._store = store
-        self._run_backup = run_backup or self._default_runner
+        # None ⇒ default runner (uses the per-execute worker connection).
+        self._custom_runner = run_backup
         self._debounce_s = max(0.0, float(debounce_s))
         self._now = now
         self._timer_factory = timer_factory or threading.Timer
+        self._connect = connect or (lambda: connect_db(paths.db))
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
         self._closed = False
         self._run_count = 0  # test aid
-
-    def _default_runner(self) -> str | None:
-        return run_seed_backup(
-            self._conn,
-            self._paths,
-            environment=self._environment,
-            store=self._store,
-        )
 
     def get_state(self) -> SeedBackupState:
         return load_seed_backup_state(self._conn)
@@ -330,30 +330,58 @@ class SeedBackupCoordinator:
             self._timer.cancel()
             self._timer = None
 
+    def _run_with_worker_conn(self, worker_conn: sqlite3.Connection) -> str | None:
+        if self._custom_runner is not None:
+            return self._custom_runner()
+        return run_seed_backup(
+            worker_conn,
+            self._paths,
+            environment=self._environment,
+            store=self._store,
+        )
+
     def _execute(self) -> SeedBackupState:
+        """Create/upload on a dedicated DB connection (never ``self._conn``)."""
         when = self._now()
         try:
-            self._run_backup()
-        except (SeedBackupError, S3SeedError, OSError, ValueError) as exc:
-            logger.warning("Seed backup falló: %s", exc)
-            try:
-                return _mark_failed(self._conn, when=when, error=str(exc))
-            except Exception:
-                logger.exception("No se pudo persistir fallo de seed backup")
-                return load_seed_backup_state(self._conn)
+            worker_conn = self._connect()
         except Exception as exc:
-            logger.exception("Seed backup falló inesperadamente")
+            logger.exception("No se pudo abrir conexión worker de seed backup")
             try:
                 return _mark_failed(self._conn, when=when, error=str(exc))
             except Exception:
                 logger.exception("No se pudo persistir fallo de seed backup")
                 return load_seed_backup_state(self._conn)
-        self._run_count += 1
+
         try:
-            return _mark_success(self._conn, when=when)
-        except Exception:
-            logger.exception("No se pudo persistir éxito de seed backup")
-            return load_seed_backup_state(self._conn)
+            try:
+                self._run_with_worker_conn(worker_conn)
+            except (SeedBackupError, S3SeedError, OSError, ValueError) as exc:
+                logger.warning("Seed backup falló: %s", exc)
+                try:
+                    return _mark_failed(worker_conn, when=when, error=str(exc))
+                except Exception:
+                    logger.exception(
+                        "No se pudo persistir fallo de seed backup"
+                    )
+                    return load_seed_backup_state(worker_conn)
+            except Exception as exc:
+                logger.exception("Seed backup falló inesperadamente")
+                try:
+                    return _mark_failed(worker_conn, when=when, error=str(exc))
+                except Exception:
+                    logger.exception(
+                        "No se pudo persistir fallo de seed backup"
+                    )
+                    return load_seed_backup_state(worker_conn)
+            self._run_count += 1
+            try:
+                return _mark_success(worker_conn, when=when)
+            except Exception:
+                logger.exception("No se pudo persistir éxito de seed backup")
+                return load_seed_backup_state(worker_conn)
+        finally:
+            worker_conn.close()
 
 
 def seed_backup_state_as_dict(state: SeedBackupState) -> dict[str, Any]:
