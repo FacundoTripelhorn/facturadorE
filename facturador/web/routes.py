@@ -452,6 +452,17 @@ def comprobantes(
 # ---------------------------------------------------------------------------
 
 
+def _param_options_by_description(rows: list) -> list:
+    """Orden alfabético por descripción (País / CUIT país en los selects)."""
+    return sorted(
+        rows,
+        key=lambda r: (
+            str(r["description"] or "").casefold(),
+            str(r["code"]),
+        ),
+    )
+
+
 def _pagina_clientes(
     request: Request,
     service,
@@ -462,7 +473,10 @@ def _pagina_clientes(
     params: dict[str, list] = {}
     try:
         for kind in ("pais", "cuit_pais", "moneda", "idioma"):
-            params[kind] = service.get_params(kind)
+            rows = service.get_params(kind)
+            if kind in ("pais", "cuit_pais"):
+                rows = _param_options_by_description(rows)
+            params[kind] = rows
     except (ServiceError, CertificateError, OSError) as exc:
         # Sin certs / par inválido el refresh de params no debe 500:
         # el template muestra el mensaje y el CRUD offline sigue usable

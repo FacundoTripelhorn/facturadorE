@@ -411,6 +411,52 @@ def test_alta_de_cliente_invalida_no_pierde_la_pagina(api, arca):
     assert r.status_code == 422
     assert "pais_dst" in r.text               # error legible en la misma página
 
+def test_selects_pais_y_cuit_pais_ordenados_por_descripcion(api, arca):
+    """País destino y CUIT país se listan A→Z por descripción, no por código."""
+    import re
+
+    from facturador import repo
+
+    repo.replace_params(
+        api.conn,
+        "pais",
+        [
+            {"code": "203", "description": "ZAMBIA"},
+            {"code": "225", "description": "URUGUAY"},
+            {"code": "212", "description": "BRASIL"},
+        ],
+    )
+    repo.replace_params(
+        api.conn,
+        "cuit_pais",
+        [
+            {"code": "55000005252", "description": "ZAMBIA - Persona Juridica"},
+            {"code": "55000002002", "description": "URUGUAY - Persona Juridica"},
+            {"code": "55000002129", "description": "BRASIL - Persona Juridica"},
+        ],
+    )
+
+    html = api.get("/clientes").text
+
+    pais_block = re.search(
+        r'id="pais_dst".*?</select>', html, flags=re.DOTALL
+    )
+    assert pais_block is not None
+    pais_labels = re.findall(r"<option[^>]*>\s*(.*?)\s*</option>", pais_block.group(0))
+    assert pais_labels == ["BRASIL", "URUGUAY", "ZAMBIA"]
+
+    cuit_block = re.search(
+        r'id="cuit_pais".*?</select>', html, flags=re.DOTALL
+    )
+    assert cuit_block is not None
+    cuit_labels = re.findall(r"<option[^>]*>\s*(.*?)\s*</option>", cuit_block.group(0))
+    assert cuit_labels == [
+        "BRASIL - Persona Juridica",
+        "URUGUAY - Persona Juridica",
+        "ZAMBIA - Persona Juridica",
+    ]
+
+
 
 # --- configuración (settings de dominio: viven en la DB) ---
 
