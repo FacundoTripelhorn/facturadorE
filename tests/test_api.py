@@ -574,3 +574,102 @@ def test_pdf_de_factura_de_otro_perfil_rechazado(api, arca):
     _marcar_como_de_otro_perfil(api, draft["id"])
 
     assert api.get(f"/invoices/{draft['id']}/pdf").status_code == 409
+
+
+# --- FAC-68: peek solo-lectura del registro ARCA ---
+
+
+def test_peek_arca_lista_mas_recientes_primero(api, arca):
+    """FEXGetLast_CMP + FEXGetCMP; paginación offset/limit (más reciente primero)."""
+    for nro in (1, 2, 3, 4, 5):
+        arca.seed_issued(
+            tipo=19,
+            pv=1,
+            nro=nro,
+            imp_total=f"{100 * nro}.00",
+            cliente=f"Cliente {nro}",
+        )
+
+    before = api.conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
+    r = api.get("/invoices/arca?limit=2&offset=0")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["punto_venta"] == 1
+    assert body["cbte_tipo"] == 19
+    assert body["last_cmp"] == 5
+    assert body["limit"] == 2
+    assert body["offset"] == 0
+    assert [inv["cbte_nro"] for inv in body["invoices"]] == [5, 4]
+    assert body["invoices"][0]["cae"].startswith("761")
+    assert body["invoices"][0]["imp_total"] == "500.00"
+    assert body["invoices"][0]["cliente"] == "Cliente 5"
+    assert body["invoices"][0]["items"][0]["pro_ds"] == "Servicio"
+    assert body["gaps"] == []
+
+    page2 = api.get("/invoices/arca?limit=2&offset=2").json()
+    assert [inv["cbte_nro"] for inv in page2["invoices"]] == [3, 2]
+
+    # Sin escrituras locales (no es catch-up / rebuild).
+    after = api.conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0]
+    assert after == before
+    assert arca.calls["FEXGetLast_CMP"] >= 1
+    assert arca.calls["FEXGetCMP"] >= 4
+
+
+def test_peek_arca_reporta_gaps_1521(api, arca):
+    """Huecos confirmados (ErrCode 1521) van en gaps; el resto en invoices."""
+    arca.seed_issued(tipo=19, pv=1, nro=1, imp_total="10.00")
+    arca.seed_issued(tipo=19, pv=1, nro=3, imp_total="30.00")
+    # last_cmp=3 pero nro 2 no existe → gap.
+
+    r = api.get("/invoices/arca?limit=10")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["last_cmp"] == 3
+    assert [inv["cbte_nro"] for inv in body["invoices"]] == [3, 1]
+    assert body["gaps"] == [
+        {"punto_venta": 1, "cbte_tipo": 19, "cbte_nro": 2}
+    ]
+
+
+def test_peek_arca_cbte_nro_unico(api, arca):
+    arca.seed_issued(
+        tipo=19, pv=1, nro=7, imp_total="77.00", cliente="Solo Uno"
+    )
+    # last_cmp queda en 7; pedimos un número puntual.
+    r = api.get("/invoices/arca?cbte_nro=7")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["last_cmp"] == 7
+    assert len(body["invoices"]) == 1
+    assert body["invoices"][0]["cbte_nro"] == 7
+    assert body["invoices"][0]["cliente"] == "Solo Uno"
+    assert body["gaps"] == []
+
+    missing = api.get("/invoices/arca?cbte_nro=2")
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["invoices"] == []
+    assert missing.json()["gaps"] == [
+        {"punto_venta": 1, "cbte_tipo": 19, "cbte_nro": 2}
+    ]
+
+
+def test_peek_arca_punto_venta_override(api, arca):
+    arca.seed_issued(tipo=19, pv=2, nro=1, imp_total="99.00")
+    r = api.get("/invoices/arca?punto_venta=2")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["punto_venta"] == 2
+    assert body["last_cmp"] == 1
+    assert body["invoices"][0]["punto_venta"] == 2
+    assert body["invoices"][0]["imp_total"] == "99.00"
+
+
+def test_peek_arca_ruta_estatica_no_capturada_como_invoice_id(api, arca):
+    """GET /invoices/arca no debe caer en GET /invoices/{invoice_id}."""
+    r = api.get("/invoices/arca")
+    assert r.status_code == 200, r.text
+    assert "last_cmp" in r.json()
+    # Si "arca" se interpretara como UUID, sería 404 de factura.
+    assert r.json()["invoices"] == []
+    assert r.json()["gaps"] == []

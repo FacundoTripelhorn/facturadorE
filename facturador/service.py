@@ -23,7 +23,13 @@ from typing import Any
 import httpx
 
 from . import repo
-from .arca.wsfex import Invoice, WsfexClient, WsfexError
+from .arca.wsfex import (
+    CmpNotFoundError,
+    CmpRecord,
+    Invoice,
+    WsfexClient,
+    WsfexError,
+)
 from .certs import CertificateError
 from .config import Config
 from .constants import (
@@ -45,6 +51,10 @@ from .profile import EnvironmentProfile
 from .reconstruct import ReconstructError, ReconstructReport
 from .restore import catch_up_register
 from .schemas import (
+    ArcaCmpItemOut,
+    ArcaCmpSummaryOut,
+    ArcaGapOut,
+    ArcaRegisterPeekOut,
     BackupSettingsIn,
     ClientIn,
     EmisorCreateIn,
@@ -549,6 +559,75 @@ class InvoiceService:
                 return resolved
         return inv
 
+    def peek_arca_register(
+        self,
+        *,
+        punto_venta: int | None = None,
+        cbte_tipo: int = CBTE_TIPO_FACTURA_E,
+        limit: int = 50,
+        offset: int = 0,
+        cbte_nro: int | None = None,
+    ) -> ArcaRegisterPeekOut:
+        """FAC-68: lectura del ledger ARCA vía FEXGetLast_CMP + FEXGetCMP.
+
+        No escribe en la DB local (no es catch-up / rebuild). Los huecos
+        confirmados (ErrCode 1521 / ``CmpNotFoundError``) van en ``gaps``.
+        """
+        pv = self._resolve_peek_punto_venta(punto_venta)
+        if cbte_nro is not None and cbte_nro < 1:
+            raise DomainError("cbte_nro debe ser >= 1")
+        try:
+            last_cmp = self.wsfex.get_last_cmp(pv, cbte_tipo)
+        except (WsfexError, httpx.HTTPError, OSError) as exc:
+            raise ArcaUnavailableError(
+                f"No se pudo consultar FEXGetLast_CMP: {exc}"
+            ) from exc
+
+        numbers = (
+            [cbte_nro]
+            if cbte_nro is not None
+            else _peek_numbers(last_cmp, limit=limit, offset=offset)
+        )
+        invoices: list[ArcaCmpSummaryOut] = []
+        gaps: list[ArcaGapOut] = []
+        for nro in numbers:
+            try:
+                record = self.wsfex.get_cmp_record(cbte_tipo, pv, nro)
+            except CmpNotFoundError:
+                gaps.append(
+                    ArcaGapOut(punto_venta=pv, cbte_tipo=cbte_tipo, cbte_nro=nro)
+                )
+                continue
+            except (WsfexError, httpx.HTTPError, OSError) as exc:
+                raise ArcaUnavailableError(
+                    f"No se pudo consultar FEXGetCMP "
+                    f"(PV {pv} tipo {cbte_tipo} nro {nro}): {exc}"
+                ) from exc
+            invoices.append(_cmp_record_to_summary(record, cbte_tipo=cbte_tipo, pv=pv, nro=nro))
+
+        return ArcaRegisterPeekOut(
+            punto_venta=pv,
+            cbte_tipo=cbte_tipo,
+            last_cmp=last_cmp,
+            limit=limit,
+            offset=offset,
+            invoices=invoices,
+            gaps=gaps,
+        )
+
+    def _resolve_peek_punto_venta(self, punto_venta: int | None) -> int:
+        if punto_venta is not None:
+            if punto_venta < 1:
+                raise DomainError("punto_venta debe ser >= 1")
+            return punto_venta
+        settings = self.get_settings()
+        if not settings.emisor.puntos_venta:
+            raise ConflictError(
+                "No hay punto de venta en el emisor activo; "
+                "indicar punto_venta en la query o completar el setup."
+            )
+        return settings.emisor.punto_venta
+
     # ------------------------------------------------------------------
     # Authorize (reglas §2.3)
     # ------------------------------------------------------------------
@@ -852,3 +931,74 @@ class InvoiceService:
             "Factura %s reconciliada vía FEXGetCMP: CAE recuperado", inv["id"]
         )
         return self._reload(inv["id"])
+
+
+def _peek_numbers(last_cmp: int, *, limit: int, offset: int) -> list[int]:
+    """Números a consultar: más recientes primero (last_cmp … 1)."""
+    if last_cmp < 1 or limit < 1:
+        return []
+    start = last_cmp - offset
+    if start < 1:
+        return []
+    end = max(1, start - limit + 1)
+    return list(range(start, end - 1, -1))
+
+
+def _field(fields: dict[str, str], *names: str) -> str | None:
+    for name in names:
+        value = fields.get(name)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _field_int(fields: dict[str, str], *names: str) -> int | None:
+    raw = _field(fields, *names)
+    if raw is None:
+        return None
+    return int(raw)
+
+
+def _cmp_record_to_summary(
+    record: CmpRecord,
+    *,
+    cbte_tipo: int,
+    pv: int,
+    nro: int,
+) -> ArcaCmpSummaryOut:
+    f = record.fields
+    items = [
+        ArcaCmpItemOut(
+            pro_codigo=item.pro_codigo,
+            pro_ds=item.pro_ds,
+            pro_qty=item.pro_qty,
+            pro_umed=item.pro_umed,
+            pro_precio_uni=item.pro_precio_uni,
+            pro_total_item=item.pro_total_item,
+            pro_bonificacion=item.pro_bonificacion,
+        )
+        for item in record.items
+    ]
+    return ArcaCmpSummaryOut(
+        cbte_tipo=_field_int(f, "Cbte_tipo", "Cbte_Tipo") or cbte_tipo,
+        punto_venta=_field_int(f, "Punto_vta") or pv,
+        cbte_nro=_field_int(f, "Cbte_nro") or nro,
+        arca_id=_field_int(f, "Id"),
+        cae=_field(f, "Cae"),
+        cae_fch_vto=_field(f, "Fch_venc_Cae"),
+        fecha_cbte=_field(f, "Fecha_cbte"),
+        fecha_pago=_field(f, "Fecha_pago"),
+        cliente=_field(f, "Cliente"),
+        domicilio_cliente=_field(f, "Domicilio_cliente"),
+        cuit_pais_cliente=_field_int(f, "Cuit_pais_cliente"),
+        id_impositivo=_field(f, "Id_impositivo"),
+        dst_cmp=_field_int(f, "Dst_cmp"),
+        moneda_id=_field(f, "Moneda_Id"),
+        moneda_ctz=_field(f, "Moneda_ctz"),
+        imp_total=_field(f, "Imp_total"),
+        forma_pago=_field(f, "Forma_pago"),
+        tipo_expo=_field_int(f, "Tipo_expo"),
+        idioma_cbte=_field_int(f, "Idioma_cbte"),
+        obs=_field(f, "Obs"),
+        items=items,
+    )

@@ -247,6 +247,7 @@ arca_params (cache de tablas dinámicas)
 ```
 POST   /invoices                  -- crea draft, valida dominio
 POST   /invoices/:id/authorize    -- ejecuta FEXAuthorize (idempotente)
+GET    /invoices/arca             -- peek solo-lectura del registro ARCA (FAC-68)
 GET    /invoices/:id              -- estado + CAE
 GET    /invoices/:id/pdf          -- PDF con QR (fase 2)
 GET    /invoices                  -- listado paginado
@@ -257,6 +258,8 @@ GET    /params/:kind              -- monedas, países, incoterms, etc. (del cach
 GET    /params/currency/:id/rate?date=YYYYMMDD  -- cotización ARCA
 GET    /health/arca               -- FEXDummy (estado app/db/auth de ARCA)
 ```
+
+`GET /invoices/arca` (FAC-68): consulta el ledger de ARCA con `FEXGetLast_CMP` + `FEXGetCMP` para el PV del emisor activo (override con `punto_venta` / `cbte_tipo`). Devuelve resúmenes estructurados (CAE, importes, cliente, fechas, ítems), `last_cmp` y huecos confirmados (`ErrCode 1521`). Paginación `limit`/`offset` (más recientes primero) o un único `cbte_nro`. **Solo lectura** — no escribe en la DB local (el catch-up / rebuild es `POST /registry/catch-up` / FAC-65). La ruta estática `/arca` se registra antes de `/invoices/{invoice_id}`.
 
 Reglas de `authorize`:
 1. Tomar lock sobre la invoice (evitar doble submit).

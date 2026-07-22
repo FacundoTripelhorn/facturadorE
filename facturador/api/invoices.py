@@ -7,9 +7,14 @@ import sqlite3
 from fastapi import APIRouter, Query, Response
 
 from .. import repo
-from ..constants import InvoiceStatus
+from ..constants import CBTE_TIPO_FACTURA_E, InvoiceStatus
 from ..pdf import get_or_render_invoice_pdf, invoice_pdf_filename
-from ..schemas import InvoiceCreate, InvoiceOut, ItemOut
+from ..schemas import (
+    ArcaRegisterPeekOut,
+    InvoiceCreate,
+    InvoiceOut,
+    ItemOut,
+)
 from ..service import ConflictError
 from .deps import ServiceDep
 
@@ -32,6 +37,26 @@ def authorize(
     invoice_id: str, service: ServiceDep, force_desync: bool = Query(default=False)
 ):
     return _invoice_out(service.conn, service.authorize(invoice_id, force_desync))
+
+
+# FAC-68: ruta estática /invoices/arca ANTES de /invoices/{invoice_id}.
+@router.get("/arca", response_model=ArcaRegisterPeekOut)
+def peek_arca_register(
+    service: ServiceDep,
+    punto_venta: int | None = Query(default=None, ge=1),
+    cbte_tipo: int = Query(default=CBTE_TIPO_FACTURA_E, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    cbte_nro: int | None = Query(default=None, ge=1),
+):
+    """Solo lectura del registro ARCA (FEXGetLast_CMP + FEXGetCMP). Sin DB writes."""
+    return service.peek_arca_register(
+        punto_venta=punto_venta,
+        cbte_tipo=cbte_tipo,
+        limit=limit,
+        offset=offset,
+        cbte_nro=cbte_nro,
+    )
 
 
 @router.get("/{invoice_id}", response_model=InvoiceOut)
