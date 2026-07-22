@@ -129,8 +129,9 @@ Do not regress these without an explicit design change in `docs/design.md`:
 
 Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
 
-- Incomplete profile setup returns **503** with `setup_state` on invoice/ARCA
-  routes until `ready` (FAC-35); `GET /health` and `GET /setup` stay up.
+- Incomplete profile setup blocks invoice/ARCA until `ready` (FAC-35): HTML
+  routes redirect to `/setup`; JSON APIs return **503** with `setup_state`.
+  `GET /health` and `GET /setup` stay up.
 - Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints
   once the profile is ready. This is expected — fix credentials, not application
   error handling, unless the task explicitly asks for better UX around that case.

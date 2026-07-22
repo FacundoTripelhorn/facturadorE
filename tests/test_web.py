@@ -497,23 +497,28 @@ def _sin_settings(api):
 
 
 def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
-    """FAC-35: sin emisor el perfil no está ready; factura/ARCA → 503.
-    Configuración sigue disponible para completar el setup (FAC-38)."""
+    """FAC-35: sin emisor el perfil no está ready.
+    UI redirige a /setup; APIs JSON → 503. Configuración sigue abierta (FAC-38)."""
     _sin_settings(api)
 
-    home = api.get("/")
-    assert home.status_code == 503
-    assert home.json()["setup_state"] == "emisor_required"
+    home = api.get("/", follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == "/setup?desde=emisor_required"
 
     setup = api.get("/setup/status")
     assert setup.status_code == 200
     assert setup.json()["ready"] is False
 
-    r = api.post("/ui/facturas", data=with_csrf(api, FACTURA_FORM))
-    assert r.status_code == 503
-    assert r.json()["setup_state"] == "emisor_required"
+    r = api.post(
+        "/ui/facturas",
+        data=with_csrf(api, FACTURA_FORM),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/setup?desde=emisor_required"
 
     assert api.get("/configuracion").status_code == 200
+    assert api.get("/setup").status_code == 200
 
 
 def test_pagina_de_configuracion_carga_y_guarda(api, arca):

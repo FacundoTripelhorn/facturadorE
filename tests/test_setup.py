@@ -212,8 +212,14 @@ def test_factura_y_arca_bloqueados_hasta_ready(tmp_path):
     )
     assert create.status_code == 503
     assert create.json()["setup_state"] == SetupState.CERTIFICATE_REQUIRED.value
+    assert create.json()["setup_url"] == "/setup"
 
-    assert client.get("/").status_code == 503
+    # UI: el launcher abre ``/`` → redirect al onboarding (no JSON 503 opaco).
+    home = client.get("/", follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == (
+        f"/setup?desde={SetupState.CERTIFICATE_REQUIRED.value}"
+    )
     assert client.get("/health/arca").status_code == 503
     assert client.get("/params/moneda").status_code == 503
 
@@ -255,9 +261,29 @@ def test_detalle_html_bloqueado_hasta_ready(tmp_path):
     """Codex review: GET /facturas/{id} reconcilia UNKNOWN y no debe tocar ARCA."""
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     client = _client_for_profile(profile, seed=False)
-    r = client.get("/facturas/any-id")
-    assert r.status_code == 503
-    assert r.json()["setup_state"] == SetupState.CERTIFICATE_REQUIRED.value
+    r = client.get("/facturas/any-id", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == (
+        f"/setup?desde={SetupState.CERTIFICATE_REQUIRED.value}"
+    )
+
+
+def test_ui_sin_ready_redirige_a_setup(tmp_path):
+    """Home y formularios HTML van a /setup; APIs JSON siguen en 503."""
+    from facturador.api.setup_guard import is_html_ui_route
+
+    assert is_html_ui_route("GET", "/") is True
+    assert is_html_ui_route("GET", "/facturas/x") is True
+    assert is_html_ui_route("POST", "/ui/facturas") is True
+    assert is_html_ui_route("GET", "/invoices") is False
+    assert is_html_ui_route("GET", "/params/moneda") is False
+
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
+    client = _client_for_profile(profile, seed=False)
+    landed = client.get("/", follow_redirects=True)
+    assert landed.status_code == 200
+    assert "Configuración inicial" in landed.text
+    assert "certificado" in landed.text.lower()
 
 
 def test_clientes_disponibles_con_params_cacheados_sin_ready(tmp_path):

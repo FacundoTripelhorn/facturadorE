@@ -1,18 +1,23 @@
 """Guardia de setup: bloquea facturación y ARCA hasta que el perfil esté listo.
 
 FAC-35: mientras el estado del perfil no sea ``ready``, las operaciones de
-factura y las que tocan ARCA responden 503. Quedan libres el liveness
-(``GET /health``), las rutas de setup (``/setup``), estáticos, configuración
-de emisor (FAC-38) y clientes (CRUD offline con params cacheados).
+factura y las que tocan ARCA quedan bloqueadas. Las rutas HTML de la UI
+redirigen a ``/setup`` (FAC-37/38) para que el usuario vea el paso pendiente;
+las APIs JSON siguen respondiendo 503 con ``setup_state``. Quedan libres el
+liveness (``GET /health``), las rutas de setup (``/setup``), estáticos,
+configuración de emisor (FAC-38) y clientes (CRUD offline con params cacheados).
 """
 
 from __future__ import annotations
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ..setup import SetupState, SetupStateProvider, is_ready
+
+# Destino del onboarding (FAC-37/38). Query opcional para diagnóstico.
+_SETUP_REDIRECT = "/setup"
 
 
 def is_setup_exempt(method: str, path: str) -> bool:
@@ -66,13 +71,25 @@ def requires_ready_profile(method: str, path: str) -> bool:
     return False
 
 
+def is_html_ui_route(method: str, path: str) -> bool:
+    """Rutas de UI del browser: redirigir a ``/setup`` en vez de JSON 503."""
+    if method == "GET" and path in ("/", ""):
+        return True
+    if path.startswith("/facturas") or path.startswith("/ui/facturas"):
+        return True
+    if path.startswith("/ui/registry"):
+        return True
+    return False
+
+
 def setup_blocked_detail(state: SetupState) -> dict[str, str]:
     return {
         "detail": (
             "El perfil aún no completó el setup; "
-            f"paso actual: {state.value}"
+            f"paso actual: {state.value}. Completar en /setup."
         ),
         "setup_state": state.value,
+        "setup_url": _SETUP_REDIRECT,
     }
 
 
@@ -100,8 +117,16 @@ class SetupGuardMiddleware:
             await self.app(scope, receive, send)
             return
 
-        response = JSONResponse(
-            setup_blocked_detail(state),
-            status_code=503,
-        )
+        if is_html_ui_route(method, path):
+            # 303: el launcher abre ``/``; el usuario termina en el onboarding
+            # con el paso pendiente (certificado, emisor, PV) en pantalla.
+            target = f"{_SETUP_REDIRECT}?desde={state.value}"
+            response: RedirectResponse | JSONResponse = RedirectResponse(
+                url=target, status_code=303
+            )
+        else:
+            response = JSONResponse(
+                setup_blocked_detail(state),
+                status_code=503,
+            )
         await response(scope, receive, send)
