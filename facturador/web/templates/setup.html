@@ -10,61 +10,61 @@
     {% if state == "emisor_required" %}
     <p>Siguiente paso: completar los datos del emisor abajo.</p>
     {% elif state == "ready" %}
-    <p>El perfil ya está listo para emitir. <a href="/">Ir a Emitir</a>.</p>
+    <p>El perfil ya estÃ¡ listo para emitir. <a href="/">Ir a Emitir</a>.</p>
     {% endif %}
   </div>
 </div>
 {% elif aviso == "emisor" %}
 <div class="panel ok"><div><strong>Emisor guardado.</strong>
   {% if state == "ready" %}
-  El perfil ya está listo para emitir. <a href="/">Ir a Emitir</a>.
+  El perfil ya estÃ¡ listo para emitir. <a href="/">Ir a Emitir</a>.
   {% elif state == "point_of_sale_required" %}
   Falta habilitar al menos un punto de venta abajo.
   {% else %}
-  Revisá los datos pendientes abajo.
+  RevisÃ¡ los datos pendientes abajo.
   {% endif %}
 </div></div>
 {% elif aviso == "punto_venta" %}
 <div class="panel ok"><div><strong>Punto de venta configurado.</strong>
   {% if state == "ready" %}
-  El perfil ya está listo para emitir. <a href="/">Ir a Emitir</a>.
+  El perfil ya estÃ¡ listo para emitir. <a href="/">Ir a Emitir</a>.
   {% endif %}
 </div></div>
 {% elif aviso == "listo" %}
-<div class="panel ok"><div><strong>Configuración inicial completa.</strong>
+<div class="panel ok"><div><strong>ConfiguraciÃ³n inicial completa.</strong>
   <a href="/">Ir a Emitir</a>.</div></div>
 {% elif aviso %}<div class="panel ok"><div>{{ aviso }}</div></div>{% endif %}
 {% if error %}<div class="panel error"><div>{{ error }}</div></div>{% endif %}
 
 <section class="card">
   {% if state == "certificate_required" %}
-  <h2>Configuración inicial <span class="sub">certificado ARCA del perfil {{ env_label }}</span></h2>
+  <h2>ConfiguraciÃ³n inicial <span class="sub">certificado ARCA del perfil {{ env_label }}</span></h2>
   {% elif state == "emisor_required" %}
-  <h2>Configuración inicial <span class="sub">datos del emisor</span></h2>
+  <h2>ConfiguraciÃ³n inicial <span class="sub">datos del emisor</span></h2>
   {% elif state == "point_of_sale_required" %}
-  <h2>Configuración inicial <span class="sub">punto de venta</span></h2>
+  <h2>ConfiguraciÃ³n inicial <span class="sub">punto de venta</span></h2>
   {% else %}
-  <h2>Configuración inicial <span class="sub">perfil {{ env_label }}</span></h2>
+  <h2>ConfiguraciÃ³n inicial <span class="sub">perfil {{ env_label }}</span></h2>
   {% endif %}
   <div class="cuerpo">
     <p class="nota" style="margin-top:0">
       <b>Ambiente ARCA:</b> {{ env_label }} (read-only; lo define el perfil activo).
       {% if state == "certificate_required" %}
-      Este paso instala el par certificado/clave de <em>este</em> ambiente — no hay
-      selector de Homologación/Producción acá.
+      Este paso instala el par certificado/clave de <em>este</em> ambiente â€” no hay
+      selector de HomologaciÃ³n/ProducciÃ³n acÃ¡.
       {% elif state == "emisor_required" %}
       Los datos del emisor se imprimen en el PDF y no viajan a ARCA.
       {% elif state == "point_of_sale_required" %}
-      Habilitá al menos un punto de venta para el emisor activo.
+      HabilitÃ¡ al menos un punto de venta para el emisor activo.
       {% endif %}
     </p>
 
     {% if env == "prod" %}
     <div class="panel neutro">
-      <div><strong>Perfil de Producción.</strong>
+      <div><strong>Perfil de ProducciÃ³n.</strong>
       {% if state == "certificate_required" %}
-      El certificado que subas se usará para emitir comprobantes con validez fiscal real.
-      Verificá que sea el certificado productivo autorizado al servicio <code>wsfex</code>.
+      El certificado que subas se usarÃ¡ para emitir comprobantes con validez fiscal real.
+      VerificÃ¡ que sea el certificado productivo autorizado al servicio <code>wsfex</code>.
       {% else %}
       Los datos de este perfil se usan para emitir comprobantes con validez fiscal real.
       {% endif %}
@@ -78,7 +78,7 @@
         <strong>Certificado instalado.</strong><br>
         CUIT: <span class="num">{{ cert_meta.cuit }}</span><br>
         Vigencia: {{ cert_meta.not_valid_before.date().isoformat() }}
-        — {{ cert_meta.not_valid_after.date().isoformat() }}
+        â€” {{ cert_meta.not_valid_after.date().isoformat() }}
       </div>
     </div>
     {% endif %}
@@ -98,8 +98,8 @@
                  accept=".key,.pem,text/plain,application/x-pem-file">
         </div>
       </div>
-      <p class="nota">Subí el par emitido por ARCA (WSASS en homologación o portal
-      en producción). La clave privada <strong>no debe tener passphrase</strong>.
+      <p class="nota">SubÃ­ el par emitido por ARCA (WSASS en homologaciÃ³n o portal
+      en producciÃ³n). La clave privada <strong>no debe tener passphrase</strong>.
       Los archivos quedan en el perfil local con permisos restrictivos; el contenido
       de la clave nunca se muestra ni se registra.</p>
       <button type="submit">Instalar certificado</button>
@@ -111,7 +111,7 @@
       {% if emisor_editando %}<input type="hidden" name="emisor_id" value="{{ emisor_editando['id'] }}">{% endif %}
       <div class="fila">
         <div>
-          <label for="razon_social">Razón social</label>
+          <label for="razon_social">RazÃ³n social</label>
           <input id="razon_social" name="razon_social" required
                  value="{{ emisor_editando['razon_social'] if emisor_editando else '' }}">
         </div>
@@ -125,8 +125,7 @@
         <div>
           <label for="iibb">Ingresos Brutos</label>
           <input id="iibb" name="iibb" required
-                 placeholder="tal como se imprime, p.ej. Exento"
-                 value="{{ emisor_editando['iibb'] if emisor_editando else '' }}">
+                 value="{{ emisor_editando['iibb'] if emisor_editando else 'Exento' }}">
         </div>
         <div>
           <label for="inicio_actividades">Inicio de actividades</label>
@@ -135,7 +134,7 @@
                  value="{{ emisor_editando['inicio_actividades'] if emisor_editando else '' }}">
         </div>
         <div>
-          <label for="condicion_iva">Condición frente al IVA</label>
+          <label for="condicion_iva">CondiciÃ³n frente al IVA</label>
           <input id="condicion_iva" name="condicion_iva"
                  value="{{ emisor_editando['condicion_iva'] if emisor_editando else 'IVA Responsable Inscripto' }}">
         </div>
@@ -148,16 +147,16 @@
                  value="{{ emisor_editando['puntos_venta'] | pvs_display if emisor_editando else '1' }}">
         </div>
       </div>
-      <p class="nota">Habilitados para este emisor. En homologación el punto de venta es libre;
-      en producción, el número del punto de venta RECE exclusivo de exportación.
-      El emisor creado quedará activo para emitir en este perfil.</p>
+      <p class="nota">Habilitados para este emisor. En homologaciÃ³n el punto de venta es libre;
+      en producciÃ³n, el nÃºmero del punto de venta RECE exclusivo de exportaciÃ³n.
+      El emisor creado quedarÃ¡ activo para emitir en este perfil.</p>
       <button type="submit">{% if emisor_editando %}Guardar emisor{% else %}Crear emisor{% endif %}</button>
     </form>
 
     {% elif state == "point_of_sale_required" %}
     {% if emisor_editando %}
-    <p><strong>{{ emisor_editando['razon_social'] or 'Emisor activo' }}</strong> —
-      habilitá al menos un punto de venta para continuar.</p>
+    <p><strong>{{ emisor_editando['razon_social'] or 'Emisor activo' }}</strong> â€”
+      habilitÃ¡ al menos un punto de venta para continuar.</p>
     {% endif %}
     <form method="post" action="/ui/setup/punto-venta">
       {% include "_csrf_field.html" %}
@@ -169,13 +168,13 @@
                  value="{{ emisor_editando['puntos_venta'] | pvs_display if emisor_editando else '' }}">
         </div>
       </div>
-      <p class="nota">En homologación el punto de venta es libre; en producción, el número
-      del punto de venta RECE exclusivo de exportación.</p>
+      <p class="nota">En homologaciÃ³n el punto de venta es libre; en producciÃ³n, el nÃºmero
+      del punto de venta RECE exclusivo de exportaciÃ³n.</p>
       <button type="submit">Guardar punto de venta</button>
     </form>
 
     {% elif state == "ready" %}
-    <p>El perfil {{ env_label }} está listo. <a href="/">Ir a Emitir</a>.</p>
+    <p>El perfil {{ env_label }} estÃ¡ listo. <a href="/">Ir a Emitir</a>.</p>
     {% endif %}
   </div>
 </section>
