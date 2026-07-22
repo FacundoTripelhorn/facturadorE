@@ -6,9 +6,9 @@
 
 {% if env == "prod" %}
 <div class="panel neutro">
-  <div><strong>ConfiguraciÃ³n de ProducciÃ³n.</strong> Emisor, puntos de venta y
+  <div><strong>Configuración de Producción.</strong> Emisor, puntos de venta y
   certificados de este perfil se usan para emitir comprobantes con validez
-  fiscal real. RevisÃ¡ con cuidado antes de autorizar en ARCA.</div>
+  fiscal real. Revisá con cuidado antes de autorizar en ARCA.</div>
 </div>
 {% endif %}
 
@@ -32,7 +32,7 @@
     {% if editando %}<input type="hidden" name="emisor_id" value="{{ editando['id'] }}">{% endif %}
     <div class="fila">
       <div>
-        <label for="razon_social">RazÃ³n social</label>
+        <label for="razon_social">Razón social</label>
         <input id="razon_social" name="razon_social" required
                value="{{ editando['razon_social'] if editando else '' }}">
       </div>
@@ -55,7 +55,7 @@
                value="{{ editando['inicio_actividades'] if editando else '' }}">
       </div>
       <div>
-        <label for="condicion_iva">CondiciÃ³n frente al IVA</label>
+        <label for="condicion_iva">Condición frente al IVA</label>
         <input id="condicion_iva" name="condicion_iva"
                value="{{ editando['condicion_iva'] if editando else s.emisor.condicion_iva }}">
       </div>
@@ -73,10 +73,10 @@
                value="{{ editando['puntos_venta'] | pvs_display if editando else '1' }}">
       </div>
     </div>
-    <p class="nota">Habilitados para este emisor. En homologaciÃ³n el punto de venta es libre;
-    en producciÃ³n, el nÃºmero del punto de venta RECE exclusivo de exportaciÃ³n.</p>
+    <p class="nota">Habilitados para este emisor. En homologación el punto de venta es libre;
+    en producción, el número del punto de venta RECE exclusivo de exportación.</p>
     <button type="submit">{% if editando %}Guardar cambios{% else %}Dar de alta{% endif %}</button>
-    {% if editando %}<a href="/configuracion" class="nota" style="margin-left:1rem">Cancelar ediciÃ³n</a>{% endif %}
+    {% if editando %}<a href="/configuracion" class="nota" style="margin-left:1rem">Cancelar edición</a>{% endif %}
   </form>
   </div>
 </section>
@@ -88,7 +88,7 @@
     <table>
       <thead>
         <tr>
-          <th>RazÃ³n social</th>
+          <th>Razón social</th>
           <th>Ambiente</th>
           <th>Puntos de venta</th>
           <th></th>
@@ -98,8 +98,8 @@
         {% for e in emisores %}
         <tr>
           <td>
-            {{ e["razon_social"] or "â€”" }}
-            {% if e["id"] == activo_id and e["ambiente"] == env %} â˜…{% endif %}
+            {{ e["razon_social"] or "—" }}
+            {% if e["id"] == activo_id and e["ambiente"] == env %} ★{% endif %}
           </td>
           <td>{{ e["ambiente"] }}</td>
           <td class="num">{{ e["puntos_venta"] | pvs_display }}</td>
@@ -116,9 +116,9 @@
         {% endfor %}
       </tbody>
     </table>
-    <p class="nota">â˜… = emisor activo en el perfil {{ env_label }} (con el que se emite).</p>
+    <p class="nota">★ = emisor activo en el perfil {{ env_label }} (con el que se emite).</p>
     {% else %}
-    <p class="vacio">TodavÃ­a no hay emisores cargados.</p>
+    <p class="vacio">Todavía no hay emisores cargados.</p>
     {% endif %}
   </div>
 </section>
@@ -132,7 +132,7 @@
       <div>
         <label for="backup_s3_bucket">Bucket S3</label>
         <input id="backup_s3_bucket" name="backup_s3_bucket"
-               placeholder="vacÃ­o = el backup queda solo local"
+               placeholder="vacío = el backup queda solo local"
                value="{{ s.backup_s3_bucket }}">
       </div>
       <div>
@@ -141,7 +141,7 @@
                value="{{ s.backup_s3_prefix }}">
       </div>
     </div>
-    <p class="nota">El backup se cifra en la mÃ¡quina con una passphrase que
+    <p class="nota">El backup se cifra en la máquina con una passphrase que
     nunca se guarda; el bucket solo recibe el archivo ya cifrado.</p>
     <button type="submit">Guardar backups</button>
   </form>
@@ -150,10 +150,10 @@
 
 <p class="nota">
   El ambiente ARCA ({{ env_label }}) es contexto de solo lectura del perfil
-  activo. {% if launcher_supervised %}Para facturar en el otro ambiente, usÃ¡
+  activo. {% if launcher_supervised %}Para facturar en el otro ambiente, usá
   <strong>Cambiar ambiente</strong> en la barra superior: el launcher cierra
-  esta sesiÃ³n y abre la elegida.{% else %}Para facturar en otro ambiente,
-  abrÃ­ FacturadorE desde el launcher y elegÃ­ HomologaciÃ³n o ProducciÃ³n.{% endif %}
+  esta sesión y abre la elegida.{% else %}Para facturar en otro ambiente,
+  abrí FacturadorE desde el launcher y elegí Homologación o Producción.{% endif %}
 </p>
 
 {% endblock %}
