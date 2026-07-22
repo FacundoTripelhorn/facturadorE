@@ -603,7 +603,11 @@ class InvoiceService:
                     f"No se pudo consultar FEXGetCMP "
                     f"(PV {pv} tipo {cbte_tipo} nro {nro}): {exc}"
                 ) from exc
-            invoices.append(_cmp_record_to_summary(record, cbte_tipo=cbte_tipo, pv=pv, nro=nro))
+            invoices.append(
+                _cmp_record_to_summary(
+                    record, cbte_tipo=cbte_tipo, pv=pv, nro=nro
+                )
+            )
 
         return ArcaRegisterPeekOut(
             punto_venta=pv,
