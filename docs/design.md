@@ -247,9 +247,11 @@ arca_params (cache de tablas dinámicas)
 ```
 POST   /invoices                  -- crea draft, valida dominio
 POST   /invoices/:id/authorize    -- ejecuta FEXAuthorize (idempotente)
+GET    /invoices/arca             -- peek de solo lectura del registro ARCA
+                                   -- (FEXGetLast_CMP + FEXGetCMP; no escribe local)
 GET    /invoices/:id              -- estado + CAE
 GET    /invoices/:id/pdf          -- PDF con QR (fase 2)
-GET    /invoices                  -- listado paginado
+GET    /invoices                  -- listado paginado (registro local)
 GET    /clients                   -- listado (incluye flag de cliente default)
 POST   /clients                   -- alta
 PUT    /clients/:id               -- edición (no afecta facturas ya autorizadas)

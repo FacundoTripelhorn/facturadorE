@@ -195,6 +195,55 @@ class InvoiceOut(BaseModel):
     items: list[ItemOut] = []
 
 
+class ArcaInvoiceItemOut(BaseModel):
+    """Ítem tal como lo devuelve FEXGetCMP (FAC-68 peek)."""
+
+    pro_codigo: str = ""
+    pro_ds: str = ""
+    pro_qty: str = ""
+    pro_umed: str = ""
+    pro_precio_uni: str = ""
+    pro_total_item: str = ""
+    pro_bonificacion: str = "0"
+
+
+class ArcaInvoiceOut(BaseModel):
+    """Comprobante leído en vivo desde ARCA (no es el registro local)."""
+
+    cbte_tipo: int
+    punto_venta: int
+    cbte_nro: int
+    arca_id: int | None = None
+    cae: str | None = None
+    cae_fch_vto: str | None = None
+    fecha_cbte: str | None = None
+    fecha_pago: str | None = None
+    tipo_expo: int | None = None
+    dst_cmp: int | None = None
+    cliente: str | None = None
+    cuit_pais_cliente: int | None = None
+    domicilio_cliente: str | None = None
+    id_impositivo: str | None = None
+    moneda_id: str | None = None
+    moneda_ctz: str | None = None
+    imp_total: str | None = None
+    forma_pago: str | None = None
+    incoterms: str | None = None
+    idioma_cbte: int | None = None
+    obs: str | None = None
+    items: list[ArcaInvoiceItemOut] = []
+
+
+class ArcaInvoicesOut(BaseModel):
+    """Peek del registro ARCA para un (PV, tipo)."""
+
+    punto_venta: int
+    cbte_tipo: int
+    last_cmp: int
+    invoices: list[ArcaInvoiceOut]
+    gaps: list[int] = []
+
+
 class ParamOut(BaseModel):
     code: str
     description: str | None

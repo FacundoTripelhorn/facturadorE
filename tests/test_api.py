@@ -515,6 +515,83 @@ def test_listado_paginado(api, arca):
     assert len(api.get("/invoices?limit=2&offset=2").json()) == 1
 
 
+# --- peek registro ARCA (FAC-68) ---
+
+
+def test_listado_arca_vacio_cuando_no_hay_comprobantes(api, arca):
+    r = api.get("/invoices/arca")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["punto_venta"] == 1
+    assert body["cbte_tipo"] == 19
+    assert body["last_cmp"] == 0
+    assert body["invoices"] == []
+    assert body["gaps"] == []
+
+
+def test_listado_arca_devuelve_comprobantes_autorizados(api, arca):
+    _crear_cliente(api)
+    for _ in range(3):
+        draft = _crear_draft(api)
+        assert (
+            api.post(f"/invoices/{draft['id']}/authorize?force_desync=true").status_code
+            == 200
+        )
+
+    r = api.get("/invoices/arca")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["last_cmp"] == 3
+    assert [inv["cbte_nro"] for inv in body["invoices"]] == [3, 2, 1]
+    assert body["invoices"][0]["cae"]
+    assert body["invoices"][0]["imp_total"] == "1500.00"
+    assert body["invoices"][0]["cliente"]  # presente en FEXGetCMP
+    assert body["invoices"][0]["items"]
+    assert body["gaps"] == []
+
+
+def test_listado_arca_pagina_desde_el_mas_reciente(api, arca):
+    _crear_cliente(api)
+    for _ in range(4):
+        draft = _crear_draft(api)
+        api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+
+    page = api.get("/invoices/arca?limit=2&offset=1").json()
+    assert [inv["cbte_nro"] for inv in page["invoices"]] == [3, 2]
+    assert page["last_cmp"] == 4
+
+
+def test_listado_arca_consulta_un_numero(api, arca):
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+
+    r = api.get("/invoices/arca?cbte_nro=1")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["last_cmp"] == 1
+    assert len(body["invoices"]) == 1
+    assert body["invoices"][0]["cbte_nro"] == 1
+
+
+def test_listado_arca_reporta_gap_confirmado(api, arca):
+    arca.last_cmp[(1, 19)] = 2
+    # Sin comprobantes registrados: FEXGetCMP → 1521 (gap).
+    r = api.get("/invoices/arca")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["last_cmp"] == 2
+    assert body["invoices"] == []
+    assert body["gaps"] == [2, 1]
+
+
+def test_listado_arca_no_colisiona_con_get_por_id(api, arca):
+    """La ruta estática /invoices/arca no debe capturarse como invoice_id."""
+    r = api.get("/invoices/arca")
+    assert r.status_code == 200
+    assert "last_cmp" in r.json()
+
+
 # --- vínculo factura ↔ perfil (ADR 0001 / FAC-26) ---
 
 

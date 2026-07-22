@@ -131,7 +131,7 @@ flowchart TB
 
 | Per-profile setup state + guard (FAC-35) | `facturador/setup.py` (incl. `make_setup_state_provider`), `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
 | Shared `InvoiceService` dependency | `facturador/api/deps.py` |
-| REST: invoices (create, authorize, list, PDF) | `facturador/api/invoices.py` |
+| REST: invoices (create, authorize, list, PDF, ARCA peek) | `facturador/api/invoices.py` |
 | REST: clients CRUD | `facturador/api/clients.py` |
 | REST: ARCA param tables & cotización | `facturador/api/params.py` |
 | REST: health + ARCA connectivity | `facturador/api/health.py` |

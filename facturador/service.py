@@ -23,7 +23,13 @@ from typing import Any
 import httpx
 
 from . import repo
-from .arca.wsfex import Invoice, WsfexClient, WsfexError
+from .arca.wsfex import (
+    CmpNotFoundError,
+    CmpRecord,
+    Invoice,
+    WsfexClient,
+    WsfexError,
+)
 from .certs import CertificateError
 from .config import Config
 from .constants import (
@@ -45,6 +51,9 @@ from .profile import EnvironmentProfile
 from .reconstruct import ReconstructError, ReconstructReport
 from .restore import catch_up_register
 from .schemas import (
+    ArcaInvoiceItemOut,
+    ArcaInvoiceOut,
+    ArcaInvoicesOut,
     BackupSettingsIn,
     ClientIn,
     EmisorCreateIn,
@@ -549,6 +558,64 @@ class InvoiceService:
                 return resolved
         return inv
 
+    def list_arca_invoices(
+        self,
+        *,
+        punto_venta: int | None = None,
+        cbte_tipo: int = CBTE_TIPO_FACTURA_E,
+        limit: int = 50,
+        offset: int = 0,
+        cbte_nro: int | None = None,
+    ) -> ArcaInvoicesOut:
+        """FAC-68: peek de solo lectura del registro ARCA (sin escribir local).
+
+        WSFEX no tiene listado: se consulta ``FEXGetLast_CMP`` y luego
+        ``FEXGetCMP`` por número. ``offset`` cuenta desde el más reciente.
+        """
+        pv = self._resolve_peek_punto_venta(punto_venta)
+        try:
+            last_cmp = self.wsfex.get_last_cmp(pv, cbte_tipo)
+        except (WsfexError, httpx.HTTPError, OSError) as exc:
+            raise ArcaUnavailableError(f"ARCA no disponible: {exc}") from exc
+
+        numbers = _arca_peek_numbers(
+            last_cmp, limit=limit, offset=offset, cbte_nro=cbte_nro
+        )
+        invoices: list[ArcaInvoiceOut] = []
+        gaps: list[int] = []
+        for nro in numbers:
+            try:
+                record = self.wsfex.get_cmp_record(cbte_tipo, pv, nro)
+            except CmpNotFoundError:
+                gaps.append(nro)
+                continue
+            except (WsfexError, httpx.HTTPError, OSError) as exc:
+                raise ArcaUnavailableError(
+                    f"ARCA no disponible al consultar CMP {pv}/{cbte_tipo}/{nro}: "
+                    f"{exc}"
+                ) from exc
+            invoices.append(_cmp_record_to_arca_out(record, fallback_nro=nro))
+        return ArcaInvoicesOut(
+            punto_venta=pv,
+            cbte_tipo=cbte_tipo,
+            last_cmp=last_cmp,
+            invoices=invoices,
+            gaps=gaps,
+        )
+
+    def _resolve_peek_punto_venta(self, punto_venta: int | None) -> int:
+        settings = load_settings(self.conn)
+        pvs = settings.emisor.puntos_venta
+        if punto_venta is not None:
+            if punto_venta < 1:
+                raise DomainError("punto_venta debe ser >= 1")
+            return punto_venta
+        if len(pvs) == 1:
+            return pvs[0]
+        raise DomainError(
+            "Indicar punto_venta: el emisor activo tiene más de uno habilitado"
+        )
+
     # ------------------------------------------------------------------
     # Authorize (reglas §2.3)
     # ------------------------------------------------------------------
@@ -852,3 +919,75 @@ class InvoiceService:
             "Factura %s reconciliada vía FEXGetCMP: CAE recuperado", inv["id"]
         )
         return self._reload(inv["id"])
+
+
+def _arca_peek_numbers(
+    last_cmp: int,
+    *,
+    limit: int,
+    offset: int,
+    cbte_nro: int | None,
+) -> list[int]:
+    """Números a consultar: uno explícito, o ventana desde el más reciente."""
+    if cbte_nro is not None:
+        if cbte_nro < 1:
+            raise DomainError("cbte_nro debe ser >= 1")
+        return [cbte_nro]
+    if last_cmp < 1:
+        return []
+    high = last_cmp - offset
+    if high < 1:
+        return []
+    low = max(1, high - limit + 1)
+    return list(range(high, low - 1, -1))
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def _cmp_record_to_arca_out(
+    record: CmpRecord, *, fallback_nro: int
+) -> ArcaInvoiceOut:
+    f = record.fields
+    cbte_tipo = _optional_int(f.get("Cbte_tipo") or f.get("Cbte_Tipo")) or 0
+    punto_venta = _optional_int(f.get("Punto_vta")) or 0
+    cbte_nro = _optional_int(f.get("Cbte_nro")) or fallback_nro
+    items = [
+        ArcaInvoiceItemOut(
+            pro_codigo=item.pro_codigo,
+            pro_ds=item.pro_ds,
+            pro_qty=item.pro_qty,
+            pro_umed=item.pro_umed,
+            pro_precio_uni=item.pro_precio_uni,
+            pro_total_item=item.pro_total_item,
+            pro_bonificacion=item.pro_bonificacion,
+        )
+        for item in record.items
+    ]
+    return ArcaInvoiceOut(
+        cbte_tipo=cbte_tipo,
+        punto_venta=punto_venta,
+        cbte_nro=cbte_nro,
+        arca_id=_optional_int(f.get("Id")),
+        cae=f.get("Cae"),
+        cae_fch_vto=f.get("Fch_venc_Cae"),
+        fecha_cbte=f.get("Fecha_cbte"),
+        fecha_pago=f.get("Fecha_pago"),
+        tipo_expo=_optional_int(f.get("Tipo_expo")),
+        dst_cmp=_optional_int(f.get("Dst_cmp")),
+        cliente=f.get("Cliente"),
+        cuit_pais_cliente=_optional_int(f.get("Cuit_pais_cliente")),
+        domicilio_cliente=f.get("Domicilio_cliente"),
+        id_impositivo=f.get("Id_impositivo"),
+        moneda_id=f.get("Moneda_Id"),
+        moneda_ctz=f.get("Moneda_ctz"),
+        imp_total=f.get("Imp_total"),
+        forma_pago=f.get("Forma_pago"),
+        incoterms=f.get("Incoterms"),
+        idioma_cbte=_optional_int(f.get("Idioma_cbte")),
+        obs=f.get("Obs"),
+        items=items,
+    )
