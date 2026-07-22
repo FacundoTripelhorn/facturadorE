@@ -137,6 +137,25 @@ def test_pdf_de_draft_es_conflicto(api, arca):
     assert "draft" in r.json()["detail"]
 
 
+def test_pdf_sin_weasyprint_responde_503_accionable(api, arca, monkeypatch):
+    """Windows nativo sin GTK: mensaje claro, no 500 opaco."""
+    factura = _factura_autorizada(api)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError(
+            "No se pudo generar el PDF: faltan las librerías nativas de "
+            "WeasyPrint (Pango/GTK)."
+        )
+
+    monkeypatch.setattr(
+        "facturador.api.invoices.get_or_render_invoice_pdf", boom
+    )
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+    assert r.status_code == 503
+    assert "WeasyPrint" in r.json()["detail"]
+    assert "Pango/GTK" in r.json()["detail"]
+
+
 def test_pdf_inexistente_es_404(api):
     assert api.get("/invoices/inexistente/pdf").status_code == 404
 

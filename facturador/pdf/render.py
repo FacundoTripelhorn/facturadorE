@@ -145,7 +145,16 @@ def render_invoice_pdf(inv: sqlite3.Row, items: list[sqlite3.Row]) -> bytes:
     # Import perezoso: weasyprint necesita Pango/GTK del sistema, que solo
     # está garantizado dentro de la imagen Docker (design.md §2.5). Así el
     # resto de la app (y el desarrollo en Windows) no depende de esas libs.
-    from weasyprint import HTML
+    try:
+        from weasyprint import HTML
+    except (ImportError, OSError) as exc:
+        raise RuntimeError(
+            "No se pudo generar el PDF: faltan las librerías nativas de "
+            "WeasyPrint (Pango/GTK). En Windows el runtime recomendado es "
+            "Docker (scripts/launch.cmd con ARCA_ENV en ~/facturador/.env). "
+            "Sin Docker, instalar el runtime GTK3 de WeasyPrint para Windows. "
+            f"Detalle: {exc}"
+        ) from exc
 
     html = render_invoice_html(inv, items)
     pdf = HTML(string=html).write_pdf()

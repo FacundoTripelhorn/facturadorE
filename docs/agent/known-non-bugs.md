@@ -129,6 +129,30 @@ JSON 503 for clients. `GET /health` and `GET /setup` stay available;
 **Do not** treat this as a broken health check or a missing exception handler.
 Open `/setup` (or follow the redirect from `/`) and finish the pending step.
 
+---
+
+## PDF download fails on native Windows (WeasyPrint / GTK)
+
+**Symptom:** `GET /invoices/{id}/pdf` returns **503** (or previously a raw
+500) mentioning `libgobject` / WeasyPrint / Pango/GTK. Invoice authorize and
+the rest of the app still work.
+
+**Expected.** WeasyPrint needs native Pango/GTK libraries. Those are installed
+in the Docker image (`Dockerfile`); they are **not** part of a normal Windows
+Python install. Native launcher (`python -m facturador.launcher`) can emit and
+talk to ARCA without them; only PDF render requires them.
+
+**Fix (pick one):**
+
+- **Recommended:** run via Docker (`scripts/launch.cmd`) after
+  `ARCA_ENV=homo` in `~/facturador/.env` and certs under
+  `~/facturador/profiles/homo/secrets/` — note Docker uses that home layout,
+  not the OS app-data profile of the native launcher.
+- Or install the [GTK3 runtime for Windows](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows)
+  so WeasyPrint can load `libgobject` on the host.
+
+**Do not** treat authorize success + PDF failure as a broken CAE/snapshot;
+regenerate the PDF once GTK/Docker is available (cache is optional).
 
 ---
 

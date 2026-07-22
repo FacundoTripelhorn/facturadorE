@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from .. import repo
 from ..constants import InvoiceStatus
@@ -68,6 +68,9 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
         )
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
+    except RuntimeError as exc:
+        # WeasyPrint sin Pango/GTK (típico en Windows nativo): 503 accionable.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     filename = invoice_pdf_filename(inv)
     return Response(
         content=pdf,
