@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: FEXGetCMP when (tipo, PV, nro) is absent — FAC-65 known gap.
+  Source label: Observed (FAC-65 / docs/wsfex-gap-vs-error.md; mirrored by tests/arca_fake.py).
+  Redaction: §2.1.1 checklist — no Token/Sign/CMS; fake CUIT only.
+-->
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FEXGetCMPResponse xmlns="http://ar.gov.afip.dif.fexv1/">
+      <FEXGetCMPResult>
+        <FEXErr>
+          <ErrCode>1521</ErrCode>
+          <ErrMsg>No existen datos para el comprobante</ErrMsg>
+        </FEXErr>
+      </FEXGetCMPResult>
+    </FEXGetCMPResponse>
+  </soap:Body>
+</soap:Envelope>

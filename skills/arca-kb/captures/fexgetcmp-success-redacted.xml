@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: FEXGetCMP success shape for Factura E services (incl. Fecha_pago + Items).
+  Source label: Observed structure (FAC-63 fidelity / WSDL ClsFEXGetCMPR); values fake.
+  Redaction: Token/Sign replaced; CUIT/CAE/cliente anonymized — §2.1.1 checklist.
+-->
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FEXGetCMPResponse xmlns="http://ar.gov.afip.dif.fexv1/">
+      <FEXGetCMPResult>
+        <FEXResultGet>
+          <Id>10004</Id>
+          <Fecha_cbte>20260723</Fecha_cbte>
+          <Cbte_tipo>19</Cbte_tipo>
+          <Punto_vta>1</Punto_vta>
+          <Cbte_nro>4</Cbte_nro>
+          <Tipo_expo>2</Tipo_expo>
+          <Permiso_existente></Permiso_existente>
+          <Dst_cmp>225</Dst_cmp>
+          <Cliente>CLIENTE EJEMPLO S.A.</Cliente>
+          <Cuit_pais_cliente>55000000018</Cuit_pais_cliente>
+          <Domicilio_cliente>Calle Falsa 123, Exterior</Domicilio_cliente>
+          <Id_impositivo>TAXID-REDACTED</Id_impositivo>
+          <Moneda_Id>DOL</Moneda_Id>
+          <Moneda_ctz>1000.000000</Moneda_ctz>
+          <Imp_total>100.00</Imp_total>
+          <Forma_pago>WIRE TRANSFER</Forma_pago>
+          <Incoterms></Incoterms>
+          <Idioma_cbte>1</Idioma_cbte>
+          <Items>
+            <Item>
+              <Pro_codigo>0001</Pro_codigo>
+              <Pro_ds>Servicios de ejemplo</Pro_ds>
+              <Pro_qty>1</Pro_qty>
+              <Pro_umed>7</Pro_umed>
+              <Pro_precio_uni>100.00</Pro_precio_uni>
+              <Pro_bonificacion>0</Pro_bonificacion>
+              <Pro_total_item>100.00</Pro_total_item>
+            </Item>
+          </Items>
+          <Fecha_pago>20260724</Fecha_pago>
+          <Cae>76000000000000</Cae>
+          <Fch_venc_Cae>20260723</Fch_venc_Cae>
+        </FEXResultGet>
+        <FEXErr>
+          <ErrCode>0</ErrCode>
+          <ErrMsg>OK</ErrMsg>
+        </FEXErr>
+      </FEXGetCMPResult>
+    </FEXGetCMPResponse>
+  </soap:Body>
+</soap:Envelope>

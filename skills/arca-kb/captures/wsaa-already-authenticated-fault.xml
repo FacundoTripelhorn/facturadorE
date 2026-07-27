@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: WSAA LoginCms fault when a valid TA already exists for the cert/service.
+  Source label: Official WSAA fault; Community (AfipSDK) frequently documents the same text.
+  Redaction: no CMS/Token/Sign/certs — fault body only.
+-->
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <soap:Fault>
+      <faultcode>ns1:coe.alreadyAuthenticated</faultcode>
+      <faultstring>El CEE ya posee un TA valido para el acceso al WSN solicitado</faultstring>
+    </soap:Fault>
+  </soap:Body>
+</soap:Envelope>
