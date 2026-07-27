@@ -78,3 +78,4 @@ Fill when validating a revision:
 | Technical Q §3 (Fecha_pago) | **Passed** — round-trips per manual v3.1.1 + FAC-63; see `captures/fexgetcmp-success-redacted.xml` | 2026-07-27 |
 | Portability A+B | **Passed** — CLI env A + Cursor Cloud env B, single tree | 2026-07-27 |
 | Secrets scan | **Passed** — only `REDACTED_TOKEN`/`REDACTED_SIGN`; fake CUIT `20000000001`; no PEM | 2026-07-27 |
+| Review follow-up (1462 evidence + Official URLs) | **Passed** — 1462 labeled **Pending** wire; Official PDF/WSDL URLs added; 1020 vs 1521 contrast documented | 2026-07-28 |

@@ -17,7 +17,9 @@ Only items with Official, Observed, and/or cited Community evidence.
 
 ## 2. Reproceso requires same `Id` **and** same payload
 
-**Official / Observed:** retrying `FEXAuthorize` with the same client `Id` and identical Cmp data returns the prior CAE (`Reproceso=S`). Same number with a **different** `Id` → reject (e.g. **1462**).
+**Official / Observed:** retrying `FEXAuthorize` with the same client `Id` and identical Cmp data returns the prior CAE (`Reproceso=S` — field documented in WSFEX authorize response). Same number with a **different** `Id` → reject (number already taken / not next-to-authorize).
+
+**ErrCode note:** this project’s fake/skill historically label that reject as **`1462`** (“Nro de comprobante ya utilizado”). That exact code is **Pending** wire confirmation (not in manual v3.1.1 error tables as of 2026-07-28). Official sequence validations (~**1520** / next-to-authorize text) still require reconciling with `FEXGetLast_CMP` / `FEXGetCMP` rather than inventing a series. Capture a redacted live dump when seen and promote the code to **Obs**.
 
 **Practical:** persist `Id` + `raw_request` before the SOAP call; on retry reuse both; verify CAE against persisted request before accepting.
 

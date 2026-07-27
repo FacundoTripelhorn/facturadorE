@@ -122,13 +122,17 @@ Formats:
 
 ## Gap vs error on `FEXGetCMP` (FAC-65)
 
-**Observed** (documented rebuild contract):
+**Observed** rebuild allow-list (product contract):
 
 | Signal | Meaning |
 |--------|---------|
 | `FEXErr.ErrCode = 1521` | Cmp **does not exist** (“No existen datos para el comprobante”) → known gap |
 | Other `ErrCode ≠ 0` | Business/server error → **not** a gap; retry then abort rebuild |
 | HTTP / timeout / SOAP Fault | Transport → retry then abort; **never** invent a gap |
+
+**Official contrast:** WSFEX manual v3.1.1 §2.2.4 documents GetCMP missing as
+**`1020` Comprobante inexistente**. Prefer **1521** for FacturadorE paths today;
+extend the allow-list if live ARCA returns 1020 (or another confirmed not-found).
 
 Full table: [errors-observed.md](references/errors-observed.md). Capture: [captures/fexgetcmp-not-found-1521.xml](captures/fexgetcmp-not-found-1521.xml).
 
