@@ -6,17 +6,24 @@
 
 ## Finding
 
-On **WSFEXv1 `FEXGetCMP`**, ARCA signals a missing voucher with a business
-`FEXErr` (not a SOAP Fault / HTTP transport failure):
+On **WSFEXv1 `FEXGetCMP`**, a missing voucher is signaled with a business
+`FEXErr` (not a SOAP Fault / HTTP transport failure). This product’s
+rebuild allow-list currently treats **`1521`** as that signal:
 
 | Signal | Meaning for FAC-65 |
 |--------|--------------------|
-| `FEXErr.ErrCode = 1521` | **Does not exist** — confirmed gap. Message typically *"No existen datos para el comprobante"*. Record a known-gap row and continue. |
+| `FEXErr.ErrCode = 1521` | **Does not exist** (product/fake contract) — known gap. Message typically *"No existen datos para el comprobante"*. Record a known-gap row and continue. |
 | Other `FEXErr.ErrCode ≠ 0` | Business / server error — **not** a gap. Bounded retry, then **abort** the rebuild. |
 | HTTP error, timeout, SOAP Fault | Transient / transport — bounded retry, then **abort**. Never invent a gap. |
 
 `WsfexClient.call` → `_raise_on_error` maps `1521` to `CmpNotFoundError`
 (subclass of `WsfexError`). Reconstruct treats only that type as a gap.
+
+**Official contrast:** WSFEX developer manual v3.1.1 §2.2.4 documents GetCMP
+missing as **`1020` Comprobante inexistente**. A redacted live homologación
+dump of the actual ErrCode is still outstanding — if the wire returns `1020`
+(or another not-found), add it to `CMP_NOT_FOUND_CODES`. Do **not** treat
+unknown codes as gaps.
 
 ## Evidence
 
@@ -27,11 +34,12 @@ On **WSFEXv1 `FEXGetCMP`**, ARCA signals a missing voucher with a business
    treats a `WsfexError` from `get_cmp` as "ARCA does not register this
    number" (safe to retry authorize). The rebuild path makes the same code
    explicit as `CmpNotFoundError`.
-3. **Live homologación probe** (operator with a WSASS cert): query
-   `FEXGetCMP` for `Cbte_nro = FEXGetLast_CMP + 1` on a known PV/tipo. Expect
-   ErrCode `1521` (or an equivalent not-found code). If a future WSFEX
-   revision changes the code, add it to `CMP_NOT_FOUND_CODES` and update
-   this doc — do **not** treat unknown codes as gaps.
+3. **Live homologación probe** (operator with a WSASS cert; **still required
+   for wire confirmation**): query `FEXGetCMP` for
+   `Cbte_nro = FEXGetLast_CMP + 1` on a known PV/tipo. Record the real
+   `ErrCode`/`ErrMsg` (expect `1521`, or Official `1020`, or equivalent).
+   Update `CMP_NOT_FOUND_CODES` and this doc from that dump — do **not**
+   treat unknown codes as gaps.
 
 ```bash
 # Optional operator check (not part of pytest / CI):

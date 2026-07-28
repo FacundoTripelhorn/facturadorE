@@ -34,9 +34,9 @@ Judge whether metadata alone should load the skill:
 
 **Must match skill + captures:**
 
-- Business `FEXErr` with **ErrCode 1521** and message about no data for the Cmp
+- Product allow-list currently uses **ErrCode 1521** (Pending wire); Official manual documents **1020**
 - Other `ErrCode ≠ 0` / transport / SOAP Fault → not a gap
-- Cite Observed (FAC-65) and point at `captures/fexgetcmp-not-found-1521.xml`
+- Cite Pending vs Official clearly; synthetic shape at `captures/fexgetcmp-not-found-1521.xml`
 
 **Prompt:** Does `Fecha_pago` come back from `FEXGetCMP`?
 
@@ -74,8 +74,9 @@ Fill when validating a revision:
 |-------|--------|------|
 | agentskills validate | **Passed** (`Valid skill: skills/arca-kb`) | 2026-07-27 |
 | Trigger table (§2) | **Passed** (description keywords cover ARCA/WSFEX/WSAA/1521/Fecha_pago; excludes generic UI/lint prompts) | 2026-07-27 |
-| Technical Q §3 (1521) | **Passed** — answer: FEXErr 1521 = gap; other codes/transport = abort (matches `captures/fexgetcmp-not-found-1521.xml` + `docs/wsfex-gap-vs-error.md`) | 2026-07-27 |
+| Technical Q §3 (1521) | **Updated** — 1521 = Pending/product allow-list; Official 1020; other codes/transport = abort | 2026-07-28 |
 | Technical Q §3 (Fecha_pago) | **Passed** — round-trips per manual v3.1.1 + FAC-63; see `captures/fexgetcmp-success-redacted.xml` | 2026-07-27 |
 | Portability A+B | **Passed** — CLI env A + Cursor Cloud env B, single tree | 2026-07-27 |
 | Secrets scan | **Passed** — only `REDACTED_TOKEN`/`REDACTED_SIGN`; fake CUIT `20000000001`; no PEM | 2026-07-27 |
 | Review follow-up (1462 evidence + Official URLs) | **Passed** — 1462 labeled **Pending** wire; Official PDF/WSDL URLs added; 1020 vs 1521 contrast documented | 2026-07-28 |
+| Review follow-up (1521 Pending) | **Passed** — 1521 no longer claimed Observed; capture marked synthetic | 2026-07-28 |

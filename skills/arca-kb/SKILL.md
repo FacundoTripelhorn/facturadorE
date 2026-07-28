@@ -27,8 +27,9 @@ Tag every non-obvious claim:
 | Label | Meaning |
 |-------|---------|
 | **Official** | Pinned ARCA/AFIP manuals or live WSDL |
-| **Observed** | Homologación / project findings (FAC-63, FAC-65, design spike) |
-| **Community** | Third-party tech notes (e.g. AfipSDK); cite URL; contrast with Official/Observed |
+| **Observed** | Homologación / project findings with **wire or WSDL evidence** (FAC-63, design spike) |
+| **Pending** | Product/fake contract modeled for FacturadorE; **no redacted live dump yet** |
+| **Community** | Third-party tech notes (e.g. AfipSDK); cite URL; contrast with Official/Observed/Pending |
 
 **Rule:** do not invent ARCA behavior. If evidence is missing, say so and point
 to the manual/WSDL/probe to verify.
@@ -122,19 +123,25 @@ Formats:
 
 ## Gap vs error on `FEXGetCMP` (FAC-65)
 
-**Observed** rebuild allow-list (product contract):
+**Product allow-list** (FacturadorE `CMP_NOT_FOUND_CODES` — **Pending** live wire dump):
 
 | Signal | Meaning |
 |--------|---------|
-| `FEXErr.ErrCode = 1521` | Cmp **does not exist** (“No existen datos para el comprobante”) → known gap |
+| `FEXErr.ErrCode = 1521` | Product/fake models this as Cmp **does not exist** → known gap. **Not** yet backed by a redacted homologación capture in this skill. |
 | Other `ErrCode ≠ 0` | Business/server error → **not** a gap; retry then abort rebuild |
 | HTTP / timeout / SOAP Fault | Transport → retry then abort; **never** invent a gap |
 
-**Official contrast:** WSFEX manual v3.1.1 §2.2.4 documents GetCMP missing as
-**`1020` Comprobante inexistente**. Prefer **1521** for FacturadorE paths today;
-extend the allow-list if live ARCA returns 1020 (or another confirmed not-found).
+**Official:** WSFEX manual v3.1.1 §2.2.4 documents GetCMP missing as
+**`1020` Comprobante inexistente**. Until a live dump confirms which code(s)
+ARCA returns today, agents must:
 
-Full table: [errors-observed.md](references/errors-observed.md). Capture: [captures/fexgetcmp-not-found-1521.xml](captures/fexgetcmp-not-found-1521.xml).
+- Describe **1020** as Official and **1521** as Pending/product-modeled.
+- For FacturadorE code paths, note the allow-list is currently `{1521}` and
+  must be extended if live ARCA returns `1020` (or another confirmed not-found).
+- Never treat an unknown `ErrCode` as a gap.
+
+Full table: [errors-observed.md](references/errors-observed.md).
+Synthetic shape (fake/product, not live): [captures/fexgetcmp-not-found-1521.xml](captures/fexgetcmp-not-found-1521.xml).
 
 ## Quick answers
 
@@ -142,7 +149,9 @@ Full table: [errors-observed.md](references/errors-observed.md). Capture: [captu
 Yes — **Official** (manual v3.1.1 / WSDL `ClsFEXGetCMPR`) and **Observed** (FAC-63 fidelity matrix, live homo WSDL 2026-07-17; operator smoke confirmed non-empty).
 
 **Q: How do I know a number is a hole vs ARCA failure during rebuild?**  
-Only treat **1521** (or an explicitly extended not-found set) as absence. Everything else aborts after retries — [errors-observed.md](references/errors-observed.md).
+Treat only **allow-listed not-found codes** as absence. FacturadorE currently
+lists **1521** (**Pending** wire); Official manual documents **1020**. Other
+codes/transport abort after retries — [errors-observed.md](references/errors-observed.md).
 
 **Q: Why did WSAA say the CEE already has a valid TA?**  
 You requested a new TA while one is still valid. Reuse the cached TA (**Official** + **Community**). See [gotchas.md](references/gotchas.md).

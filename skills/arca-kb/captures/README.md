@@ -24,7 +24,7 @@ mirror for agent-facing examples.
 
 | File | What it shows |
 |------|----------------|
-| `fexgetcmp-not-found-1521.xml` | FAC-65 gap signal on `FEXGetCMP` |
+| `fexgetcmp-not-found-1521.xml` | Synthetic FAC-65 product/fake gap shape (`1521`) — **not** a redacted live dump |
 | `fexgetcmp-success-redacted.xml` | Successful GetCMP including `Fecha_pago` + Items (FAC-63 shape) |
 | `fexauthorize-success-redacted.xml` | Authorize result with `Reproceso` |
 | `wsaa-already-authenticated-fault.xml` | WSAA fault when TA already valid |
