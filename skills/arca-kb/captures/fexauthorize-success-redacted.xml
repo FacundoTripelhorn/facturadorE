@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: FEXAuthorize success (first issue Reproceso=N). Same Id retry would be Reproceso=S.
+  Source label: Observed authorize response shape (product + fake contract).
+  Redaction: §2.1.1 checklist — no Token/Sign/CMS; fake CAE/numbers.
+-->
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FEXAuthorizeResponse xmlns="http://ar.gov.afip.dif.fexv1/">
+      <FEXAuthorizeResult>
+        <FEXResultAuth>
+          <Id>10004</Id>
+          <Cbte_nro>4</Cbte_nro>
+          <Cae>76000000000000</Cae>
+          <Fch_venc_Cae>20260723</Fch_venc_Cae>
+          <Fecha_cbte>20260723</Fecha_cbte>
+          <Cbte_tipo>19</Cbte_tipo>
+          <Punto_vta>1</Punto_vta>
+          <Reproceso>N</Reproceso>
+        </FEXResultAuth>
+        <FEXErr>
+          <ErrCode>0</ErrCode>
+          <ErrMsg>OK</ErrMsg>
+        </FEXErr>
+      </FEXAuthorizeResult>
+    </FEXAuthorizeResponse>
+  </soap:Body>
+</soap:Envelope>

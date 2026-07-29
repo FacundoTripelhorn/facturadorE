@@ -156,6 +156,8 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 | Profile roots & runtime paths | `facturador/profile.py` (`EnvironmentProfile`, `ProfilePaths`) |
 | Boot: inject one environment, validate certs | `facturador/config.py` (`resolve_boot_profile`, `load_config`) |
 | Domain rules & checklist | `docs/design.md` §1–2 |
+| Distilled ARCA KB skill (FAC-66; portable) | [`skills/arca-kb/`](../../skills/arca-kb/) — endpoints, TA, methods, observed errors, gotchas, redacted captures |
+| Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |
 | In-process fake (no network) | `tests/arca_fake.py` |
 | WSAA unit tests | `tests/test_wsaa.py` |
 | WSFEX unit tests | `tests/test_wsfex.py` |

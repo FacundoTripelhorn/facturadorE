@@ -27,6 +27,11 @@ of exploring the repo blindly.
     from [`docs/agent/task-brief-template.md`](docs/agent/task-brief-template.md)
     — paste the scaffold into the Linear issue or prompt so goal, constraints,
     and verification are explicit without duplicating this file.
+11. For **ARCA / WSAA / WSFEX protocol questions** (endpoints, TA, ErrCodes,
+    `Fecha_pago`, gap vs error), load the portable skill
+    [`skills/arca-kb/`](skills/arca-kb/) (FAC-66). It is citation-backed and
+    vendor-neutral; see [`skills/README.md`](skills/README.md). Product
+    architecture remains in [`docs/design.md`](docs/design.md).
 
 ## Project shape
 

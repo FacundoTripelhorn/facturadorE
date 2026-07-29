@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: Synthetic FEXGetCMP shape for product/fake ErrCode 1521 (FAC-65 allow-list).
+  Source label: Pending — mirrors tests/arca_fake.py / CMP_NOT_FOUND_CODES; NOT a live homologación dump.
+  Official contrast: WSFEX manual v3.1.1 §2.2.4 documents GetCMP missing as ErrCode 1020.
+  Redaction: §2.1.1 checklist — no Token/Sign/CMS; fake CUIT only.
+-->
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FEXGetCMPResponse xmlns="http://ar.gov.afip.dif.fexv1/">
+      <FEXGetCMPResult>
+        <FEXErr>
+          <ErrCode>1521</ErrCode>
+          <ErrMsg>No existen datos para el comprobante</ErrMsg>
+        </FEXErr>
+      </FEXGetCMPResult>
+    </FEXGetCMPResponse>
+  </soap:Body>
+</soap:Envelope>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Purpose: Illustrative Auth element shape only (never commit real credentials).
+  Source label: Observed request structure (facturador/arca/wsfex.py).
+  Redaction: §2.1.1.9 — Token/Sign are placeholders; CUIT is fake.
+-->
+<Auth xmlns="http://ar.gov.afip.dif.fexv1/">
+  <Token>REDACTED_TOKEN</Token>
+  <Sign>REDACTED_SIGN</Sign>
+  <Cuit>20000000001</Cuit>
+</Auth>
