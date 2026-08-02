@@ -10,7 +10,7 @@ from merged GitHub history (Linear automation out of scope).
 |------|---------|
 | `sprint-review.md` | Marp source (cover, completed tickets, two developer presentation sections) |
 | `theme/facturador-review.css` | Minimal custom Marp theme |
-| `data/cycles.json` | Fixture cycles / issues / assignees used to author the deck |
+| `fixture/cycles.json` | Fixture cycles / issues / assignees used to author the deck |
 | `generate.sh` | One-command PDF generation |
 | `out/facturador-backend-sprint-review.pdf` | Generated PDF |
 | `FINDINGS.md` | Spike evaluation and recommendation |
@@ -52,4 +52,4 @@ Linear was not reachable from the cloud agent (MCP auth unavailable). Sprint
 windows and ticket lists come from `master` merges between 2026-07-14 and
 2026-07-29. Git history has one human backend author; Cursor Agent is used as
 Developer 2 so the required two-presenter layout can be evaluated. See
-`data/cycles.json`.
+`fixture/cycles.json`.

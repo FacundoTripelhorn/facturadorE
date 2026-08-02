@@ -1,0 +1,148 @@
+{
+  "team": "FacturadorE Backend",
+  "note": "Fixture for FAC-80. Linear MCP was unavailable in the agent environment; cycles and assignments are reconstructed from merged GitHub PRs / commits on master (2026-07-14..2026-07-29). Only one human backend author appears in git history; Cursor Agent is used as Developer 2 so the two-presenter layout can be evaluated.",
+  "developers": [
+    {
+      "id": "dev1",
+      "name": "Facundo Tripelhorn",
+      "role": "Backend lead"
+    },
+    {
+      "id": "dev2",
+      "name": "Cursor Agent",
+      "role": "Agent-assisted backend delivery"
+    }
+  ],
+  "cycles": [
+    {
+      "id": "sprint-a",
+      "name": "Sprint A — Onboarding & fiscal safety",
+      "starts_at": "2026-07-14",
+      "ends_at": "2026-07-18",
+      "issues": [
+        {
+          "id": "FAC-35",
+          "title": "Per-profile setup state and onboarding guard",
+          "assignee": "dev1",
+          "featured": true
+        },
+        {
+          "id": "FAC-40",
+          "title": "Production confirmation and safety cues",
+          "assignee": "dev1",
+          "featured": false
+        },
+        {
+          "id": "FAC-37",
+          "title": "Certificate upload onboarding step",
+          "assignee": "dev1",
+          "featured": false
+        },
+        {
+          "id": "FAC-48",
+          "title": "Block issuance when local profile is behind ARCA",
+          "assignee": "dev2",
+          "featured": false
+        },
+        {
+          "id": "FAC-38",
+          "title": "Emisor and point-of-sale onboarding",
+          "assignee": "dev1",
+          "featured": false
+        },
+        {
+          "id": "FAC-10",
+          "title": "Snapshot issuer fields on invoices at draft creation",
+          "assignee": "dev2",
+          "featured": true
+        },
+        {
+          "id": "FAC-52",
+          "title": "Persist complete immutable invoice rendering snapshot",
+          "assignee": "dev2",
+          "featured": true
+        },
+        {
+          "id": "FAC-53",
+          "title": "Version PDF renderers and make generated PDFs disposable",
+          "assignee": "dev2",
+          "featured": true
+        }
+      ]
+    },
+    {
+      "id": "sprint-b",
+      "name": "Sprint B — Recovery, seed backup & polish",
+      "starts_at": "2026-07-19",
+      "ends_at": "2026-07-29",
+      "issues": [
+        {
+          "id": "FAC-44",
+          "title": "Encrypted profile seed backup and manifest",
+          "assignee": "dev1",
+          "featured": true
+        },
+        {
+          "id": "FAC-45",
+          "title": "S3 storage adapter for encrypted profile seeds",
+          "assignee": "dev1",
+          "featured": true
+        },
+        {
+          "id": "FAC-47",
+          "title": "Trigger encrypted seed backup on profile config changes",
+          "assignee": "dev2",
+          "featured": true
+        },
+        {
+          "id": "FAC-65",
+          "title": "Rebuild register from ARCA (reconstruct-based restore)",
+          "assignee": "dev1",
+          "featured": true
+        },
+        {
+          "id": "FAC-66",
+          "title": "Portable arca-kb ARCA knowledge skill",
+          "assignee": "dev2",
+          "featured": true
+        },
+        {
+          "id": "FAC-68",
+          "title": "GET /invoices/arca read-only register peek",
+          "assignee": "dev2",
+          "featured": false
+        },
+        {
+          "id": "FAC-70",
+          "title": "Redirect incomplete-setup HTML routes to /setup",
+          "assignee": "dev2",
+          "featured": false
+        },
+        {
+          "id": "FAC-71",
+          "title": "Sort País destino and CUIT país dropdowns by description",
+          "assignee": "dev2",
+          "featured": false
+        },
+        {
+          "id": "FAC-72",
+          "title": "Actionable 503 when PDF render lacks WeasyPrint/GTK",
+          "assignee": "dev2",
+          "featured": false
+        },
+        {
+          "id": "FAC-73",
+          "title": "Default Ingresos Brutos to Exento on emisor forms",
+          "assignee": "dev1",
+          "featured": false
+        },
+        {
+          "id": "FAC-74",
+          "title": "Fix UTF-8 mojibake in emisor templates from FAC-73",
+          "assignee": "dev1",
+          "featured": false
+        }
+      ]
+    }
+  ]
+}

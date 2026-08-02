@@ -20,7 +20,7 @@ it is not required to get value from Marp today.
 |-------------|--------|
 | Marp source (`sprint-review.md`) | Done |
 | Minimal theme (`theme/facturador-review.css`) | Done |
-| Fixture cycle data (`data/cycles.json`) | Done |
+| Fixture cycle data (`fixture/cycles.json`) | Done |
 | Reproducible generate script | Done (`generate.sh`, pinned `@marp-team/marp-cli@4.2.3`) |
 | Generated PDF (10 slides, 16:9) | Done (~186 KB) |
 | Cover + completed tickets + two developer impact sections | Done |
