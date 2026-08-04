@@ -74,6 +74,25 @@ while the container keeps listening on 8399.
 
 ---
 
+## Production WSFEX: weak DH / OpenSSL 3 (FAC-81)
+
+**Symptom:** In **Producción**, `/health/arca`, `/params/…`, or client forms that
+refresh ARCA tables fail with
+`[SSL: DH_KEY_TOO_SMALL] dh key too small`. Homologación works.
+
+**Expected (pre-FAC-81):** AFIP’s prod WSFEX host (`servicios1.afip.gov.ar`)
+still offers DHE with a 1024-bit DH temp key; OpenSSL 3’s default SECLEVEL
+rejects it. WSAA prod and both homo endpoints negotiate ECDH and are fine.
+
+**Product accommodation (FAC-81):** only the **prod** `WsfexClient` httpx
+client uses an `SSLContext` from `ssl.create_default_context()` with
+SECLEVEL=1 (Python’s default cipher policy preserved; not OpenSSL’s broader
+`DEFAULT` set). Certificate verification stays on. Homologación and WSAA
+keep httpx/OpenSSL defaults. Do **not** “fix” this with `verify=False` or a
+machine-wide `openssl.cnf` SECLEVEL change.
+
+---
+
 ## Missing real ARCA homologación credentials
 
 **Symptom:** ARCA-backed endpoints return 5xx (`WsaaError`, SOAP faults, health
@@ -304,6 +323,7 @@ Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 |-------------|--------------|--------|
 | Cannot reach app from another PC | Localhost-only bind | Expected; do not widen bind |
 | `0.0.0.0` in `docker ps` / container logs | Docker internal listen | Expected; check host publish is `127.0.0.1` |
+| `DH_KEY_TOO_SMALL` on prod WSFEX / params | AFIP 1024-bit DH + OpenSSL 3 | Expected host behavior; FAC-81 acomoda solo prod WSFEX (verify on) |
 | 5xx on authorize / cotización | No real homologación cert | Setup credentials or use tests |
 | `cms.cert.untrusted` | Self-signed test cert | WSASS cert or `arca_fake` tests |
 | Emisor not in `.env` | Config in profile SQLite | Use `/configuracion` or DB seed |
