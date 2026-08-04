@@ -85,10 +85,11 @@ still offers DHE with a 1024-bit DH temp key; OpenSSL 3’s default SECLEVEL
 rejects it. WSAA prod and both homo endpoints negotiate ECDH and are fine.
 
 **Product accommodation (FAC-81):** only the **prod** `WsfexClient` httpx
-client uses an `SSLContext` with `DEFAULT:@SECLEVEL=1`. Certificate
-verification stays on. Homologación and WSAA keep httpx/OpenSSL defaults.
-Do **not** “fix” this with `verify=False` or a machine-wide `openssl.cnf`
-SECLEVEL change.
+client uses an `SSLContext` from `ssl.create_default_context()` with
+SECLEVEL=1 (Python’s default cipher policy preserved; not OpenSSL’s broader
+`DEFAULT` set). Certificate verification stays on. Homologación and WSAA
+keep httpx/OpenSSL defaults. Do **not** “fix” this with `verify=False` or a
+machine-wide `openssl.cnf` SECLEVEL change.
 
 ---
 

@@ -26,6 +26,19 @@ def test_wsfex_verify_prod_lowers_seclevel_keeps_cert_verify() -> None:
     assert isinstance(ctx, ssl.SSLContext)
     assert ctx.verify_mode == ssl.CERT_REQUIRED
     assert ctx.check_hostname is True
+    assert ctx.security_level == 1
+
+
+def test_wsfex_verify_prod_preserves_default_cipher_policy() -> None:
+    """SECLEVEL drops to 1 without switching the suite list to DEFAULT."""
+    default_names = {c["name"] for c in ssl.create_default_context().get_ciphers()}
+    ctx = wsfex_verify(ArcaEnvironment.PROD)
+    assert isinstance(ctx, ssl.SSLContext)
+    assert {c["name"] for c in ctx.get_ciphers()} == default_names
+
+    broader = ssl.create_default_context()
+    broader.set_ciphers("ALL:@SECLEVEL=1")
+    assert len(broader.get_ciphers()) > len(ctx.get_ciphers())
 
 
 def test_wsfex_client_default_http_uses_helper(test_config, monkeypatch) -> None:

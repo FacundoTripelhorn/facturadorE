@@ -183,8 +183,10 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
    **Excepción documentada (FAC-81):** el WSFEX de producción
    (`servicios1.afip.gov.ar`) negocia DHE con DH de 1024 bits, que OpenSSL 3
    rechaza con `DH_KEY_TOO_SMALL`. Solo en **Producción** y solo para el
-   cliente WSFEX se usa un `SSLContext` con `DEFAULT:@SECLEVEL=1`, manteniendo
-   la verificación del certificado. Homologación y WSAA (ambos ambientes)
+   cliente WSFEX se usa un `SSLContext` derivado de
+   `ssl.create_default_context()` con SECLEVEL=1 (misma política de cifrados
+   del default de Python; no se cambia a `DEFAULT`), manteniendo la
+   verificación del certificado. Homologación y WSAA (ambos ambientes)
    siguen en el default de httpx/OpenSSL — no hace falta acomodarlos.
 6. **Verificación post-emisión:** pyafipws recomienda constatar el CAE. Implementar: tras autorizar, `FEXGetCMP` y comparar CAE + importe + número; opcionalmente WSCDC en producción.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.
