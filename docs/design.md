@@ -178,7 +178,14 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
 2. **Validación del TA recibido:** parsear y validar `expirationTime` del ticket antes de usarlo/cachearlo; no asumir las 12 h. Rechazar TAs con `destination`/`service` que no sean `wsfex`.
 3. **Reproceso seguro:** al reintentar un `FEXAuthorize` con el mismo `Id`, pyafipws compara que la respuesta corresponda a los mismos datos enviados (monto, tipo, punto de venta) antes de aceptar el CAE como propio. Replicar: nunca aceptar ciegamente un CAE de reproceso sin verificar contra el request persistido.
 4. **XML injection/escaping:** todos los campos de texto libre (razón social, descripción de ítems, observaciones, domicilio) deben escaparse al armar el XML. Con templates a mano este es EL riesgo nuevo que pyafipws no tenía (usa serialización). Usar siempre el serializador de la lib XML, jamás f-strings/concatenación para valores.
-5. **TLS:** verificación de certificados del servidor SIEMPRE activa en `httpx` (default, no tocarlo). Nada de `verify=False` "para probar" — es el vector exacto para robar el token fiscal.
+5. **TLS:** verificación de certificados del servidor SIEMPRE activa en `httpx`
+   (nunca `verify=False` — es el vector exacto para robar el token fiscal).
+   **Excepción documentada (FAC-81):** el WSFEX de producción
+   (`servicios1.afip.gov.ar`) negocia DHE con DH de 1024 bits, que OpenSSL 3
+   rechaza con `DH_KEY_TOO_SMALL`. Solo en **Producción** y solo para el
+   cliente WSFEX se usa un `SSLContext` con `DEFAULT:@SECLEVEL=1`, manteniendo
+   la verificación del certificado. Homologación y WSAA (ambos ambientes)
+   siguen en el default de httpx/OpenSSL — no hace falta acomodarlos.
 6. **Verificación post-emisión:** pyafipws recomienda constatar el CAE. Implementar: tras autorizar, `FEXGetCMP` y comparar CAE + importe + número; opcionalmente WSCDC en producción.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.
 8. **Clock sync:** generación del TRA con ventana amplia (gen -10 min / exp +10 min) y NTP contra `time.afip.gov.ar`, como documenta el manual WSAA.

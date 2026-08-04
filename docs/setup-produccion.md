@@ -113,6 +113,14 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
 Sin `FACTURADOR_APP_DATA` apuntando al layout Docker, el script busca el
 perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
 
+> **TLS (FAC-81):** el WSFEX de producción (`servicios1.afip.gov.ar`) usa DH
+> de 1024 bits. Con Python 3.12 / OpenSSL 3 eso dispara
+> `DH_KEY_TOO_SMALL` si el cliente no acomoda el SECLEVEL. FacturadorE lo
+> hace solo en el cliente WSFEX de Producción (verificación del certificado
+> sigue activa). Homologación y WSAA no necesitan el acomodo. Si ves ese
+> error en prod, confirmá que estás en un build con FAC-81; no desactives
+> `verify`.
+
 ## 6. Primera factura real
 
 1. Levantar con Producción

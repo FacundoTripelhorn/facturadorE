@@ -27,6 +27,7 @@ from ..constants import (
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
 )
+from .tls import wsfex_verify
 from .wsaa import WsaaClient, cuit_from_certificate
 
 logger = logging.getLogger(__name__)
@@ -367,8 +368,12 @@ class WsfexClient:
     ):
         self.config = config
         self.wsaa = wsaa or WsaaClient(config)
-        # TLS verify en default de httpx (activo) — checklist punto 5.
-        self.http = http or httpx.Client(timeout=60.0)
+        # TLS verify activo (design.md §2.1.1 punto 5). En prod WSFEX, OpenSSL
+        # SECLEVEL=1 acepta el DH 1024 de servicios1.afip.gov.ar (FAC-81);
+        # homologación y WSAA siguen en defaults.
+        self.http = http or httpx.Client(
+            timeout=60.0, verify=wsfex_verify(config.env)
+        )
         self._cuit: int | None = None
         self.last_events: list[tuple[str, str]] = []
 
