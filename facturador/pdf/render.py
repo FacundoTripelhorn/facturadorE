@@ -39,7 +39,8 @@ _env = Environment(
 
 _CHROMIUM_MISSING_HINT = (
     "No se pudo generar el PDF: falta Chromium de Playwright. "
-    "Instalá el browser con: uv run playwright install chromium"
+    "Instalá el browser con: uv run playwright install chromium "
+    "(en Linux: uv run playwright install --with-deps chromium)"
 )
 
 

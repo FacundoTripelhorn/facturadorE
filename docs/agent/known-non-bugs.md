@@ -160,12 +160,15 @@ the app still work.
 WeasyPrint/GTK. The Python package alone is not enough: the browser binary
 must be installed once per machine/venv. Docker installs it in the image
 build; the native launcher expects `uv run playwright install chromium` after
-`uv sync`.
+`uv sync`. On native Linux hosts that lack Chromium OS libraries, use
+`--with-deps` so Playwright installs those system packages too.
 
 **Fix:**
 
 ```bash
 uv run playwright install chromium
+# Linux (missing OS libs for Chromium):
+uv run playwright install --with-deps chromium
 ```
 
 Then retry the PDF download (cache is optional; regenerate from the invoice

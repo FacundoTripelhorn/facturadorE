@@ -29,8 +29,10 @@ Qué incluye:
 - **Docker Desktop** (runtime recomendado; trae Chromium en la imagen), o bien
   **Python ≥ 3.12** + [uv](https://docs.astral.sh/uv/) para correr sin Docker —
   en ese caso, tras `uv sync`, instalá Chromium una vez con
-  `uv run playwright install chromium`. Sin el browser el resto de la app
-  funciona igual; solo la descarga del PDF falla (503 con hint de install).
+  `uv run playwright install chromium` (en Linux, si faltan librerías del
+  sistema: `uv run playwright install --with-deps chromium`). Sin el browser
+  el resto de la app funciona igual; solo la descarga del PDF falla (503 con
+  hint de install).
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
