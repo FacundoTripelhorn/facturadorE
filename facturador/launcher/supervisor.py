@@ -1,10 +1,12 @@
-"""Supervisor de proceso del launcher (FAC-28 / FAC-30 / FAC-32, ADR 0001).
+"""Supervisor de proceso del launcher (FAC-28 / FAC-30 / FAC-32 / FAC-83, ADR 0001).
 
-Arranca un backend ligado a un único perfil, espera ``GET /health``, abre el
-browser solo si quedó listo, y apaga el hijo sin dejarlo huérfano. El lock de
-perfil (FAC-30) evita un segundo backend sobre el mismo SQLite; si ya hay una
-sesión sana, se reutiliza abriendo el browser. FAC-32: el supervisor expone el
-pedido de cambio de ambiente escrito por la UI (sin hot-switch).
+Arranca un backend ligado a un único perfil, espera ``GET /health``, abre la
+UI (ventana pywebview o fallback al browser) solo si quedó listo, y apaga el
+hijo sin dejarlo huérfano. El lock de perfil (FAC-30) evita un segundo backend
+sobre el mismo SQLite; si ya hay una sesión sana, se reutiliza abriendo la UI.
+FAC-32: el supervisor expone el pedido de cambio de ambiente escrito por la UI
+(sin hot-switch). FAC-83: la UI por defecto es una ventana nativa; cerrarla
+señala el fin de la sesión supervisada.
 """
 
 from __future__ import annotations
@@ -19,7 +21,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-import webbrowser
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +35,7 @@ from .switch import (
     clear_change_environment_request,
     read_change_environment_request,
 )
+from .window import UiEndReason, UiOpenResult, app_window_title, open_app_ui
 
 DEFAULT_READINESS_TIMEOUT_S = 60.0
 DEFAULT_STOP_TIMEOUT_S = 10.0
@@ -64,7 +66,9 @@ class ProcessSupervisor:
     home: Path | None = None
     readiness_timeout: float = DEFAULT_READINESS_TIMEOUT_S
     open_browser: bool = True
-    browser_opener: Callable[[str], Any] = field(default=webbrowser.open)
+    # None → ventana nativa (FAC-83). Callable inyectable en tests / agents
+    # (p.ej. ``list.append``) se trata como opener no bloqueante.
+    browser_opener: Callable[[str], Any] | None = None
     python: str | None = None
     base_env: Mapping[str, str] | None = None
     # Inyectable en tests: reemplaza ``python -m facturador``.
@@ -72,6 +76,9 @@ class ProcessSupervisor:
     # FAC-30: por defecto toma el lock de perfil; False solo en tests unitarios
     # del ciclo start/stop sin contención.
     acquire_profile_lock: bool = True
+    # FAC-83: si True (default), la ventana se interrumpe cuando hay pedido
+    # FAC-32 o el backend muere, para devolver el control al hilo del launcher.
+    interrupt_ui_on_change_request: bool = True
 
     _plan: BackendLaunchPlan | None = field(default=None, init=False, repr=False)
     _process: subprocess.Popen[bytes] | None = field(
@@ -84,6 +91,9 @@ class ProcessSupervisor:
     )
     _lock: ProfileLock | None = field(default=None, init=False, repr=False)
     _reused: bool = field(default=False, init=False, repr=False)
+    _last_ui_result: UiOpenResult | None = field(
+        default=None, init=False, repr=False
+    )
 
     @property
     def plan(self) -> BackendLaunchPlan:
@@ -130,8 +140,18 @@ class ProcessSupervisor:
     def was_reused(self) -> bool:
         return self._reused
 
+    @property
+    def last_ui_result(self) -> UiOpenResult | None:
+        """Resultado de la última apertura de UI (ventana o browser)."""
+        return self._last_ui_result
+
+    @property
+    def last_ui_reason(self) -> UiEndReason | None:
+        result = self._last_ui_result
+        return result.reason if result is not None else None
+
     def start(self) -> LaunchResult:
-        """Arranca el backend (o reutiliza sesión sana) y abre el browser."""
+        """Arranca el backend (o reutiliza sesión sana) y abre la UI."""
         if self.is_running:
             raise LauncherError(
                 "Ya hay un backend en marcha para este launcher. "
@@ -140,13 +160,13 @@ class ProcessSupervisor:
         plan = self.plan
         self._ready = False
         self._reused = False
+        self._last_ui_result = None
 
         if self.acquire_profile_lock:
             reused = self._acquire_or_reuse(plan)
             if reused is not None:
                 self._reused = True
                 self._ready = True
-                self._open_browser_if_needed(reused.base_url)
                 # Plan sintético con el puerto de la sesión existente.
                 reused_plan = BackendLaunchPlan(
                     environment=plan.environment,
@@ -158,6 +178,8 @@ class ProcessSupervisor:
                 # Callers que solo guardan el supervisor (start_backend,
                 # context manager) deben ver base_url/plan del puerto real.
                 self._plan = reused_plan
+                # Abrir UI con el plan ya actualizado (título / interrupt).
+                self._open_browser_if_needed(reused.base_url)
                 return LaunchResult(plan=reused_plan, reused=True)
 
         try:
@@ -256,19 +278,52 @@ class ProcessSupervisor:
         if lock is not None:
             lock.release()
 
+    def open_ui(self, base_url: str | None = None) -> UiOpenResult | None:
+        """Abre (o reabre) la UI contra ``base_url``; ver ``_open_browser_if_needed``."""
+        if not self.open_browser:
+            return None
+        url_base = base_url if base_url is not None else self.base_url
+        self._open_browser_if_needed(url_base)
+        return self._last_ui_result
+
     def _open_browser_if_needed(self, base_url: str) -> None:
         if not self.open_browser:
             return
+        url = f"{base_url.rstrip('/')}/"
         try:
-            self.browser_opener(f"{base_url}/")
+            if self.browser_opener is not None:
+                # Opener inyectado (tests / --custom): no bloquea; equivalente
+                # al fallback de navegador para el ciclo de vida en __main__.
+                self.browser_opener(url)
+                self._last_ui_result = UiOpenResult(
+                    reason=UiEndReason.BROWSER_FALLBACK
+                )
+                return
+
+            title = app_window_title(self.plan.profile.display_name)
+            interrupt: Callable[[], bool] | None = None
+            if self.interrupt_ui_on_change_request and not self._reused:
+                interrupt = self._ui_interrupt_check
+            self._last_ui_result = open_app_ui(
+                url,
+                title=title,
+                interrupt_check=interrupt,
+            )
         except Exception:
-            # El backend ya está listo: un fallo al abrir el browser no
-            # debe tumbar el launcher ni dejar el proceso sin supervisión.
+            # El backend ya está listo: un fallo al abrir la UI no debe
+            # tumbar el launcher ni dejar el proceso sin supervisión.
             _log.warning(
-                "No se pudo abrir el navegador; la app ya está en %s/",
-                base_url,
+                "No se pudo abrir la UI; la app ya está en %s",
+                url,
                 exc_info=True,
             )
+            self._last_ui_result = None
+
+    def _ui_interrupt_check(self) -> bool:
+        """True si hay que devolver el hilo principal (cambio de ambiente / muerte)."""
+        if not self._reused and not self.is_running:
+            return True
+        return read_change_environment_request(self.plan.profile.paths) is not None
 
     def _spawn(self, plan: BackendLaunchPlan) -> subprocess.Popen[bytes]:
         self._output_chunks = []

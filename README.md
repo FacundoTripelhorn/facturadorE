@@ -110,8 +110,22 @@ uv sync
 uv run python -m facturador.launcher   # elige Homologación o Producción
 ```
 
-Abre `http://127.0.0.1:8399`. La app escucha **solo en localhost** por diseño
-(el host no es configurable): la única conexión de red es saliente hacia ARCA.
+El launcher nativo arranca el backend en `http://127.0.0.1:8399` y abre una
+**ventana dedicada** (pywebview: WebView2 en Windows, WebKit en macOS) con el
+título `FacturadorE — Homologación` o `FacturadorE — Producción`. Cerrar esa
+ventana detiene el backend. Si el webview no está disponible, cae al navegador
+del sistema. Para automatización / agents: `--no-browser`.
+
+La app escucha **solo en localhost** por diseño (el host no es configurable):
+la única conexión de red es saliente hacia ARCA.
+
+**Requisitos del webview**
+
+- **Windows:** [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+  (suele venir con Windows 11 / Edge; en máquinas mínimas hay que instalarlo).
+- **macOS:** WebKit vía el runtime de pywebview (no hace falta un browser aparte).
+- **Linux (dev):** pywebview usa GTK/Qt según lo disponible; el fallback al
+  browser cubre entornos headless o sin toolkit.
 
 Para desarrollo o scripts sin el chooser:
 `uv run python -m facturador.launcher --env homo` (o `prod`), o

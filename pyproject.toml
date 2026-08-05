@@ -15,6 +15,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
     "boto3>=1.35",
+    "pywebview>=6.2.1",
 ]
 
 [dependency-groups]
@@ -50,7 +51,16 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-module = ["weasyprint", "qrcode", "boto3", "boto3.*", "botocore", "botocore.*"]
+module = [
+    "weasyprint",
+    "qrcode",
+    "boto3",
+    "boto3.*",
+    "botocore",
+    "botocore.*",
+    "webview",
+    "webview.*",
+]
 ignore_missing_imports = true
 
 [build-system]
