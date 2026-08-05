@@ -18,13 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # Libs nativas de weasyprint: acá el test del PDF real corre de
-      # verdad (en Windows sin GTK se skipea).
-      - name: Dependencias de weasyprint
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       # age/age-keygen: FAC-44 cifra el seed a recipients; los tests
       # ejercitan round-trip real (sin loguear plaintext/secretos).
       # Binario oficial: el paquete apt no es uniforme entre runners.
@@ -36,6 +29,10 @@ jobs:
           age --version
           age-keygen --version
       - run: uv sync --frozen
+      # Chromium de Playwright (FAC-82): el test real del PDF corre acá.
+      # ``--with-deps`` instala libs de sistema del browser en el runner.
+      - name: Instalar Chromium (Playwright)
+        run: uv run playwright install --with-deps chromium
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run pytest -q

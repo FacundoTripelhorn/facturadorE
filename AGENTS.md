@@ -36,7 +36,7 @@ of exploring the repo blindly.
 ## Project shape
 
 - **Stack:** Python 3.12, single-process FastAPI (JSON API + Jinja/HTMX frontend),
-  SQLite datastore, WeasyPrint PDFs.
+  SQLite datastore, Playwright Chromium PDFs.
 - **Domain:** Argentine export invoices ("Factura E") via ARCA WSAA/WSFEX SOAP.
 - **Environments:** one app, launcher-selected **Homologación** / **Producción**,
   isolated hidden profiles, one immutable environment per backend process
@@ -163,6 +163,7 @@ Keep responses proportional to task complexity; do not pad with unrelated detail
 Tool-specific notes belong in `docs/agent/` when they exist. Until then:
 
 - **Cursor Cloud:** dependency refresh may be automated by the environment
-  (`uv sync` on boot). WeasyPrint system libs (pango/cairo/gdk-pixbuf) are
-  preinstalled in the base image. ARCA homologación endpoints are network-reachable
-  from the VM, but a self-signed cert is still rejected by WSAA.
+  (`uv sync` on boot). After sync, install Chromium once with
+  `uv run playwright install chromium` (or `--with-deps` on Linux) so PDF
+  tests run. ARCA homologación endpoints are network-reachable from the VM,
+  but a self-signed cert is still rejected by WSAA.

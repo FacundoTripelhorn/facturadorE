@@ -37,7 +37,7 @@ flowchart TB
     REPO["facturador/repo/<br/>SQLite queries"]
     ARCA["facturador/arca/<br/>WSAA + WSFEX SOAP"]
     WEB["facturador/web/<br/>Jinja + HTMX routes"]
-    PDF["facturador/pdf/<br/>WeasyPrint + QR"]
+    PDF["facturador/pdf/<br/>Playwright + QR"]
     BAK["facturador/seed_backup.py<br/>backup.py · restore.py"]
   end
 
@@ -185,7 +185,7 @@ UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domai
 
 | What | Where |
 |------|-------|
-| HTML → PDF (WeasyPrint) + cache helper | `facturador/pdf/render.py` |
+| HTML → PDF (Playwright Chromium) + cache helper | `facturador/pdf/render.py` |
 | Versioned renderer registry (FAC-53) | `facturador/pdf/registry.py` |
 | QR payload (RG 4892) | `facturador/pdf/qr.py` |
 | Print layout template (v1) | `facturador/pdf/invoice.html` |

@@ -155,8 +155,9 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
                                    │
                               ┌────▼─────┐   ┌──────────────┐
                               │ SQLite   │   │ PDF renderer │
-                              │ (Postgres│   │ (weasyprint  │
-                              │ si crece)│   │  + QR RG4892)│
+                              │ (Postgres│   │ (Playwright  │
+                              │ si crece)│   │  Chromium +  │
+                              │          │   │  QR RG4892)  │
                               └──────────┘   └──────────────┘
 ```
 
@@ -165,7 +166,10 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
 - **API:** FastAPI + Pydantic (validación de dominio) + SQLite. Un solo proceso, sin colas ni workers: el volumen es ~1 factura/semana.
 - **Cliente ARCA:** implementación propia (`ArcaClient`) con `httpx` y XML SOAP armado con templates (los requests de WSFEX son pocos y estables; no generar clientes desde el WSDL). Alternativa aceptable si se traba: `zeep` como cliente SOAP dinámico.
 - **Firma CMS (WSAA):** librería `cryptography` → `pkcs7.PKCS7SignatureBuilder` (firma nativa, sin subprocesos de openssl).
-- **PDF:** `weasyprint` (HTML→PDF) + `qrcode` para el QR RG 4892.
+- **PDF:** Playwright Chromium headless (HTML→PDF; FAC-82, reemplaza WeasyPrint)
+  + `qrcode` para el QR RG 4892. Solo HTML local de confianza (`set_content`);
+  sin Pango/GTK. Tras instalar deps: `playwright install chromium` (en Linux,
+  si faltan libs del sistema: `playwright install --with-deps chromium`).
 - **Frontend:** Jinja2 + HTMX servido por la misma app FastAPI. Cero build tooling de JS; si a futuro se quiere SPA, la API JSON ya existe.
 - **DB:** SQLite alcanza incluso más allá del spike dado el volumen; migrar a Postgres solo si aparece multiusuario real. La app es el único registro y fuente de verdad local; no se sincroniza con herramientas externas. El esquema (siempre bajo un perfil) se versiona con migraciones transaccionales (`facturador.migrations`, FAC-43): al conectar se aplica lo pendiente, un fallo hace rollback y bloquea el arranque, y cada conexión habilita `PRAGMA foreign_keys=ON`. La baseline es el esquema de perfiles aislados.
 - **Secretos:** cert + key nunca en el repo. Variables de entorno o archivo montado con permisos 400; la key privada es equivalente a la firma fiscal de la empresa.
