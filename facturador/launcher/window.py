@@ -19,7 +19,7 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -46,21 +46,6 @@ class UiOpenResult:
     reason: UiEndReason
 
 
-class SupportsWebview(Protocol):
-    """Subset de pywebview inyectable en tests (sin GUI real)."""
-
-    def create_window(self, title: str, url: str | None = None, **kwargs: Any) -> Any:
-        ...
-
-    def start(
-        self,
-        func: Callable[..., None] | None = None,
-        args: Any = None,
-        **kwargs: Any,
-    ) -> None:
-        ...
-
-
 def app_window_title(display_name: str) -> str:
     """Título de ventana: producto + cue de ambiente (Homologación / Producción)."""
     name = display_name.strip() or "FacturadorE"
@@ -74,7 +59,7 @@ def open_app_ui(
     *,
     title: str,
     interrupt_check: Callable[[], bool] | None = None,
-    webview_module: SupportsWebview | None = None,
+    webview_module: Any | None = None,
     browser_opener: Callable[[str], Any] | None = None,
 ) -> UiOpenResult:
     """Abre la UI local en webview o, si falla, en el navegador del sistema.
@@ -90,7 +75,6 @@ def open_app_ui(
     """
     open_browser = browser_opener or webbrowser.open
     try:
-        webview: SupportsWebview
         if webview_module is not None:
             webview = webview_module
         else:

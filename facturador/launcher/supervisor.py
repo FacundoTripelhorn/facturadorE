@@ -279,7 +279,7 @@ class ProcessSupervisor:
             lock.release()
 
     def open_ui(self, base_url: str | None = None) -> UiOpenResult | None:
-        """Abre (o reabre) la UI contra ``base_url``; ver ``_open_browser_if_needed``."""
+        """Abre (o reabre) la UI; ver ``_open_browser_if_needed``."""
         if not self.open_browser:
             return None
         url_base = base_url if base_url is not None else self.base_url
