@@ -15,7 +15,9 @@ Contrato de ambientes: [`adr/0001-perfiles-de-ambiente-aislados.md`](adr/0001-pe
 - Clave fiscal de ARCA (nivel suficiente para operar servicios con clave fiscal).
 - Python ≥ 3.12 y [uv](https://docs.astral.sh/uv/), **o** Docker Desktop.
 - Chromium de Playwright si corrés sin Docker (FAC-82). Tras `uv sync`:
-  `uv run playwright install chromium` (una vez por máquina / venv).
+  `uv run playwright install chromium` (una vez por máquina / venv). En
+  Linux, si faltan librerías del sistema del browser:
+  `uv run playwright install --with-deps chromium`.
 - **Reloj sincronizado por NTP.** El clock skew es la causa número 1 de errores
   del WSAA; macOS y la mayoría de las distros Linux lo traen activo por defecto.
 
@@ -58,6 +60,7 @@ exactamente `cert.crt` y `cert.key`; la key en modo `400`/`600`.
 ```bash
 uv sync
 uv run playwright install chromium
+# Linux (si faltan deps del sistema): uv run playwright install --with-deps chromium
 uv run python -m facturador.launcher --env homo
 ```
 

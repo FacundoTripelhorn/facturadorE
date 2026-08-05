@@ -152,7 +152,8 @@ def test_pdf_sin_chromium_responde_503_accionable(api, arca, monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError(
             "No se pudo generar el PDF: falta Chromium de Playwright. "
-            "Instalá el browser con: uv run playwright install chromium"
+            "Instalá el browser con: uv run playwright install chromium "
+            "(en Linux: uv run playwright install --with-deps chromium)"
         )
 
     monkeypatch.setattr(
