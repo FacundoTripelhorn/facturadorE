@@ -101,19 +101,27 @@ def test_qr_exige_factura_con_cae(api, arca):
 # --- endpoint /invoices/:id/pdf ---
 
 
-def _weasyprint_disponible() -> bool:
-    # weasyprint levanta OSError (no ImportError) si faltan las libs nativas
-    # de Pango, así que pytest.importorskip no alcanza.
+def _playwright_chromium_disponible() -> bool:
+    """True si Playwright puede lanzar Chromium (browser instalado)."""
     try:
-        import weasyprint  # noqa: F401
-    except (ImportError, OSError):
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            browser.close()
+    except Exception:
         return False
     return True
 
 
 @pytest.mark.skipif(
-    not _weasyprint_disponible(),
-    reason="weasyprint sin libs nativas (Pango/GTK); el runtime real es Docker",
+    not _playwright_chromium_disponible(),
+    reason=(
+        "Playwright Chromium no instalado; "
+        "correr: uv run playwright install chromium"
+    ),
 )
 def test_pdf_de_factura_autorizada(api, arca, test_config):
     factura = _factura_autorizada(api)
@@ -137,14 +145,14 @@ def test_pdf_de_draft_es_conflicto(api, arca):
     assert "draft" in r.json()["detail"]
 
 
-def test_pdf_sin_weasyprint_responde_503_accionable(api, arca, monkeypatch):
-    """Windows nativo sin GTK: mensaje claro, no 500 opaco."""
+def test_pdf_sin_chromium_responde_503_accionable(api, arca, monkeypatch):
+    """Chromium ausente: mensaje claro con hint de install, no 500 opaco."""
     factura = _factura_autorizada(api)
 
     def boom(*_args, **_kwargs):
         raise RuntimeError(
-            "No se pudo generar el PDF: faltan las librerías nativas de "
-            "WeasyPrint (Pango/GTK)."
+            "No se pudo generar el PDF: falta Chromium de Playwright. "
+            "Instalá el browser con: uv run playwright install chromium"
         )
 
     monkeypatch.setattr(
@@ -152,8 +160,8 @@ def test_pdf_sin_weasyprint_responde_503_accionable(api, arca, monkeypatch):
     )
     r = api.get(f"/invoices/{factura['id']}/pdf")
     assert r.status_code == 503
-    assert "WeasyPrint" in r.json()["detail"]
-    assert "Pango/GTK" in r.json()["detail"]
+    assert "Chromium" in r.json()["detail"]
+    assert "playwright install chromium" in r.json()["detail"]
 
 
 def test_pdf_inexistente_es_404(api):

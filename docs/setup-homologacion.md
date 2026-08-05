@@ -14,9 +14,8 @@ Contrato de ambientes: [`adr/0001-perfiles-de-ambiente-aislados.md`](adr/0001-pe
 
 - Clave fiscal de ARCA (nivel suficiente para operar servicios con clave fiscal).
 - Python ≥ 3.12 y [uv](https://docs.astral.sh/uv/), **o** Docker Desktop.
-- Dependencias de sistema de WeasyPrint (Pango, Cairo, GDK-PixBuf) si corrés
-  sin Docker. En Debian/Ubuntu:
-  `sudo apt install libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0`.
+- Chromium de Playwright si corrés sin Docker (FAC-82). Tras `uv sync`:
+  `uv run playwright install chromium` (una vez por máquina / venv).
 - **Reloj sincronizado por NTP.** El clock skew es la causa número 1 de errores
   del WSAA; macOS y la mayoría de las distros Linux lo traen activo por defecto.
 
@@ -58,6 +57,7 @@ exactamente `cert.crt` y `cert.key`; la key en modo `400`/`600`.
 
 ```bash
 uv sync
+uv run playwright install chromium
 uv run python -m facturador.launcher --env homo
 ```
 

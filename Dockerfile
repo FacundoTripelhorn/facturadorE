@@ -3,11 +3,10 @@
 # el chequeo de arranque se resuelven una sola vez acá adentro (Linux).
 FROM python:3.12-slim
 
-# Libs nativas de weasyprint (Pango/HarfBuzz) + fuentes para el PDF.
+# Chromium de Playwright (FAC-82) + fuentes + curl (HEALTHCHECK).
+# ``playwright install --with-deps`` trae las libs de sistema del browser;
+# no hace falta Pango/GTK (WeasyPrint ya no se usa).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpango-1.0-0 \
-        libpangoft2-1.0-0 \
-        libharfbuzz-subset0 \
         fonts-dejavu-core \
         curl \
     && rm -rf /var/lib/apt/lists/*
@@ -16,7 +15,8 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY facturador/ facturador/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . \
+    && playwright install --with-deps chromium
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

@@ -10,7 +10,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
-    "weasyprint>=69.0",
+    "playwright>=1.49,<2",
     "qrcode[pil]>=8.2",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
@@ -50,7 +50,7 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-module = ["weasyprint", "qrcode", "boto3", "boto3.*", "botocore", "botocore.*"]
+module = ["playwright", "playwright.*", "qrcode", "boto3", "boto3.*", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [build-system]
