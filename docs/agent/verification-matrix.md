@@ -64,9 +64,11 @@ finishing.
 per-module narrow mode. After a focused edit, still run both once.
 
 **Manual UI check** (optional, localhost only):
-`uv run python -m facturador.launcher --env homo` then open
-`http://127.0.0.1:8399`. Requires certs on the Homologación profile; ARCA
-calls need a real homologación certificate (see below).
+`uv run python -m facturador.launcher --env homo` opens a dedicated pywebview
+window to `http://127.0.0.1:8399` (FAC-83; `--no-browser` skips it). Requires
+certs on the Homologación profile; ARCA calls need a real homologación
+certificate (see below). On Windows, WebView2 must be installed or the
+launcher falls back to the system browser.
 
 ---
 
