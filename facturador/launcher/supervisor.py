@@ -1,12 +1,11 @@
 """Supervisor de proceso del launcher (FAC-28 / FAC-30 / FAC-32 / FAC-83, ADR 0001).
 
-Arranca un backend ligado a un único perfil, espera ``GET /health``, abre la
-UI (ventana pywebview o fallback al browser) solo si quedó listo, y apaga el
+Arranca un backend ligado a un único perfil, espera ``GET /health``, y apaga el
 hijo sin dejarlo huérfano. El lock de perfil (FAC-30) evita un segundo backend
-sobre el mismo SQLite; si ya hay una sesión sana, se reutiliza abriendo la UI.
-FAC-32: el supervisor expone el pedido de cambio de ambiente escrito por la UI
-(sin hot-switch). FAC-83: la UI por defecto es una ventana nativa; cerrarla
-señala el fin de la sesión supervisada.
+sobre el mismo SQLite; si ya hay una sesión sana, se reutiliza. La UI nativa
+(FAC-83) se abre vía ``open_ui()`` / el CLI — ``start()`` no bloquea en
+pywebview. FAC-32: el supervisor expone el pedido de cambio de ambiente
+escrito por la UI (sin hot-switch).
 """
 
 from __future__ import annotations
@@ -65,9 +64,13 @@ class ProcessSupervisor:
     app_data_root: Path | None = None
     home: Path | None = None
     readiness_timeout: float = DEFAULT_READINESS_TIMEOUT_S
-    open_browser: bool = True
-    # None → ventana nativa (FAC-83). Callable inyectable en tests / agents
-    # (p.ej. ``list.append``) se trata como opener no bloqueante.
+    # False por defecto: start()/start_backend()/``with`` deben devolver el
+    # supervisor listo sin bloquear. La ventana nativa (FAC-83) se abre vía
+    # open_ui() o el loop del CLI (``python -m facturador.launcher``).
+    open_browser: bool = False
+    # None → ventana nativa (FAC-83) solo en open_ui() / allow_blocking.
+    # Callable inyectable en tests / agents (p.ej. ``list.append``) es
+    # no bloqueante y sí puede usarse desde start().
     browser_opener: Callable[[str], Any] | None = None
     python: str | None = None
     base_env: Mapping[str, str] | None = None
@@ -151,7 +154,12 @@ class ProcessSupervisor:
         return result.reason if result is not None else None
 
     def start(self) -> LaunchResult:
-        """Arranca el backend (o reutiliza sesión sana) y abre la UI."""
+        """Arranca el backend (o reutiliza sesión sana) y vuelve listo.
+
+        No bloquea en la ventana nativa: eso vive en ``open_ui()`` / el CLI.
+        Con ``open_browser=True`` solo corre un opener inyectado no bloqueante
+        (tests / agents); sin opener, ``start`` no abre UI.
+        """
         if self.is_running:
             raise LauncherError(
                 "Ya hay un backend en marcha para este launcher. "
@@ -178,8 +186,10 @@ class ProcessSupervisor:
                 # Callers que solo guardan el supervisor (start_backend,
                 # context manager) deben ver base_url/plan del puerto real.
                 self._plan = reused_plan
-                # Abrir UI con el plan ya actualizado (título / interrupt).
-                self._open_browser_if_needed(reused.base_url)
+                # Solo opener no bloqueante acá (título / interrupt en open_ui).
+                self._open_browser_if_needed(
+                    reused.base_url, allow_blocking=False
+                )
                 return LaunchResult(plan=reused_plan, reused=True)
 
         try:
@@ -194,7 +204,7 @@ class ProcessSupervisor:
             self._stop_process(timeout=DEFAULT_STOP_TIMEOUT_S)
             self._release_lock()
             raise
-        self._open_browser_if_needed(plan.base_url)
+        self._open_browser_if_needed(plan.base_url, allow_blocking=False)
         return LaunchResult(plan=plan, reused=False)
 
     def stop(self, *, timeout: float = DEFAULT_STOP_TIMEOUT_S) -> None:
@@ -279,14 +289,16 @@ class ProcessSupervisor:
             lock.release()
 
     def open_ui(self, base_url: str | None = None) -> UiOpenResult | None:
-        """Abre (o reabre) la UI; ver ``_open_browser_if_needed``."""
+        """Abre (o reabre) la UI; puede bloquear en la ventana nativa (FAC-83)."""
         if not self.open_browser:
             return None
         url_base = base_url if base_url is not None else self.base_url
-        self._open_browser_if_needed(url_base)
+        self._open_browser_if_needed(url_base, allow_blocking=True)
         return self._last_ui_result
 
-    def _open_browser_if_needed(self, base_url: str) -> None:
+    def _open_browser_if_needed(
+        self, base_url: str, *, allow_blocking: bool
+    ) -> None:
         if not self.open_browser:
             return
         url = f"{base_url.rstrip('/')}/"
@@ -298,6 +310,11 @@ class ProcessSupervisor:
                 self._last_ui_result = UiOpenResult(
                     reason=UiEndReason.BROWSER_FALLBACK
                 )
+                return
+
+            if not allow_blocking:
+                # start()/start_backend: no abrir pywebview acá. El CLI y
+                # open_ui() manejan el ciclo de vida bloqueante.
                 return
 
             title = app_window_title(self.plan.profile.display_name)
@@ -488,7 +505,12 @@ def start_backend(
     environment: ArcaEnvironment | str,
     **kwargs: Any,
 ) -> ProcessSupervisor:
-    """Atajo: crea el supervisor, arranca y devuelve la instancia lista."""
+    """Atajo: crea el supervisor, arranca y devuelve la instancia lista.
+
+    No abre la ventana nativa por defecto (``open_browser=False``). Para la
+    UI bloqueante, llamá ``supervisor.open_ui()`` después del start, o usá
+    ``python -m facturador.launcher``.
+    """
     if isinstance(environment, str):
         from .command import resolve_launch_environment
 

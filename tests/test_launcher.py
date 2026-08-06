@@ -811,6 +811,58 @@ def test_supervisor_browser_opener_inyectado_no_bloquea(
         supervisor.stop()
 
 
+def test_supervisor_start_no_bloquea_con_open_browser_sin_opener(
+    tmp_path, test_cert_and_key, monkeypatch
+):
+    """start() no debe llamar open_app_ui aunque open_browser=True (P2 review).
+
+    La ventana nativa bloqueante pertenece a open_ui() / el CLI, no a
+    start_backend() ni al context manager.
+    """
+    from facturador.launcher import UiEndReason, UiOpenResult
+    from facturador.launcher import supervisor as supervisor_mod
+
+    calls: list[str] = []
+
+    def _fake_open(url: str, *, title: str, **_kwargs):
+        calls.append(f"{title}|{url}")
+        return UiOpenResult(reason=UiEndReason.CLOSED)
+
+    monkeypatch.setattr(supervisor_mod, "open_app_ui", _fake_open)
+
+    app_data = tmp_path / "appdata"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    port = _free_port()
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=port,
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=True,
+        browser_opener=None,
+    )
+    try:
+        result = supervisor.start()
+        assert not result.reused
+        assert supervisor.is_ready
+        assert calls == []
+        assert supervisor.last_ui_result is None
+
+        ui = supervisor.open_ui()
+        assert ui is not None
+        assert ui.reason is UiEndReason.CLOSED
+        assert calls == [f"FacturadorE — Homologación|http://127.0.0.1:{port}/"]
+    finally:
+        supervisor.stop()
+
+
+def test_supervisor_default_open_browser_es_false():
+    """API programática: open_browser desactivado por defecto (P2 review)."""
+    supervisor = ProcessSupervisor(environment=ArcaEnvironment.HOMO)
+    assert supervisor.open_browser is False
+
+
 def test_main_no_browser_no_abre_ui():
     from facturador.launcher.__main__ import main
 
@@ -821,7 +873,7 @@ def test_main_no_browser_no_abre_ui():
             self.environment = environment
             self.process = None
             self.is_running = False
-            self.open_browser = kwargs.get("open_browser", True)
+            self.open_browser = kwargs.get("open_browser", False)
             self.browser_opener = opened.append
             self.base_url = "http://127.0.0.1:8399"
 
