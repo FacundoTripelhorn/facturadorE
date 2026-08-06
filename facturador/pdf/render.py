@@ -1,4 +1,4 @@
-"""Render del comprobante: fila SQLite → HTML (Jinja2) → PDF (weasyprint).
+"""Render del comprobante: fila SQLite → HTML (Jinja2) → PDF (Playwright).
 
 El layout replica el comprobante real de Comprobantes en Línea analizado en
 design.md §0.1. Todos los valores impresos salen del snapshot inmutable de
@@ -11,6 +11,10 @@ hostiles (checklist §2.1.1 punto 4 aplica al HTML igual que al XML).
 FAC-53: el despacho elige el renderer por ``pdf_render_version``. Los PDF
 generados son cache local opcional bajo ``ProfilePaths.pdf_dir``; se pueden
 borrar sin perder el registro fiscal (la DB es la fuente de verdad).
+
+FAC-82: HTML→PDF vía Chromium headless de Playwright (sin Pango/GTK). Solo
+se renderiza HTML local de confianza con ``set_content`` — nunca se navega
+a URLs remotas.
 """
 
 from __future__ import annotations
@@ -31,6 +35,12 @@ from .registry import get_pdf_renderer, register_pdf_renderer
 _env = Environment(
     loader=FileSystemLoader(Path(__file__).parent),
     autoescape=True,
+)
+
+_CHROMIUM_MISSING_HINT = (
+    "No se pudo generar el PDF: falta Chromium de Playwright. "
+    "Instalá el browser con: uv run playwright install chromium "
+    "(en Linux: uv run playwright install --with-deps chromium)"
 )
 
 
@@ -141,26 +151,52 @@ def render_invoice_html(inv: sqlite3.Row, items: list[sqlite3.Row]) -> str:
     return get_pdf_renderer(version)(inv, items)
 
 
-def render_invoice_pdf(inv: sqlite3.Row, items: list[sqlite3.Row]) -> bytes:
-    # Import perezoso: weasyprint necesita Pango/GTK del sistema, que solo
-    # está garantizado dentro de la imagen Docker (design.md §2.5). Así el
-    # resto de la app (y el desarrollo en Windows) no depende de esas libs.
+def _html_to_pdf(html: str) -> bytes:
+    """HTML local → PDF A4 con Chromium headless. Cierra browser siempre."""
     try:
-        from weasyprint import HTML
-    except (ImportError, OSError) as exc:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError(f"{_CHROMIUM_MISSING_HINT}. Detalle: {exc}") from exc
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                context = browser.new_context()
+                try:
+                    page = context.new_page()
+                    # Solo HTML confiable generado acá; sin navigate remoto.
+                    page.set_content(html, wait_until="load")
+                    pdf = page.pdf(
+                        format="A4",
+                        print_background=True,
+                        prefer_css_page_size=True,
+                    )
+                finally:
+                    context.close()
+            finally:
+                browser.close()
+    except PlaywrightError as exc:
+        detail = str(exc)
+        if "Executable doesn't exist" in detail:
+            raise RuntimeError(
+                f"{_CHROMIUM_MISSING_HINT}. Detalle: {exc}"
+            ) from exc
         raise RuntimeError(
-            "No se pudo generar el PDF: faltan las librerías nativas de "
-            "WeasyPrint (Pango/GTK). En Windows el runtime recomendado es "
-            "Docker (scripts/launch.cmd con ARCA_ENV en ~/facturador/.env). "
-            "Sin Docker, instalar el runtime GTK3 de WeasyPrint para Windows. "
-            f"Detalle: {exc}"
+            f"No se pudo generar el PDF con Playwright. Detalle: {exc}"
         ) from exc
 
-    html = render_invoice_html(inv, items)
-    pdf = HTML(string=html).write_pdf()
-    if pdf is None:  # write_pdf sin target siempre devuelve bytes
-        raise RuntimeError("weasyprint no devolvió bytes del PDF")
+    if not pdf:
+        raise RuntimeError("Playwright no devolvió bytes del PDF")
     return pdf
+
+
+def render_invoice_pdf(inv: sqlite3.Row, items: list[sqlite3.Row]) -> bytes:
+    # Import perezoso de Playwright: el resto de la app no necesita Chromium
+    # hasta que alguien pida un PDF (FAC-82).
+    html = render_invoice_html(inv, items)
+    return _html_to_pdf(html)
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
