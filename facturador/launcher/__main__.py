@@ -3,9 +3,11 @@
 Sin ``--env`` muestra el chooser (FAC-29): Homologación o Producción en
 lenguaje de negocio. Con ``--env`` arranca ese ambiente de una vez (tests /
 automatización). El supervisor (FAC-28) arranca el backend del perfil oculto,
-espera readiness, abre el browser y permanece en primer plano hasta Ctrl+C.
-Si el perfil ya tiene una sesión sana (FAC-30), reabre el browser y sale sin
-duplicar el backend. Un error de arranque desde el chooser vuelve a la
+espera readiness, abre una ventana nativa (FAC-83 / pywebview) y permanece en
+primer plano hasta que se cierra la ventana o Ctrl+C. Si el webview no puede
+arrancar, cae al navegador del sistema. ``--no-browser`` salta la UI (agents /
+headless). Si el perfil ya tiene una sesión sana (FAC-30), reabre la UI y sale
+sin duplicar el backend. Un error de arranque desde el chooser vuelve a la
 pantalla de elección.
 
 FAC-32: si la UI pide "Cambiar ambiente", el launcher muestra el chooser
@@ -32,6 +34,7 @@ from .chooser import ChooserUnavailable, choose_environment
 from .command import resolve_launch_environment
 from .production_ack import ensure_production_acknowledged
 from .supervisor import LauncherError, ProcessSupervisor
+from .window import UiEndReason
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
@@ -71,7 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m facturador.launcher",
         description=(
             "Launcher de FacturadorE: elegí Homologación o Producción, "
-            "arranca el backend, espera /health y abre el navegador."
+            "arranca el backend, espera /health y abre la ventana de la app."
         ),
     )
     parser.add_argument(
@@ -93,7 +96,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-browser",
         action="store_true",
-        help="No abrir el navegador al quedar listo.",
+        help=(
+            "No abrir la ventana nativa ni el navegador al quedar listo "
+            "(útil para automatización / agents)."
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -260,10 +266,13 @@ def _run_session(
         )
         return ReturnToChooser()
 
+    want_ui = not args.no_browser
     supervisor = factory(
         environment=environment,
         port=args.port,
-        open_browser=not args.no_browser,
+        # start() no abre UI: el mensaje "listo" debe imprimirse antes de que
+        # webview bloquee el hilo (FAC-83).
+        open_browser=False,
         readiness_timeout=args.timeout,
     )
     try:
@@ -280,21 +289,57 @@ def _run_session(
         print("\nDeteniendo…", flush=True)
         return 0
 
+    # Tras readiness: habilitar UI según CLI (fakes pueden ignorar el kwargs).
+    try:
+        supervisor.open_browser = want_ui
+    except Exception:
+        pass
+
     plan = result.plan
     if result.reused:
         print(
             f"FacturadorE ({plan.profile.display_name}) ya estaba en marcha "
-            f"en {plan.base_url}/; se reabrió la sesión existente.",
+            f"en {plan.base_url}/; se reabre la sesión existente.",
             flush=True,
         )
+        if want_ui:
+            try:
+                _reopen_ui(supervisor)
+            except KeyboardInterrupt:
+                # No somos dueños del backend: no stop(); solo salir limpio.
+                print("\nDeteniendo…", flush=True)
+        # Reuse: este launcher no es dueño del backend; al cerrar la UI sale.
         return 0
 
     print(
         f"FacturadorE ({plan.profile.display_name}) listo en {plan.base_url}/",
         flush=True,
     )
-    print("Ctrl+C para detener.", flush=True)
+
+    # Dueños del backend: cualquier Ctrl+C mientras la UI bloquea (webview) o
+    # mientras supervisamos debe apagar el hijo (evita huérfanos FAC-30/83).
     try:
+        ui_reason: UiEndReason | None = None
+        if want_ui:
+            ui_reason = _reopen_ui(supervisor)
+
+        if (
+            want_ui
+            and ui_reason is not None
+            and ui_reason is not UiEndReason.BROWSER_FALLBACK
+        ):
+            return _after_native_ui_session(
+                supervisor,
+                environment=environment,
+                choose=choose,
+                confirm_production=confirm_production,
+                report_failure=report_failure,
+                return_to_chooser_on_startup_error=return_to_chooser_on_startup_error,
+                initial_reason=ui_reason,
+            )
+
+        # --no-browser, opener inyectado, o fallback al navegador del sistema.
+        print("Ctrl+C para detener.", flush=True)
         while supervisor.is_running:
             assert supervisor.process is not None
             switch = _handle_change_environment_request(
@@ -326,18 +371,142 @@ def _run_session(
         return 0
 
 
+def _after_native_ui_session(
+    supervisor: ProcessSupervisor,
+    *,
+    environment: ArcaEnvironment,
+    choose: _ChooseFn,
+    confirm_production: _ConfirmProdFn | None,
+    report_failure: Callable[[str], None],
+    return_to_chooser_on_startup_error: bool,
+    initial_reason: UiEndReason,
+) -> int | None | SwitchTo | ReturnToChooser:
+    """Ciclo post-webview: cerrar = apagar backend; interrupt = FAC-32 / muerte."""
+    reason = initial_reason
+    try:
+        while True:
+            if not supervisor.is_running:
+                code = (
+                    supervisor.process.returncode
+                    if supervisor.process is not None
+                    else 1
+                )
+                report_failure(
+                    f"El backend de {supervisor.plan.profile.display_name} "
+                    f"se detuvo solo (código {code})."
+                )
+                return None if return_to_chooser_on_startup_error else 1
+
+            if reason is UiEndReason.INTERRUPTED:
+                switch = _handle_change_environment_request(
+                    supervisor,
+                    current=environment,
+                    choose=choose,
+                    confirm_production=confirm_production,
+                    reopen_on_same=False,
+                )
+                if switch is not None:
+                    return switch
+                # Canceló / mismo ambiente: reabrir ventana (o browser si falla).
+                print(
+                    f"FacturadorE ({supervisor.plan.profile.display_name}) "
+                    f"sigue en {supervisor.base_url}/",
+                    flush=True,
+                )
+                reopened = _reopen_ui(supervisor)
+                if reopened is None:
+                    # open_browser desactivado a mitad de sesión: supervisar.
+                    break
+                if reopened is UiEndReason.BROWSER_FALLBACK:
+                    print("Ctrl+C para detener.", flush=True)
+                    break
+                reason = reopened
+                continue
+
+            # CLOSED: el usuario cerró la ventana → apagar backend (ownership).
+            print("Ventana cerrada; deteniendo…", flush=True)
+            supervisor.stop()
+            return 0
+    except KeyboardInterrupt:
+        print("\nDeteniendo…", flush=True)
+        supervisor.stop()
+        return 0
+
+    # Fallback browser tras reopen fallido / no-webview: loop clásico.
+    try:
+        while supervisor.is_running:
+            assert supervisor.process is not None
+            switch = _handle_change_environment_request(
+                supervisor,
+                current=environment,
+                choose=choose,
+                confirm_production=confirm_production,
+            )
+            if switch is not None:
+                return switch
+            try:
+                supervisor.process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                continue
+        code = (
+            supervisor.process.returncode
+            if supervisor.process is not None
+            else 1
+        )
+        report_failure(
+            f"El backend de {supervisor.plan.profile.display_name} "
+            f"se detuvo solo (código {code})."
+        )
+        return None if return_to_chooser_on_startup_error else 1
+    except KeyboardInterrupt:
+        print("\nDeteniendo…", flush=True)
+        supervisor.stop()
+        return 0
+
+
+def _reopen_ui(supervisor: ProcessSupervisor) -> UiEndReason | None:
+    """Abre o reabre la UI (ventana nativa o opener inyectado).
+
+    Returns:
+        Razón de fin de la sesión de UI, o ``None`` si no hay que abrir UI.
+    """
+    if not getattr(supervisor, "open_browser", False):
+        return None
+    open_ui = getattr(supervisor, "open_ui", None)
+    if callable(open_ui):
+        result = open_ui()
+        if result is None:
+            return None
+        return result.reason
+    # Fake supervisors de tests: opener inyectado no bloqueante.
+    opener = getattr(supervisor, "browser_opener", None)
+    base_url = getattr(supervisor, "base_url", None)
+    if callable(opener) and base_url:
+        try:
+            opener(f"{base_url}/")
+        except Exception:
+            pass
+        return UiEndReason.BROWSER_FALLBACK
+    # Sin open_ui ni opener: no hay GUI real (fakes de smoke de main).
+    return UiEndReason.BROWSER_FALLBACK
+
+
 def _handle_change_environment_request(
     supervisor: ProcessSupervisor,
     *,
     current: ArcaEnvironment,
     choose: _ChooseFn,
     confirm_production: _ConfirmProdFn | None = None,
+    reopen_on_same: bool = True,
 ) -> SwitchTo | None:
     """FAC-32: chooser con el backend aún vivo; stop solo si confirma otro.
 
     ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
     Si el destino es Producción sin ack, la confirmación corre *antes* de
     ``stop()``: cancelar mantiene la sesión actual (FAC-40).
+
+    ``reopen_on_same``: si False, el caller reabre la UI (sesión webview nativa
+    donde ``open_ui`` bloquearía de nuevo dentro de este handler).
     """
     request = supervisor.poll_change_environment_request()
     if request is None:
@@ -371,11 +540,20 @@ def _handle_change_environment_request(
             f"Ya estás en {supervisor.plan.profile.display_name}.",
             flush=True,
         )
-        if supervisor.open_browser:
-            try:
-                supervisor.browser_opener(f"{supervisor.base_url}/")
-            except Exception:
-                pass
+        if reopen_on_same and supervisor.open_browser:
+            open_ui = getattr(supervisor, "open_ui", None)
+            if callable(open_ui):
+                try:
+                    open_ui()
+                except Exception:
+                    pass
+            else:
+                opener = getattr(supervisor, "browser_opener", None)
+                if callable(opener):
+                    try:
+                        opener(f"{supervisor.base_url}/")
+                    except Exception:
+                        pass
         return None
 
     # FAC-40: ack de Producción antes de apagar el backend actual.

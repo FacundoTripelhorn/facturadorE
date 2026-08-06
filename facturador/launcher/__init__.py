@@ -1,7 +1,8 @@
 """Launcher de FacturadorE: chooser, supervisión y lock de perfil.
 
 FAC-28 supervisor · FAC-29 chooser · FAC-30 lock anti-duplicado ·
-FAC-32 cambio de ambiente por reinicio · FAC-40 confirmación de Producción.
+FAC-32 cambio de ambiente por reinicio · FAC-40 confirmación de Producción ·
+FAC-83 ventana nativa (pywebview).
 """
 
 from .chooser import (
@@ -46,6 +47,7 @@ from .switch import (
     read_change_environment_request,
     write_change_environment_request,
 )
+from .window import UiEndReason, UiOpenResult, app_window_title, open_app_ui
 
 __all__ = [
     "CHANGE_ENVIRONMENT_REQUEST_FILENAME",
@@ -62,6 +64,9 @@ __all__ = [
     "ProfileLock",
     "ProfileLockError",
     "ProfileLockHeld",
+    "UiEndReason",
+    "UiOpenResult",
+    "app_window_title",
     "build_backend_command",
     "build_backend_env",
     "change_environment_request_path",
@@ -73,6 +78,7 @@ __all__ = [
     "is_launcher_supervised",
     "is_production_acknowledged",
     "is_process_alive",
+    "open_app_ui",
     "plan_backend_launch",
     "prompt_environment_gui",
     "prompt_environment_tty",

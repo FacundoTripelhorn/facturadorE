@@ -1,8 +1,8 @@
 """Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28).
 
 También cubre el chooser de ambiente (FAC-29), el lock anti-duplicado
-(FAC-30), el cambio de ambiente por reinicio (FAC-32) y la confirmación
-de primer uso de Producción (FAC-40).
+(FAC-30), el cambio de ambiente por reinicio (FAC-32), la confirmación
+de primer uso de Producción (FAC-40) y la ventana nativa pywebview (FAC-83).
 """
 
 from __future__ import annotations
@@ -615,6 +615,464 @@ def test_smoke_browser_no_abre_si_open_browser_false(tmp_path, test_cert_and_key
         assert opened == []
     finally:
         supervisor.stop()
+
+
+# --- FAC-83: ventana nativa (pywebview) / fallback / --no-browser ------------
+
+
+def test_app_window_title_incluye_producto_y_ambiente():
+    from facturador.launcher import app_window_title
+
+    assert app_window_title("Homologación") == "FacturadorE — Homologación"
+    assert app_window_title("Producción") == "FacturadorE — Producción"
+    assert app_window_title("FacturadorE") == "FacturadorE"
+
+
+def test_open_app_ui_webview_closed_con_modulo_inyectado():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    created: list[tuple[str, str]] = []
+    started: list[str] = []
+
+    class _FakeWin:
+        def destroy(self) -> None:
+            return None
+
+    class _FakeWebview:
+        def create_window(self, title, url=None, **_kwargs):
+            created.append((title, url or ""))
+            return _FakeWin()
+
+        def start(self, func=None, args=None, **_kwargs):
+            started.append("start")
+            # Sin interrupt: start retorna como si el usuario cerró la ventana.
+
+    browser_hits: list[str] = []
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_FakeWebview(),
+        browser_opener=browser_hits.append,
+    )
+    assert result.reason is UiEndReason.CLOSED
+    assert created == [("FacturadorE — Homologación", "http://127.0.0.1:8399/")]
+    assert started == ["start"]
+    assert browser_hits == []
+
+
+def test_open_app_ui_interrupt_destruye_ventana():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    class _FakeWin:
+        def __init__(self) -> None:
+            self.destroyed = False
+
+        def destroy(self) -> None:
+            self.destroyed = True
+
+    win = _FakeWin()
+
+    class _FakeWebview:
+        def create_window(self, title, url=None, **_kwargs):
+            return win
+
+        def start(self, func=None, args=None, **_kwargs):
+            assert func is not None
+            func(args)
+
+    checks = {"n": 0}
+
+    def _interrupt() -> bool:
+        checks["n"] += 1
+        return checks["n"] >= 1
+
+    result = open_app_ui(
+        "http://127.0.0.1:8410/",
+        title="FacturadorE — Producción",
+        interrupt_check=_interrupt,
+        webview_module=_FakeWebview(),
+        browser_opener=lambda _u: (_ for _ in ()).throw(
+            AssertionError("no debe caer al browser")
+        ),
+    )
+    assert result.reason is UiEndReason.INTERRUPTED
+    assert win.destroyed
+
+
+def test_open_app_ui_fallback_si_webview_falla():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    class _BoomWebview:
+        def create_window(self, title, url=None, **_kwargs):
+            raise RuntimeError("WebView2 missing")
+
+        def start(self, func=None, args=None, **_kwargs):
+            raise AssertionError("start no debería correr")
+
+    opened: list[str] = []
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_BoomWebview(),
+        browser_opener=opened.append,
+    )
+    assert result.reason is UiEndReason.BROWSER_FALLBACK
+    assert opened == ["http://127.0.0.1:8399/"]
+
+
+def test_open_app_ui_fallback_si_import_falla(monkeypatch):
+    from facturador.launcher import UiEndReason
+    from facturador.launcher import window as window_mod
+
+    opened: list[str] = []
+
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == "webview":
+            raise ImportError("no pywebview")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+    result = window_mod.open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        browser_opener=opened.append,
+    )
+    assert result.reason is UiEndReason.BROWSER_FALLBACK
+    assert opened == ["http://127.0.0.1:8399/"]
+
+
+def test_supervisor_open_ui_usa_open_app_ui_inyectable(
+    tmp_path, test_cert_and_key, monkeypatch
+):
+    """Sin browser_opener, supervisor.open_ui delega en open_app_ui."""
+    from facturador.launcher import UiEndReason, UiOpenResult
+    from facturador.launcher import supervisor as supervisor_mod
+
+    calls: list[str] = []
+
+    def _fake_open(url: str, *, title: str, **_kwargs):
+        calls.append(f"{title}|{url}")
+        return UiOpenResult(reason=UiEndReason.CLOSED)
+
+    monkeypatch.setattr(supervisor_mod, "open_app_ui", _fake_open)
+
+    app_data = tmp_path / "appdata"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    port = _free_port()
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=port,
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=False,
+        browser_opener=None,
+    )
+    try:
+        supervisor.start()
+        supervisor.open_browser = True
+        result = supervisor.open_ui()
+        assert result is not None
+        assert result.reason is UiEndReason.CLOSED
+        assert calls == [f"FacturadorE — Homologación|http://127.0.0.1:{port}/"]
+        assert supervisor.last_ui_reason is UiEndReason.CLOSED
+    finally:
+        supervisor.stop()
+
+
+def test_supervisor_browser_opener_inyectado_no_bloquea(
+    tmp_path, test_cert_and_key
+):
+    """Opener inyectado se registra como fallback no bloqueante."""
+    from facturador.launcher import UiEndReason
+
+    app_data = tmp_path / "appdata"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    opened: list[str] = []
+    port = _free_port()
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=port,
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=True,
+        browser_opener=opened.append,
+    )
+    try:
+        supervisor.start()
+        assert opened == [f"http://127.0.0.1:{port}/"]
+        assert supervisor.last_ui_reason is UiEndReason.BROWSER_FALLBACK
+    finally:
+        supervisor.stop()
+
+
+def test_supervisor_start_no_bloquea_con_open_browser_sin_opener(
+    tmp_path, test_cert_and_key, monkeypatch
+):
+    """start() no debe llamar open_app_ui aunque open_browser=True (P2 review).
+
+    La ventana nativa bloqueante pertenece a open_ui() / el CLI, no a
+    start_backend() ni al context manager.
+    """
+    from facturador.launcher import UiEndReason, UiOpenResult
+    from facturador.launcher import supervisor as supervisor_mod
+
+    calls: list[str] = []
+
+    def _fake_open(url: str, *, title: str, **_kwargs):
+        calls.append(f"{title}|{url}")
+        return UiOpenResult(reason=UiEndReason.CLOSED)
+
+    monkeypatch.setattr(supervisor_mod, "open_app_ui", _fake_open)
+
+    app_data = tmp_path / "appdata"
+    _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
+    port = _free_port()
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.HOMO,
+        port=port,
+        app_data_root=app_data,
+        home=tmp_path / "home",
+        readiness_timeout=30.0,
+        open_browser=True,
+        browser_opener=None,
+    )
+    try:
+        result = supervisor.start()
+        assert not result.reused
+        assert supervisor.is_ready
+        assert calls == []
+        assert supervisor.last_ui_result is None
+
+        ui = supervisor.open_ui()
+        assert ui is not None
+        assert ui.reason is UiEndReason.CLOSED
+        assert calls == [f"FacturadorE — Homologación|http://127.0.0.1:{port}/"]
+    finally:
+        supervisor.stop()
+
+
+def test_supervisor_default_open_browser_es_false():
+    """API programática: open_browser desactivado por defecto (P2 review)."""
+    supervisor = ProcessSupervisor(environment=ArcaEnvironment.HOMO)
+    assert supervisor.open_browser is False
+
+
+def test_main_no_browser_no_abre_ui():
+    from facturador.launcher.__main__ import main
+
+    opened: list[str] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+            self.open_browser = kwargs.get("open_browser", False)
+            self.browser_opener = opened.append
+            self.base_url = "http://127.0.0.1:8399"
+
+        def start(self):
+            from facturador.launcher.command import plan_backend_launch
+            from facturador.launcher.supervisor import LaunchResult
+
+            # Simula sesión dueña (no reuse) para ejercitar el path post-start.
+            self.is_running = False
+            return LaunchResult(
+                plan=plan_backend_launch(self.environment, port=8399),
+                reused=True,
+            )
+
+        def stop(self):
+            return None
+
+        def open_ui(self):
+            raise AssertionError("--no-browser no debe abrir UI")
+
+    code = main(
+        ["--env", "homo", "--no-browser"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+    )
+    assert code == 0
+    assert opened == []
+
+
+def test_main_cierre_ventana_nativa_apaga_backend():
+    """FAC-83: cerrar la ventana nativa detiene el backend supervisado."""
+    import subprocess
+
+    from facturador.launcher import UiEndReason, UiOpenResult
+    from facturador.launcher.__main__ import main
+
+    events: list[str] = []
+
+    class _Proc:
+        returncode = 0
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd="fake", timeout=timeout or 1)
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = _Proc()
+            self.is_running = True
+            self.open_browser = False
+            self.browser_opener = None
+            self._plan = None
+            self.last_ui_reason = None
+
+        @property
+        def plan(self):
+            from facturador.launcher.command import plan_backend_launch
+
+            if self._plan is None:
+                self._plan = plan_backend_launch(self.environment, port=8399)
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self.plan.base_url
+
+        def start(self):
+            from facturador.launcher.supervisor import LaunchResult
+
+            events.append("start")
+            return LaunchResult(plan=self.plan, reused=False)
+
+        def open_ui(self, base_url=None):
+            del base_url
+            events.append("open_ui")
+            self.last_ui_reason = UiEndReason.CLOSED
+            return UiOpenResult(reason=UiEndReason.CLOSED)
+
+        def stop(self):
+            events.append("stop")
+            self.is_running = False
+
+        def poll_change_environment_request(self):
+            return None
+
+        def clear_change_environment_request(self):
+            return None
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == ["start", "open_ui", "stop"]
+
+
+def test_main_ctrl_c_durante_ventana_nativa_apaga_backend():
+    """Ctrl+C mientras webview bloquea debe stop() (no dejar backend huérfano)."""
+    from facturador.launcher.__main__ import main
+
+    events: list[str] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = object()
+            self.is_running = True
+            self.open_browser = False
+            self.browser_opener = None
+            self._plan = None
+
+        @property
+        def plan(self):
+            from facturador.launcher.command import plan_backend_launch
+
+            if self._plan is None:
+                self._plan = plan_backend_launch(self.environment, port=8399)
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self.plan.base_url
+
+        def start(self):
+            from facturador.launcher.supervisor import LaunchResult
+
+            events.append("start")
+            return LaunchResult(plan=self.plan, reused=False)
+
+        def open_ui(self, base_url=None):
+            del base_url
+            events.append("open_ui")
+            raise KeyboardInterrupt
+
+        def stop(self):
+            events.append("stop")
+            self.is_running = False
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == ["start", "open_ui", "stop"]
+
+
+def test_main_ctrl_c_en_reuse_no_apaga_backend_ajeno():
+    """En sesión reutilizada, Ctrl+C no debe stop() del backend del otro launcher."""
+    from facturador.launcher.__main__ import main
+
+    events: list[str] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+            self.open_browser = False
+            self._plan = None
+
+        @property
+        def plan(self):
+            from facturador.launcher.command import plan_backend_launch
+
+            if self._plan is None:
+                self._plan = plan_backend_launch(self.environment, port=8399)
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self.plan.base_url
+
+        def start(self):
+            from facturador.launcher.supervisor import LaunchResult
+
+            events.append("start")
+            return LaunchResult(plan=self.plan, reused=True)
+
+        def open_ui(self, base_url=None):
+            del base_url
+            events.append("open_ui")
+            raise KeyboardInterrupt
+
+        def stop(self):
+            events.append("stop")
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == ["start", "open_ui"]
+    assert "stop" not in events
 
 
 # --- FAC-30: lock de perfil / anti-duplicado ---------------------------------
