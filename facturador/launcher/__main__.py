@@ -303,7 +303,11 @@ def _run_session(
             flush=True,
         )
         if want_ui:
-            _reopen_ui(supervisor)
+            try:
+                _reopen_ui(supervisor)
+            except KeyboardInterrupt:
+                # No somos dueños del backend: no stop(); solo salir limpio.
+                print("\nDeteniendo…", flush=True)
         # Reuse: este launcher no es dueño del backend; al cerrar la UI sale.
         return 0
 
@@ -312,28 +316,30 @@ def _run_session(
         flush=True,
     )
 
-    ui_reason: UiEndReason | None = None
-    if want_ui:
-        ui_reason = _reopen_ui(supervisor)
-
-    if (
-        want_ui
-        and ui_reason is not None
-        and ui_reason is not UiEndReason.BROWSER_FALLBACK
-    ):
-        return _after_native_ui_session(
-            supervisor,
-            environment=environment,
-            choose=choose,
-            confirm_production=confirm_production,
-            report_failure=report_failure,
-            return_to_chooser_on_startup_error=return_to_chooser_on_startup_error,
-            initial_reason=ui_reason,
-        )
-
-    # --no-browser, opener inyectado, o fallback al navegador del sistema.
-    print("Ctrl+C para detener.", flush=True)
+    # Dueños del backend: cualquier Ctrl+C mientras la UI bloquea (webview) o
+    # mientras supervisamos debe apagar el hijo (evita huérfanos FAC-30/83).
     try:
+        ui_reason: UiEndReason | None = None
+        if want_ui:
+            ui_reason = _reopen_ui(supervisor)
+
+        if (
+            want_ui
+            and ui_reason is not None
+            and ui_reason is not UiEndReason.BROWSER_FALLBACK
+        ):
+            return _after_native_ui_session(
+                supervisor,
+                environment=environment,
+                choose=choose,
+                confirm_production=confirm_production,
+                report_failure=report_failure,
+                return_to_chooser_on_startup_error=return_to_chooser_on_startup_error,
+                initial_reason=ui_reason,
+            )
+
+        # --no-browser, opener inyectado, o fallback al navegador del sistema.
+        print("Ctrl+C para detener.", flush=True)
         while supervisor.is_running:
             assert supervisor.process is not None
             switch = _handle_change_environment_request(

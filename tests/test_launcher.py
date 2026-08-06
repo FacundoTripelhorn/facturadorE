@@ -920,6 +920,109 @@ def test_main_cierre_ventana_nativa_apaga_backend():
     assert events == ["start", "open_ui", "stop"]
 
 
+def test_main_ctrl_c_durante_ventana_nativa_apaga_backend():
+    """Ctrl+C mientras webview bloquea debe stop() (no dejar backend huérfano)."""
+    from facturador.launcher.__main__ import main
+
+    events: list[str] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = object()
+            self.is_running = True
+            self.open_browser = False
+            self.browser_opener = None
+            self._plan = None
+
+        @property
+        def plan(self):
+            from facturador.launcher.command import plan_backend_launch
+
+            if self._plan is None:
+                self._plan = plan_backend_launch(self.environment, port=8399)
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self.plan.base_url
+
+        def start(self):
+            from facturador.launcher.supervisor import LaunchResult
+
+            events.append("start")
+            return LaunchResult(plan=self.plan, reused=False)
+
+        def open_ui(self, base_url=None):
+            del base_url
+            events.append("open_ui")
+            raise KeyboardInterrupt
+
+        def stop(self):
+            events.append("stop")
+            self.is_running = False
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == ["start", "open_ui", "stop"]
+
+
+def test_main_ctrl_c_en_reuse_no_apaga_backend_ajeno():
+    """En sesión reutilizada, Ctrl+C no debe stop() del backend del otro launcher."""
+    from facturador.launcher.__main__ import main
+
+    events: list[str] = []
+
+    class _FakeSupervisor:
+        def __init__(self, *, environment, **_kwargs):
+            self.environment = environment
+            self.process = None
+            self.is_running = False
+            self.open_browser = False
+            self._plan = None
+
+        @property
+        def plan(self):
+            from facturador.launcher.command import plan_backend_launch
+
+            if self._plan is None:
+                self._plan = plan_backend_launch(self.environment, port=8399)
+            return self._plan
+
+        @property
+        def base_url(self):
+            return self.plan.base_url
+
+        def start(self):
+            from facturador.launcher.supervisor import LaunchResult
+
+            events.append("start")
+            return LaunchResult(plan=self.plan, reused=True)
+
+        def open_ui(self, base_url=None):
+            del base_url
+            events.append("open_ui")
+            raise KeyboardInterrupt
+
+        def stop(self):
+            events.append("stop")
+
+    code = main(
+        ["--env", "homo"],
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no chooser")),
+        supervisor_factory=_FakeSupervisor,
+        report_failure=lambda _msg: None,
+    )
+    assert code == 0
+    assert events == ["start", "open_ui"]
+    assert "stop" not in events
+
+
 # --- FAC-30: lock de perfil / anti-duplicado ---------------------------------
 
 
