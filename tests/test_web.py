@@ -205,6 +205,69 @@ def test_constatacion_muestra_desajuste(api, arca):
     assert "107" in r.text
 
 
+def test_constatacion_html_outage_es_503_operador(
+    test_config, test_profile, arca
+):
+    """Página HTML 502 de WSCDC → 503 en UI, no 500 por ParseError."""
+    from facturador import db
+    from facturador.api import create_app
+    from facturador.arca.wsaa import SERVICE_WSCDC
+    from facturador.arca.wscdc import WscdcClient
+    from facturador.arca.wsfex import WsfexClient
+    from tests.arca_fake import FakeWsaa
+    from tests.conftest import seed_params, seed_settings
+
+    def html_502(request: httpx.Request) -> httpx.Response:
+        soap = request.headers.get("SOAPAction", "")
+        if "ComprobanteConstatar" in soap:
+            return httpx.Response(
+                502,
+                text="<html>Bad Gateway</html>",
+                headers={"Content-Type": "text/html"},
+            )
+        return arca.handler(request)
+
+    conn = db.connect(test_profile.paths.db)
+    seed_params(conn)
+    seed_settings(conn)
+    transport = httpx.MockTransport(html_502)
+    wsfex = WsfexClient(
+        test_config,
+        wsaa=FakeWsaa(),
+        http=httpx.Client(transport=transport),
+    )
+    wscdc = WscdcClient(
+        test_config,
+        wsaa=FakeWsaa(service=SERVICE_WSCDC),
+        http=httpx.Client(transport=transport),
+    )
+    app = create_app(
+        test_profile,
+        config=test_config,
+        conn=conn,
+        wsfex=wsfex,
+        wscdc=wscdc,
+    )
+    client = TestClient(app, base_url=loopback_base_url())
+
+    r = client.post(
+        "/ui/clientes",
+        data=with_csrf(client, {**CLIENTE_FORM}),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    invoice_id = _generar_borrador(client)
+    assert _autorizar(client, invoice_id).status_code == 303
+
+    outage = client.post(
+        "/ui/constatacion",
+        data=with_csrf(client, {"invoice_id": invoice_id}),
+    )
+    assert outage.status_code == 503
+    assert "No se pudo constatar" in outage.text
+    assert "WSCDC" in outage.text
+
+
 def test_detalle_de_borrador_redirige_a_revision(api, arca):
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)

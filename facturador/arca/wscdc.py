@@ -165,8 +165,16 @@ class WscdcClient:
                 "SOAPAction": f'"{WSCDC_NS}{method}"',
             },
         )
-        root = ET.fromstring(response.text)
+        # Status first: 502/503 HTML outage pages are not XML. ParseError
+        # must become WscdcError so the UI can show 503, not an unhandled 500.
         if response.status_code >= 400:
+            try:
+                root = ET.fromstring(response.text)
+            except ET.ParseError as exc:
+                raise WscdcError(
+                    str(response.status_code),
+                    f"HTTP {response.status_code}",
+                ) from exc
             fault = root.find(".//{*}Fault")
             if fault is not None:
                 raise WscdcError(
@@ -175,6 +183,11 @@ class WscdcClient:
                     or "",
                 )
             raise WscdcError(str(response.status_code), f"HTTP {response.status_code}")
+
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            raise WscdcError("?", "Respuesta WSCDC no es XML válido") from exc
 
         result = root.find(f".//{{{WSCDC_NS}}}{method}Result")
         if result is None:

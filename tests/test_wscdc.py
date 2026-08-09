@@ -103,3 +103,36 @@ def test_request_from_invoice_row_rejects_draft(test_config, arca):
     )
     with pytest.raises(WscdcError, match="autorizada"):
         WscdcClient.request_from_invoice_row(inv, cuit_emisor=int(TEST_CUIT))
+
+
+def test_non_xml_http_error_becomes_wscdc_error(test_config):
+    """502/503 HTML outage pages must not leak ET.ParseError as a 500."""
+
+    def html_502(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            502,
+            text="<html><body>Bad Gateway</body></html>",
+            headers={"Content-Type": "text/html"},
+        )
+
+    client = WscdcClient(
+        test_config,
+        wsaa=FakeWsaa(service=SERVICE_WSCDC),
+        http=httpx.Client(transport=httpx.MockTransport(html_502)),
+    )
+    with pytest.raises(WscdcError, match="HTTP 502") as exc_info:
+        client.constatar(_req())
+    assert exc_info.value.code == "502"
+
+
+def test_non_xml_200_becomes_wscdc_error(test_config):
+    def plain_ok(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="not xml at all")
+
+    client = WscdcClient(
+        test_config,
+        wsaa=FakeWsaa(service=SERVICE_WSCDC),
+        http=httpx.Client(transport=httpx.MockTransport(plain_ok)),
+    )
+    with pytest.raises(WscdcError, match="no es XML"):
+        client.constatar(_req())
