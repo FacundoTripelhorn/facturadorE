@@ -24,12 +24,18 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from .. import repo
-from ..api.csrf import csrf_token_for_request, enforce_csrf
+from ..api.csrf import (
+    CSRF_JSON_DETAIL,
+    CSRF_UI_MESSAGE,
+    CsrfRejected,
+    csrf_token_for_request,
+    enforce_csrf,
+)
 from ..api.deps import ServiceDep
 from ..arca.wsfex import WsfexError
 from ..certs import (
@@ -92,6 +98,30 @@ templates = Jinja2Templates(
     directory=TEMPLATES_DIR,
     context_processors=[_ambiente_en_contexto, _csrf_en_contexto],
 )
+
+
+async def csrf_rejected_handler(
+    request: Request, exc: Exception
+) -> HTMLResponse | JSONResponse:
+    """FAC-62: HTML con guía de recarga en ``/ui/``; JSON genérico fuera.
+
+    El mensaje es fijo: nunca ecoa cookie ni el valor enviado en el form.
+    La firma acepta ``Exception`` por el contrato de Starlette
+    ``ExceptionHandler``; solo se registra para :class:`CsrfRejected`.
+    """
+    if not isinstance(exc, CsrfRejected):
+        raise exc
+    if request.url.path.startswith("/ui/"):
+        return templates.TemplateResponse(
+            request,
+            "csrf_error.html",
+            {"message": CSRF_UI_MESSAGE},
+            status_code=403,
+        )
+    return JSONResponse(
+        status_code=403, content={"detail": CSRF_JSON_DETAIL}
+    )
+
 
 STATUS_LABELS = {
     InvoiceStatus.DRAFT: "Borrador",

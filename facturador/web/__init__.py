@@ -4,6 +4,6 @@ Cero build tooling de JS: htmx.min.js va vendoreado en static/ (la app es
 localhost y debe funcionar sin salida a internet más allá de ARCA).
 """
 
-from .routes import STATIC_DIR, router
+from .routes import STATIC_DIR, csrf_rejected_handler, router
 
-__all__ = ["STATIC_DIR", "router"]
+__all__ = ["STATIC_DIR", "csrf_rejected_handler", "router"]

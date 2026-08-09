@@ -1,4 +1,4 @@
-"""Protección CSRF para formularios del browser (FAC-42).
+"""Protección CSRF para formularios del browser (FAC-42 / FAC-62).
 
 Patrón double-submit cookie, apto para una app localhost sin login:
 
@@ -7,6 +7,8 @@ Patrón double-submit cookie, apto para una app localhost sin login:
 * Campo oculto ``csrf_token`` (o header ``X-CSRF-Token``) en POSTs a ``/ui/``.
 * Validación solo en métodos que cambian estado bajo ``/ui/``; GET y la API
   JSON quedan fuera (clientes no-browser / scripts).
+* Rechazo bajo ``/ui/`` → HTML de sesión expirada (FAC-62); fuera de ``/ui/``
+  el handler responde JSON genérico.
 
 El material del token no se loguea ni se incluye en mensajes de error.
 """
@@ -17,7 +19,7 @@ import secrets
 from collections.abc import MutableMapping
 from typing import Final
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -30,8 +32,14 @@ _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _UI_PREFIX = "/ui/"
 
 # Mensajes genéricos: nunca incluyen el valor del token.
-_ERR_MISSING = "CSRF token ausente o inválido"
-_ERR_INVALID = "CSRF token ausente o inválido"
+CSRF_JSON_DETAIL: Final = "CSRF token ausente o inválido"
+CSRF_UI_MESSAGE: Final = (
+    "La sesión expiró — recargá la página e intentá de nuevo."
+)
+
+
+class CsrfRejected(Exception):
+    """CSRF ausente o inválido; el handler de app elige HTML (/ui/) o JSON."""
 
 
 def generate_csrf_token() -> str:
@@ -90,9 +98,9 @@ async def enforce_csrf(request: Request) -> None:
 
     submitted = header_token or form_token
     if not cookie_token or not submitted:
-        raise HTTPException(status_code=403, detail=_ERR_MISSING)
+        raise CsrfRejected()
     if not tokens_match(cookie_token, submitted):
-        raise HTTPException(status_code=403, detail=_ERR_INVALID)
+        raise CsrfRejected()
 
 
 def _set_cookie_header(token: str) -> str:
