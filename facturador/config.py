@@ -41,7 +41,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .constants import DEFAULT_PORT, WSAA_URLS, WSFEX_URLS, ArcaEnvironment
+from .constants import (
+    DEFAULT_PORT,
+    WSAA_URLS,
+    WSCDC_URLS,
+    WSFEX_URLS,
+    ArcaEnvironment,
+)
 from .production_ack import ProductionAckRequired, require_production_ack
 from .profile import (
     EnvironmentProfile,
@@ -86,6 +92,10 @@ class Config:
     @property
     def wsfex_url(self) -> str:
         return WSFEX_URLS[self.env]
+
+    @property
+    def wscdc_url(self) -> str:
+        return WSCDC_URLS[self.env]
 
 
 def resolve_home() -> Path:

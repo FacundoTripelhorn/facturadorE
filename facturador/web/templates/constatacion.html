@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h2>Constatación de CAE <span class="sub">WSCDC — verificación independiente</span></h2>
+  <div class="cuerpo">
+    <p class="nota" style="margin-top:0">
+      Misma verificación del portal ARCA «Constatación de Comprobantes».
+      No se ejecuta sola tras autorizar: hay que pulsar <strong>Constatar</strong>.
+      Si WSCDC no está disponible, el portal sigue siendo el respaldo.
+    </p>
+
+    {% if not facturas %}
+    <p class="vacio">No hay facturas autorizadas para constatar.</p>
+    {% else %}
+    <form method="post" action="/ui/constatacion" id="form-constatar">
+      {% include "_csrf_field.html" %}
+      <label for="invoice_id">Factura E autorizada</label>
+      <select name="invoice_id" id="invoice_id" required
+              onchange="window.location='/constatacion?invoice_id='+encodeURIComponent(this.value)">
+        {% for f in facturas %}
+        <option value="{{ f['id'] }}"
+          {% if selected and selected['id'] == f['id'] %}selected{% endif %}>
+          {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
+          · {{ f["cliente"] }}
+          · CAE {{ f["cae"] }}
+          · {{ f["imp_total"] }} {{ f["moneda_id"] }}
+        </option>
+        {% endfor %}
+      </select>
+
+      {% if selected %}
+      <dl class="revisar-grid" style="margin-top:1.25rem">
+        <div>
+          <dt>CUIT emisor</dt>
+          <dd class="num">{{ preview.cuit_emisor }}</dd>
+        </div>
+        <div>
+          <dt>Tipo / PV-Nro</dt>
+          <dd class="num">{{ preview.cbte_tipo }} · {{ "%05d"|format(preview.punto_venta) }}-{{ "%08d"|format(preview.cbte_nro) }}</dd>
+        </div>
+        <div>
+          <dt>Fecha</dt>
+          <dd class="num">{{ preview.fecha_cbte }}</dd>
+        </div>
+        <div>
+          <dt>Importe (moneda original)</dt>
+          <dd class="num">{{ preview.imp_total }}</dd>
+        </div>
+        <div>
+          <dt>CAE</dt>
+          <dd class="num">{{ preview.cae }}</dd>
+        </div>
+        <div>
+          <dt>Doc. receptor</dt>
+          <dd class="num">{{ preview.doc_tipo_receptor }} · {{ preview.doc_nro_receptor }}
+            <span class="nota">(CUIT país, no el tax ID extranjero)</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Modalidad</dt>
+          <dd>{{ preview.cbte_modo }}</dd>
+        </div>
+      </dl>
+      {% endif %}
+
+      <button type="submit">
+        Constatar
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+{% if error %}
+<div class="panel error">
+  <div>
+    <strong>No se pudo constatar.</strong>
+    <p>{{ error }}</p>
+  </div>
+</div>
+{% endif %}
+
+{% if resultado %}
+  {% if resultado.ok %}
+  <div class="panel ok">
+    <div>
+      <strong>CAE constatado</strong> (Resultado A)
+      {% if resultado.fch_proceso %}
+      <p>Procesado: <span class="num">{{ resultado.fch_proceso }}</span></p>
+      {% endif %}
+      {% if resultado.observations %}
+      <p>Observaciones:</p>
+      <ul>
+        {% for code, msg in resultado.observations %}
+        <li><span class="num">{{ code }}</span> — {{ msg }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="panel error">
+    <div>
+      <strong>Constatación rechazada o con desajuste</strong>
+      (Resultado {{ resultado.resultado }})
+      {% if resultado.fch_proceso %}
+      <p>Procesado: <span class="num">{{ resultado.fch_proceso }}</span></p>
+      {% endif %}
+      {% if resultado.errors %}
+      <p>Errores ARCA:</p>
+      <ul>
+        {% for code, msg in resultado.errors %}
+        <li><span class="num">{{ code }}</span> — {{ msg }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if resultado.observations %}
+      <p>Observaciones:</p>
+      <ul>
+        {% for code, msg in resultado.observations %}
+        <li><span class="num">{{ code }}</span> — {{ msg }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

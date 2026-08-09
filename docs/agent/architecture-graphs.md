@@ -41,7 +41,7 @@ flowchart TB
     SVC["service.py<br/>InvoiceService"]
     REPO["repo/<br/>SQLite queries"]
     PDF["pdf/<br/>Playwright + QR"]
-    ARCA["arca/<br/>WsaaClient + WsfexClient"]
+    ARCA["arca/<br/>WsaaClient + WsfexClient + WscdcClient"]
   end
 
   subgraph profiles["Perfiles internos ocultos (app-data del SO)"]
@@ -52,6 +52,7 @@ flowchart TB
   subgraph external["External (outbound HTTPS only)"]
     WSAA["ARCA WSAA<br/>LoginCms"]
     WSFEX["ARCA WSFEXv1<br/>FEXAuthorize, params, …"]
+    WSCDC["ARCA WSCDC<br/>ComprobanteConstatar (FAC-84)"]
     S3["S3 backup<br/>(CLI, off critical path)"]
   end
 
@@ -64,6 +65,7 @@ flowchart TB
   SVC --> PDF
   ARCA --> WSAA
   ARCA --> WSFEX
+  ARCA --> WSCDC
   subgraph backup_cli["Backup CLI (off critical path)"]
     BAK["backup.py / restore.py"]
   end

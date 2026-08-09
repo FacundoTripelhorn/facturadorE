@@ -46,6 +46,10 @@ repo); solo viaja el CSR.
 4. En *Autorizar servicio*, **autorizar ese certificado al servicio `wsfex`**
    (Facturación Electrónica de Exportación). Sin este paso el WSAA emite el
    ticket pero WSFEX rechaza todas las llamadas.
+5. Para probar la constatación in-app (FAC-84), autorizar también el servicio
+   **`wscdc`** (Constatación de Comprobantes). Emisión y constatación usan
+   Tickets de Acceso distintos; el menú «Constatación de CAE» no reutiliza el
+   TA de `wsfex`.
 
 Manual oficial de WSASS: `arca.gob.ar/ws/WSASS/WSASS_manual.pdf`.
 

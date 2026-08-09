@@ -31,9 +31,14 @@ en el launcher (perfil aislado, sin segunda instalación). Contrato:
 En **"Administrador de Relaciones de Clave Fiscal"**, asociar el certificado
 (computador fiscal) al servicio **"Facturación Electrónica de Exportación"**.
 
+Para la constatación in-app (FAC-84), asociar también el servicio
+**"Constatación de Comprobantes"** / WSCDC al mismo certificado. Sin ese
+vínculo el menú «Constatación de CAE» no puede obtener TA (`service=wscdc`).
+
 > Atención: es un servicio **distinto** al de facturación electrónica nacional.
 > Si solo se asocia el nacional, el WSAA emite el ticket igual pero WSFEX
-> rechaza todas las llamadas.
+> rechaza todas las llamadas. WSCDC es otro servicio más: emisión y
+> constatación no comparten Ticket de Acceso.
 
 ## 3. Punto de venta exclusivo para exportación webservice
 
@@ -130,10 +135,13 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
    (`FEXGetPARAM_Ctz` para la fecha).
 2. Emitir una **primera factura de monto chico** por el flujo normal
    (form → revisar → confirmar).
-3. Verificar el CAE en el portal de ARCA con **"Constatación de Comprobantes"**
-   (la verificación automatizada vía WSCDC es opcional a futuro). La app ya
-   hace su propia verificación post-emisión con `FEXGetCMP`, pero para la
-   primera real conviene constatar también del lado del portal.
+3. Constatar el CAE desde el menú **«Constatación de CAE»** (botón
+   **Constatar** — no corre solo tras autorizar). Usa WSCDC con los mismos
+   campos del portal (para Factura E el doc. del receptor es **CUIT 80** =
+   `cuit_pais_cliente`). `FEXGetCMP` post-emisión sigue siendo la
+   reconciliación de authorize, no reemplaza esta verificación. Si WSCDC no
+   está asociado o falla, el portal ARCA **"Constatación de Comprobantes"**
+   sigue siendo el respaldo.
 4. Descargar el PDF y controlar datos del emisor, del cliente, importes, QR.
 
 ## Cuidados operativos en producción
@@ -180,5 +188,8 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
       Producción (paso 4).
 - [ ] Sesión Producción levantada; PV RECE cargado en Configuración (paso 4).
 - [ ] `get_ta.py` y `check_wsfex.py` OK contra producción (paso 5).
-- [ ] Primera factura de monto chico emitida y CAE constatado en el portal (paso 6).
+- [ ] Primera factura de monto chico emitida y CAE constatado in-app (o portal
+      como respaldo) (paso 6).
+- [ ] Certificado asociado también a WSCDC / Constatación de Comprobantes
+      (paso 2), si se usa el menú in-app.
 - [ ] Backup post-emisión del perfil Producción funcionando.

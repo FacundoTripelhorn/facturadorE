@@ -60,6 +60,17 @@ WSFEX_URLS = {
     "prod": "https://servicios1.afip.gov.ar/wsfexv1/service.asmx",
 }
 
+# WSCDC — Constatación de Comprobantes (FAC-84). Misma regla atómica
+# cert↔URL por ambiente que WSFEX. Namespace/SOAPAction oficiales:
+# http://servicios1.afip.gob.ar/wscdc/
+WSCDC_URLS = {
+    "homo": "https://wswhomo.afip.gov.ar/WSCDC/service.asmx",
+    "prod": "https://servicios1.afip.gov.ar/wscdc/service.asmx",
+}
+
+# Modalidad de autorización informada a WSCDC (ComprobantesModalidadConsultar).
+CBTE_MODO_CAE = "CAE"
+
 # SOAP 1.1 (compartido por WSAA y WSFEX)
 SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 
@@ -83,7 +94,7 @@ MONEDA_DOL = "DOL"
 # hacia ARCA siempre viaja el código de la tabla (DOL, PES, ...).
 MONEDA_DISPLAY = {"DOL": "USD", "PES": "ARS"}
 
-# QR RG 4892
+# QR RG 4892 / WSCDC receptor (FAC-84): Factura E usa CUIT país (tipo 80).
 QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
 TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA
 

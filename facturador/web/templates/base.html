@@ -243,6 +243,7 @@
     <span class="titulo">factura<span>dor</span></span>
     <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
     <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
+    <a href="/constatacion" {% if request.url.path.startswith("/constatacion") %}aria-current="page"{% endif %}>Constatación de CAE</a>
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
     <span class="badge-env {{ env }}" data-env="{{ env }}">

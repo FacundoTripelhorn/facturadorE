@@ -15,6 +15,8 @@ from facturador import db
 from facturador.api import create_app
 from facturador.api.csrf import CSRF_COOKIE_NAME, CSRF_FORM_FIELD
 from facturador.api.localhost_policy import loopback_base_url
+from facturador.arca.wsaa import SERVICE_WSCDC
+from facturador.arca.wscdc import WscdcClient
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import ArcaEnvironment
@@ -90,12 +92,24 @@ def api(test_config, test_profile, arca):
     conn = db.connect(test_profile.paths.db)
     seed_params(conn)
     seed_settings(conn)
+    transport = httpx.MockTransport(arca.handler)
     wsfex = WsfexClient(
         test_config,
         wsaa=FakeWsaa(),
-        http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
+        http=httpx.Client(transport=transport),
     )
-    app = create_app(test_profile, config=test_config, conn=conn, wsfex=wsfex)
+    wscdc = WscdcClient(
+        test_config,
+        wsaa=FakeWsaa(service=SERVICE_WSCDC),
+        http=httpx.Client(transport=transport),
+    )
+    app = create_app(
+        test_profile,
+        config=test_config,
+        conn=conn,
+        wsfex=wsfex,
+        wscdc=wscdc,
+    )
     # Host válido (FAC-41): TestClient default "testserver" sería rechazado.
     client = TestClient(app, base_url=loopback_base_url())
     client.conn = conn  # para asserts directos sobre la DB

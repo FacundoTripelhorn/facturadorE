@@ -57,6 +57,9 @@ def requires_ready_profile(method: str, path: str) -> bool:
     # HTML de facturas: el detalle reconcilia UNKNOWN vía FEXGetCMP (ARCA).
     if path.startswith("/facturas") or path.startswith("/ui/facturas"):
         return True
+    # Constatación WSCDC (FAC-84): necesita cert + TA ``wscdc``.
+    if path.startswith("/constatacion") or path.startswith("/ui/constatacion"):
+        return True
     if path.startswith("/params"):
         return True
     if path == "/registry" or path.startswith("/registry/"):
@@ -76,6 +79,8 @@ def is_html_ui_route(method: str, path: str) -> bool:
     if method == "GET" and path in ("/", ""):
         return True
     if path.startswith("/facturas") or path.startswith("/ui/facturas"):
+        return True
+    if path.startswith("/constatacion") or path.startswith("/ui/constatacion"):
         return True
     if path.startswith("/ui/registry"):
         return True

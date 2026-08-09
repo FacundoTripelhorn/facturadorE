@@ -151,6 +151,8 @@ def test_confirmar_autoriza_y_muestra_detalle(api, arca):
     assert r.status_code == 303
     assert r.headers["location"] == f"/facturas/{invoice_id}"
     assert arca.calls["FEXAuthorize"] == 1
+    # FAC-84: authorize nunca dispara WSCDC por su cuenta.
+    assert arca.calls["ComprobanteConstatar"] == 0
 
     detalle = api.get(f"/facturas/{invoice_id}")
     assert "autorizada" in detalle.text
@@ -159,6 +161,48 @@ def test_confirmar_autoriza_y_muestra_detalle(api, arca):
     assert "Lo enviado a ARCA" in detalle.text
     assert "<input" not in detalle.text       # read-only: sin inputs
     assert "Generar" not in detalle.text      # sin form de nueva factura
+
+
+def test_constatacion_menu_y_boton_constatar(api, arca):
+    """FAC-84: menú propio + Constatar explícito (happy path con fake)."""
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    _autorizar(api, invoice_id)
+    assert arca.calls["ComprobanteConstatar"] == 0
+
+    pagina = api.get("/constatacion")
+    assert pagina.status_code == 200
+    assert "Constatación de CAE" in pagina.text
+    assert "Constatar" in pagina.text
+    assert "Doc. receptor" in pagina.text
+    assert "80" in pagina.text
+    assert "55000002002" in pagina.text  # cuit_pais_cliente
+
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {"invoice_id": invoice_id}),
+    )
+    assert r.status_code == 200
+    assert "CAE constatado" in r.text
+    assert arca.calls["ComprobanteConstatar"] == 1
+    assert arca.last_constatar_req is not None
+    assert arca.last_constatar_req["DocTipoReceptor"] == "80"
+    assert arca.last_constatar_req["DocNroReceptor"] == "55000002002"
+    assert arca.last_constatar_req["CbteTipo"] == "19"
+
+
+def test_constatacion_muestra_desajuste(api, arca):
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    _autorizar(api, invoice_id)
+    arca.constatar_mode = "mismatch"
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {"invoice_id": invoice_id}),
+    )
+    assert r.status_code == 200
+    assert "desajuste" in r.text.lower() or "rechazada" in r.text.lower()
+    assert "107" in r.text
 
 
 def test_detalle_de_borrador_redirige_a_revision(api, arca):
@@ -575,6 +619,12 @@ def test_nav_incluye_configuracion(api):
     assert 'href="/configuracion"' in api.get("/").text
 
 
+def test_nav_incluye_constatacion_de_cae(api):
+    html = api.get("/").text
+    assert 'href="/constatacion"' in html
+    assert "Constatación de CAE" in html
+
+
 EMISOR_FORM_SEGUNDO = {
     "razon_social": "OTRO EMISOR S.A.",
     "domicilio": "Av. Corrientes 1000",
@@ -703,7 +753,13 @@ def test_seleccion_punto_venta_al_emitir(api, arca):
 
 # --- identidad de ambiente persistente (FAC-31 / ADR 0001) ---
 
-_PAGINAS_NORMALES = ("/", "/comprobantes", "/clientes", "/configuracion")
+_PAGINAS_NORMALES = (
+    "/",
+    "/comprobantes",
+    "/constatacion",
+    "/clientes",
+    "/configuracion",
+)
 
 
 def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):

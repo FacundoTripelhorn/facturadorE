@@ -39,6 +39,7 @@ def test_todos_los_paths_se_derivan_de_una_raiz(tmp_path):
     assert paths.key == root / "secrets" / "cert.key"
     assert paths.pdf_dir == root / "data" / "pdfs"
     assert paths.wsaa_ta_cache == root / "data" / "ta-wsfex.json"
+    assert paths.wscdc_ta_cache == root / "data" / "ta-wscdc.json"
     assert paths.arca_params_cache == paths.db
     assert paths.logs_dir == root / "data" / "logs"
     assert paths.log_file == root / "data" / "logs" / "facturador.log"

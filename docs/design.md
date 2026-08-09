@@ -192,7 +192,14 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
    del default de Python; no se cambia a `DEFAULT`), manteniendo la
    verificación del certificado. Homologación y WSAA (ambos ambientes)
    siguen en el default de httpx/OpenSSL — no hace falta acomodarlos.
-6. **Verificación post-emisión:** pyafipws recomienda constatar el CAE. Implementar: tras autorizar, `FEXGetCMP` y comparar CAE + importe + número; opcionalmente WSCDC en producción.
+6. **Verificación post-emisión:** tras autorizar, `FEXGetCMP` compara CAE +
+   importe + número (idempotencia / recovery — no es constatación del portal).
+   **WSCDC (FAC-84):** menú propio «Constatación de CAE» + botón **Constatar**
+   (nunca auto tras `FEXAuthorize` / `FEXGetCMP`). Request con CUIT emisor,
+   CAE, fecha, tipo 19, PV, nro, importe en moneda original, receptor tipo
+   **80** + `cuit_pais_cliente` (CUIT país, no el tax ID extranjero). TA WSAA
+   con `service=wscdc` y cache aparte de `wsfex`. Portal ARCA sigue como
+   respaldo si el servicio no está asociado o no responde.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.
 8. **Clock sync:** generación del TRA con ventana amplia (gen -10 min / exp +10 min) y NTP contra `time.afip.gov.ar`, como documenta el manual WSAA.
 9. **Manejo de la clave privada:** pyafipws soporta passphrase en la key; acá se DECIDIÓ no usarla (la app es local y sin operador que la tipee: la protegen los permisos 400 y el home local). La clave **no** viaja en el seed de backup (FAC-44); cada máquina tiene su propio par (FAC-64). Nunca loguear ni el CMS firmado ni el token/sign del TA (tratarlos como credenciales en los logs — redactar).
@@ -354,7 +361,7 @@ Componentes:
 
 **Fase 6 — Frontend mínimo:** form precargado con el cliente default (el flujo "1 click + monto" para la factura semanal), selector de cliente para los futuros, listado con estado/CAE, descarga de PDF. Incluye el empaquetado de §2.5: Docker Compose (o comando uvicorn), launcher con perfiles aislados, script de backup y chequeos de arranque (permisos de key, consistencia cert/ambiente, bind a localhost).
 
-**Fase 7 — Checklist a producción:** certificado prod, asociación al servicio "Facturación Electrónica de Exportación", punto de venta RECE exclusivo de exportación, arranque en Producción (launcher o `--env prod`), smoke test con `FEXDummy`, primera factura real de monto chico y verificación del CAE en el portal de ARCA ("constatación de comprobantes" / WSCDC como verificación automatizada opcional).
+**Fase 7 — Checklist a producción:** certificado prod, asociación al servicio "Facturación Electrónica de Exportación" **y** al WSCDC (constatación), punto de venta RECE exclusivo de exportación, arranque en Producción (launcher o `--env prod`), smoke test con `FEXDummy`, primera factura real de monto chico y constatación del CAE desde el menú in-app (botón Constatar) o, si falla, el portal ARCA.
 
 ---
 

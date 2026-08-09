@@ -1,1 +1,1 @@
-"""Integración con ARCA: WSAA (autenticación) y WSFEX (Factura E)."""
+"""Integración con ARCA: WSAA (autenticación), WSFEX (Factura E) y WSCDC."""

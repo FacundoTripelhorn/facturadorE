@@ -23,6 +23,8 @@ from typing import Any
 import httpx
 
 from . import repo
+from .arca.wsaa import WsaaError
+from .arca.wscdc import ConstatacionResult, WscdcClient, WscdcError
 from .arca.wsfex import (
     CmpNotFoundError,
     CmpRecord,
@@ -118,10 +120,13 @@ class InvoiceService:
         conn: sqlite3.Connection,
         wsfex: WsfexClient,
         seed_backup: SeedBackupCoordinator | None = None,
+        wscdc: WscdcClient | None = None,
     ):
         self.config = config
         self.conn = conn
         self.wsfex = wsfex
+        # FAC-84: cliente WSCDC opcional en tests unitarios sin constatación.
+        self.wscdc = wscdc or WscdcClient(config)
         # FAC-47: opcional para tests unitarios del service sin coordinator.
         self.seed_backup = seed_backup
 
@@ -557,6 +562,39 @@ class InvoiceService:
             if resolved is not None:
                 return resolved
         return inv
+
+    def constatar_cae(self, invoice_id: str) -> ConstatacionResult:
+        """Constatación WSCDC bajo demanda (FAC-84).
+
+        Nunca se llama desde authorize / FEXGetCMP. El operador dispara el
+        botón Constatar; el request sale del snapshot local (CUIT país = 80).
+        """
+        inv = self.get_invoice(invoice_id, reconcile=False)
+        if inv["status"] != InvoiceStatus.AUTHORIZED:
+            raise DomainError(
+                "Solo se puede constatar una factura autorizada con CAE"
+            )
+        if inv["cbte_tipo"] != CBTE_TIPO_FACTURA_E:
+            raise DomainError(
+                "La constatación in-app solo cubre Factura E (tipo 19)"
+            )
+        cuit_raw = inv["cuit_emisor"]
+        if cuit_raw:
+            cuit_emisor = int(cuit_raw)
+        else:
+            # Snapshot pre-FAC-39: caer al CUIT del certificado vivo.
+            cuit_emisor = self.wsfex.cuit
+        try:
+            req = WscdcClient.request_from_invoice_row(
+                inv, cuit_emisor=cuit_emisor
+            )
+            return self.wscdc.constatar(req)
+        except WscdcError as exc:
+            if exc.code == "local":
+                raise DomainError(exc.message) from exc
+            raise ArcaUnavailableError(f"WSCDC no disponible: {exc}") from exc
+        except (WsaaError, httpx.HTTPError, OSError, CertificateError) as exc:
+            raise ArcaUnavailableError(f"WSCDC no disponible: {exc}") from exc
 
     def list_arca_invoices(
         self,

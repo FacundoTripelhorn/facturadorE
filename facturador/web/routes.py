@@ -38,7 +38,13 @@ from ..certs import (
     load_certificate_metadata,
     store_certificate_pair,
 )
-from ..constants import MONEDA_DISPLAY, MONEDA_DOL, InvoiceStatus
+from ..constants import (
+    CBTE_MODO_CAE,
+    MONEDA_DISPLAY,
+    MONEDA_DOL,
+    TIPO_DOC_CUIT,
+    InvoiceStatus,
+)
 from ..fiscal_identity import FiscalIdentityError, get_sealed_fiscal_cuit
 from ..launcher.switch import (
     is_launcher_supervised,
@@ -51,7 +57,13 @@ from ..schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
-from ..service import NotFoundError, ServiceError, StaleRegistryError
+from ..service import (
+    ArcaUnavailableError,
+    DomainError,
+    NotFoundError,
+    ServiceError,
+    StaleRegistryError,
+)
 from ..settings import (
     BACKUP_PREFIX_DEFAULT,
     CONDICION_IVA_DEFAULT,
@@ -404,6 +416,98 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
         # Enviada/no descartable: el detalle explica el estado real.
         return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
     return RedirectResponse("/?aviso=descartado", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Constatación de CAE (WSCDC, FAC-84) — menú propio, botón explícito
+# ---------------------------------------------------------------------------
+
+
+def _preview_constatacion(inv: sqlite3.Row) -> dict[str, object]:
+    """Campos que viajan a WSCDC (misma forma que el portal)."""
+    return {
+        "cuit_emisor": inv["cuit_emisor"] or "—",
+        "cbte_tipo": inv["cbte_tipo"],
+        "punto_venta": inv["punto_venta"],
+        "cbte_nro": inv["cbte_nro"],
+        "fecha_cbte": inv["fecha_cbte"],
+        "imp_total": inv["imp_total"],
+        "cae": inv["cae"],
+        "doc_tipo_receptor": TIPO_DOC_CUIT,
+        "doc_nro_receptor": inv["cuit_pais_cliente"],
+        "cbte_modo": CBTE_MODO_CAE,
+    }
+
+
+def _pagina_constatacion(
+    request: Request,
+    service: ServiceDep,
+    *,
+    invoice_id: str | None = None,
+    resultado=None,
+    error: str | None = None,
+    status_code: int = 200,
+):
+    facturas = repo.list_invoices(
+        service.conn,
+        limit=100,
+        offset=0,
+        statuses=(InvoiceStatus.AUTHORIZED,),
+    )
+    selected = None
+    if invoice_id:
+        selected = next((f for f in facturas if f["id"] == invoice_id), None)
+    if selected is None and facturas:
+        selected = facturas[0]
+    return templates.TemplateResponse(
+        request,
+        "constatacion.html",
+        {
+            "facturas": facturas,
+            "selected": selected,
+            "preview": _preview_constatacion(selected) if selected else None,
+            "resultado": resultado,
+            "error": error,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/constatacion", response_class=HTMLResponse)
+def constatacion(request: Request, service: ServiceDep, invoice_id: str = ""):
+    return _pagina_constatacion(
+        request, service, invoice_id=invoice_id or None
+    )
+
+
+@router.post("/ui/constatacion", response_class=HTMLResponse)
+def ui_constatar(
+    request: Request,
+    service: ServiceDep,
+    invoice_id: str = Form(...),
+):
+    """Botón Constatar: única vía que llama a WSCDC (nunca post-authorize)."""
+    try:
+        resultado = service.constatar_cae(invoice_id)
+    except NotFoundError:
+        return _pagina_constatacion(
+            request,
+            service,
+            invoice_id=invoice_id,
+            error="La factura no existe.",
+            status_code=404,
+        )
+    except (DomainError, ArcaUnavailableError, ServiceError) as exc:
+        return _pagina_constatacion(
+            request,
+            service,
+            invoice_id=invoice_id,
+            error=str(exc),
+            status_code=422 if isinstance(exc, DomainError) else 503,
+        )
+    return _pagina_constatacion(
+        request, service, invoice_id=invoice_id, resultado=resultado
+    )
 
 
 # ---------------------------------------------------------------------------

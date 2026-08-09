@@ -376,11 +376,20 @@ def test_store_invalida_cache_de_ta_wsaa(profile: EnvironmentProfile):
         '"expiration":"2099-01-01T00:00:00+00:00"}',
         encoding="utf-8",
     )
+    wscdc_cache = profile.paths.wscdc_ta_cache
+    wscdc_cache.write_text(
+        '{"token":"old","sign":"old","service":"wscdc",'
+        '"environment":"homo","generation":"2026-01-01T00:00:00+00:00",'
+        '"expiration":"2099-01-01T00:00:00+00:00"}',
+        encoding="utf-8",
+    )
     assert cache.is_file()
+    assert wscdc_cache.is_file()
 
     cert_pem, key_pem, _ = _build_pair()
     store_certificate_pair(profile, cert_pem, key_pem)
     assert not cache.exists()
+    assert not wscdc_cache.exists()
 
 
 def test_store_fallido_no_borra_cache_de_ta(

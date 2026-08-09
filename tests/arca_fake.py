@@ -1,4 +1,4 @@
-"""Simulador de WSFEX para tests de la fase 4.
+"""Simulador de WSFEX (+ WSCDC FAC-84) para tests.
 
 Mantiene estado (numeración, comprobantes emitidos) y permite simular los
 modos de falla que definen la máquina de estados: rechazo de negocio,
@@ -14,11 +14,18 @@ from collections import Counter
 import httpx
 
 from facturador.arca.wsaa import Ticket
+from facturador.arca.wscdc import WSCDC_NS
 from facturador.arca.wsfex import FEX_NS
 
 
 class FakeWsaa:
-    """WSAA que siempre entrega un TA vigente de mentira."""
+    """WSAA que siempre entrega un TA vigente de mentira.
+
+    ``service`` se propaga al Ticket (wsfex / wscdc) para tests de cache.
+    """
+
+    def __init__(self, service: str = "wsfex"):
+        self.service = service
 
     def get_ticket(self) -> Ticket:
         return Ticket(
@@ -26,7 +33,7 @@ class FakeWsaa:
             sign="sig==",
             generation=dt.datetime.now(dt.UTC),
             expiration=dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
-            service="wsfex",
+            service=self.service,
             environment="homo",
         )
 
@@ -36,6 +43,16 @@ def soap_response(method: str, inner: str) -> str:
         '<?xml version="1.0" encoding="utf-8"?>'
         '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
         f'<soap:Body><{method}Response xmlns="{FEX_NS}">'
+        f"<{method}Result>{inner}</{method}Result>"
+        f"</{method}Response></soap:Body></soap:Envelope>"
+    )
+
+
+def wscdc_soap_response(method: str, inner: str) -> str:
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+        f'<soap:Body><{method}Response xmlns="{WSCDC_NS}">'
         f"<{method}Result>{inner}</{method}Result>"
         f"</{method}Response></soap:Body></soap:Envelope>"
     )
@@ -55,11 +72,16 @@ class FakeArca:
         self.issued: dict[tuple[int, int, int], dict] = {}
         self.authorize_mode = "ok"  # ok | reject | timeout | timeout_but_issued
         self.get_cmp_mode = "ok"  # ok | timeout | error (FAC-65)
+        # FAC-84: ok | reject | mismatch | error
+        self.constatar_mode = "ok"
+        self.constatar_error_code = "100"
+        self.constatar_error_msg = "CAE inexistente"
         self.reject_code = "1068"
         self.reject_msg = "Campo Id_impositivo invalido"
         self.ctz = "1145.5690"
         self.calls: Counter[str] = Counter()
         self.last_authorize_cliente: str | None = None
+        self.last_constatar_req: dict[str, str] | None = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         method = request.headers.get("SOAPAction", "").strip('"').rsplit("/", 1)[-1]
@@ -286,5 +308,72 @@ class FakeArca:
                 "<Fch_venc_Cae>20260713</Fch_venc_Cae>"
                 "</FEXResultGet>"
                 "<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>",
+            ),
+        )
+
+    def _comprobanteconstatar(self, body):
+        """WSCDC ComprobanteConstatar (FAC-84)."""
+        req = {
+            "CbteModo": _findtext(body, "CbteModo") or "",
+            "CuitEmisor": _findtext(body, "CuitEmisor") or "",
+            "PtoVta": _findtext(body, "PtoVta") or "",
+            "CbteTipo": _findtext(body, "CbteTipo") or "",
+            "CbteNro": _findtext(body, "CbteNro") or "",
+            "CbteFch": _findtext(body, "CbteFch") or "",
+            "ImpTotal": _findtext(body, "ImpTotal") or "",
+            "CodAutorizacion": _findtext(body, "CodAutorizacion") or "",
+            "DocTipoReceptor": _findtext(body, "DocTipoReceptor") or "",
+            "DocNroReceptor": _findtext(body, "DocNroReceptor") or "",
+        }
+        self.last_constatar_req = req
+        cmp_resp = (
+            f"<CmpResp>"
+            f"<CbteModo>{req['CbteModo']}</CbteModo>"
+            f"<CuitEmisor>{req['CuitEmisor']}</CuitEmisor>"
+            f"<PtoVta>{req['PtoVta']}</PtoVta>"
+            f"<CbteTipo>{req['CbteTipo']}</CbteTipo>"
+            f"<CbteNro>{req['CbteNro']}</CbteNro>"
+            f"<CbteFch>{req['CbteFch']}</CbteFch>"
+            f"<ImpTotal>{req['ImpTotal']}</ImpTotal>"
+            f"<CodAutorizacion>{req['CodAutorizacion']}</CodAutorizacion>"
+            f"<DocTipoReceptor>{req['DocTipoReceptor']}</DocTipoReceptor>"
+            f"<DocNroReceptor>{req['DocNroReceptor']}</DocNroReceptor>"
+            f"</CmpResp>"
+        )
+        if self.constatar_mode == "error":
+            return httpx.Response(
+                200,
+                text=wscdc_soap_response(
+                    "ComprobanteConstatar",
+                    cmp_resp
+                    + "<Resultado>R</Resultado>"
+                    + "<FchProceso>20260809120000</FchProceso>"
+                    + "<Errors><Err>"
+                    f"<Code>{self.constatar_error_code}</Code>"
+                    f"<Msg>{self.constatar_error_msg}</Msg>"
+                    "</Err></Errors>",
+                ),
+            )
+        if self.constatar_mode in ("reject", "mismatch"):
+            return httpx.Response(
+                200,
+                text=wscdc_soap_response(
+                    "ComprobanteConstatar",
+                    cmp_resp
+                    + "<Resultado>R</Resultado>"
+                    + "<FchProceso>20260809120000</FchProceso>"
+                    + "<Observaciones><Obs>"
+                    "<Code>107</Code>"
+                    "<Msg>Los datos no coinciden con el CAE informado</Msg>"
+                    "</Obs></Observaciones>",
+                ),
+            )
+        return httpx.Response(
+            200,
+            text=wscdc_soap_response(
+                "ComprobanteConstatar",
+                cmp_resp
+                + "<Resultado>A</Resultado>"
+                + "<FchProceso>20260809120000</FchProceso>",
             ),
         )
