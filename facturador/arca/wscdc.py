@@ -223,7 +223,9 @@ class WscdcClient:
         )
 
     @staticmethod
-    def request_from_invoice_row(inv: object, *, cuit_emisor: int) -> ConstatacionRequest:
+    def request_from_invoice_row(
+        inv: object, *, cuit_emisor: int
+    ) -> ConstatacionRequest:
         """Deriva CmpReq del snapshot local de una Factura E autorizada."""
         # sqlite3.Row / mapping
         status = inv["status"]  # type: ignore[index]
