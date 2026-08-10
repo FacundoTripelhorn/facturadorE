@@ -126,7 +126,7 @@ flowchart TB
 |------|-------|
 | App assembly, error mapping, router registration | `facturador/api/app.py` |
 | Localhost Host/Origin policy (FAC-41) | `facturador/api/localhost_policy.py` |
-| CSRF for browser forms (FAC-42) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html` |
+| CSRF for browser forms (FAC-42 / FAC-62) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html`, `csrf_error.html` |
 | Production first-use confirmation (FAC-40) | `facturador/production_ack.py`, `facturador/launcher/production_ack.py`, launcher `__main__.py` |
 
 | Per-profile setup state + guard (FAC-35) | `facturador/setup.py` (incl. `make_setup_state_provider`), `facturador/api/setup_guard.py`, `facturador/api/setup.py` |

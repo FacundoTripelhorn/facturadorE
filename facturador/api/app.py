@@ -27,7 +27,7 @@ from ..service import (
 )
 from ..setup import make_setup_state_provider, reconcile_setup_state
 from . import backup, clients, health, invoices, params, registry, setup
-from .csrf import CsrfCookieMiddleware
+from .csrf import CsrfCookieMiddleware, CsrfRejected
 from .localhost_policy import (
     LocalhostPolicyMiddleware,
     resolve_listen_port,
@@ -140,6 +140,9 @@ def create_app(
 
     for tipo, status in _ERROR_STATUS.items():
         app.add_exception_handler(tipo, _handler_for(status))
+
+    # FAC-62: CSRF fallido en formularios /ui/ → HTML; JSON fuera de /ui/.
+    app.add_exception_handler(CsrfRejected, web.csrf_rejected_handler)
 
     app.include_router(invoices.router)
     app.include_router(clients.router)

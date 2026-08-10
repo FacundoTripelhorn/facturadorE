@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel error">
+  <div>
+    <strong>Sesión expirada</strong>
+    <p>{{ message }}</p>
+    <p class="nota" style="margin-top:.75rem">
+      <a href="{{ recovery_href }}">Volver al formulario</a>
+      ·
+      <a href="/">Volver al inicio</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

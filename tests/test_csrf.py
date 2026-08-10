@@ -1,4 +1,4 @@
-"""FAC-42 — CSRF en formularios del browser (double-submit cookie)."""
+"""FAC-42 / FAC-62 — CSRF en formularios del browser (double-submit cookie)."""
 
 from __future__ import annotations
 
@@ -6,11 +6,24 @@ from facturador.api.csrf import (
     CSRF_COOKIE_NAME,
     CSRF_FORM_FIELD,
     CSRF_HEADER_NAME,
+    CSRF_JSON_DETAIL,
+    CSRF_UI_MESSAGE,
     generate_csrf_token,
     tokens_match,
 )
 from tests.conftest import ensure_csrf_cookie, with_csrf
 from tests.test_web import CLIENTE_FORM, FACTURA_FORM, _crear_cliente_por_form
+
+
+def _assert_csrf_html_403(response, *, recovery_href: str = "/clientes") -> None:
+    """FAC-62: rechazo /ui/ es HTML con enlace GET, no reload del POST."""
+    assert response.status_code == 403
+    assert "text/html" in response.headers["content-type"]
+    assert CSRF_UI_MESSAGE in response.text
+    assert CSRF_JSON_DETAIL not in response.text
+    assert "javascript:location.reload()" not in response.text
+    assert f'href="{recovery_href}"' in response.text
+    assert "Volver al formulario" in response.text
 
 
 def test_tokens_match_rechaza_ausentes_y_distintos():
@@ -47,8 +60,7 @@ def test_formulario_html_incluye_campo_csrf_alineado_a_cookie(api):
 def test_post_ui_sin_token_es_403(api):
     ensure_csrf_cookie(api)
     r = api.post("/ui/clientes", data=CLIENTE_FORM, follow_redirects=False)
-    assert r.status_code == 403
-    assert "CSRF" in r.json()["detail"]
+    _assert_csrf_html_403(r)
     # Mensaje genérico: no filtra el valor del cookie.
     assert api.cookies.get(CSRF_COOKIE_NAME) not in r.text
 
@@ -57,8 +69,7 @@ def test_post_ui_con_token_invalido_es_403(api):
     ensure_csrf_cookie(api)
     bad = {**CLIENTE_FORM, CSRF_FORM_FIELD: "token-falso-no-coincide"}
     r = api.post("/ui/clientes", data=bad, follow_redirects=False)
-    assert r.status_code == 403
-    assert "CSRF" in r.json()["detail"]
+    _assert_csrf_html_403(r)
 
 
 def test_post_ui_sin_cookie_es_403(api):
@@ -70,7 +81,12 @@ def test_post_ui_sin_cookie_es_403(api):
         data={**CLIENTE_FORM, CSRF_FORM_FIELD: token},
         follow_redirects=False,
     )
-    assert r.status_code == 403
+    _assert_csrf_html_403(r)
+    # El token enviado no debe ecoarse; la cookie nueva tampoco en el body.
+    assert token not in r.text
+    issued = r.cookies.get(CSRF_COOKIE_NAME)
+    if issued:
+        assert issued not in r.text
 
 
 def test_post_ui_valido_con_form_field(api):
@@ -127,7 +143,22 @@ def test_authorize_ui_exige_csrf(api, arca):
         f"/ui/facturas/{invoice_id}/authorize",
         follow_redirects=False,
     )
-    assert missing.status_code == 403
+    _assert_csrf_html_403(
+        missing, recovery_href=f"/facturas/{invoice_id}/revisar"
+    )
+
+    # Referer same-origin gana al mapeo (p.ej. reintento desde el detalle).
+    from facturador.api.localhost_policy import loopback_base_url
+
+    base = loopback_base_url()
+    from_detalle = api.post(
+        f"/ui/facturas/{invoice_id}/authorize",
+        headers={"Referer": f"{base}/facturas/{invoice_id}"},
+        follow_redirects=False,
+    )
+    _assert_csrf_html_403(
+        from_detalle, recovery_href=f"/facturas/{invoice_id}"
+    )
 
     ok = api.post(
         f"/ui/facturas/{invoice_id}/authorize",
@@ -146,8 +177,102 @@ def test_respuesta_csrf_no_filtra_material_del_token(api):
         data={**CLIENTE_FORM, CSRF_FORM_FIELD: submitted},
         follow_redirects=False,
     )
-    assert r.status_code == 403
+    _assert_csrf_html_403(r)
     body = r.text
     assert token not in body
     assert submitted not in body
-    assert r.json()["detail"] == "CSRF token ausente o inválido"
+
+
+def test_csrf_recovery_href_referer_y_mapeo():
+    """Referer same-origin gana; /ui/ y orígenes ajenos caen al mapeo del path."""
+    from starlette.requests import Request
+
+    from facturador.api.localhost_policy import loopback_base_url
+    from facturador.web.routes import csrf_recovery_href
+
+    base = loopback_base_url()
+    host = base.removeprefix("http://")
+
+    def _req(path: str, referer: str | None = None) -> Request:
+        headers: list[tuple[bytes, bytes]] = [
+            (b"host", host.encode("latin-1")),
+        ]
+        if referer is not None:
+            headers.append((b"referer", referer.encode("latin-1")))
+        return Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": path,
+                "raw_path": path.encode(),
+                "query_string": b"",
+                "headers": headers,
+                "client": ("127.0.0.1", 123),
+                "server": ("127.0.0.1", 8399),
+            }
+        )
+
+    invoice_id = "abc123"
+    assert (
+        csrf_recovery_href(_req(f"/ui/facturas/{invoice_id}/authorize"))
+        == f"/facturas/{invoice_id}/revisar"
+    )
+    assert (
+        csrf_recovery_href(
+            _req(
+                f"/ui/facturas/{invoice_id}/authorize",
+                referer=f"{base}/facturas/{invoice_id}",
+            )
+        )
+        == f"/facturas/{invoice_id}"
+    )
+    assert (
+        csrf_recovery_href(
+            _req("/ui/clientes", referer=f"{base}/ui/clientes")
+        )
+        == "/clientes"
+    )
+    assert (
+        csrf_recovery_href(
+            _req("/ui/clientes", referer="http://evil.example/clientes")
+        )
+        == "/clientes"
+    )
+    assert csrf_recovery_href(_req("/ui/facturas")) == "/"
+    assert csrf_recovery_href(_req("/ui/setup/certificado")) == "/setup"
+    assert csrf_recovery_href(_req("/ui/emisores/1/activar")) == "/configuracion"
+
+
+def test_csrf_rejected_fuera_de_ui_sigue_siendo_json():
+    """Defensa: el handler responde JSON genérico fuera de /ui/."""
+    import asyncio
+
+    from starlette.requests import Request
+
+    from facturador.api.csrf import CsrfRejected
+    from facturador.web.routes import csrf_rejected_handler
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/clients",
+        "raw_path": b"/clients",
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 123),
+        "server": ("127.0.0.1", 8399),
+    }
+    response = asyncio.run(
+        csrf_rejected_handler(Request(scope), CsrfRejected())
+    )
+    assert response.status_code == 403
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.body == (
+        b'{"detail":"' + CSRF_JSON_DETAIL.encode() + b'"}'
+    )
