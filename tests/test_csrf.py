@@ -15,12 +15,15 @@ from tests.conftest import ensure_csrf_cookie, with_csrf
 from tests.test_web import CLIENTE_FORM, FACTURA_FORM, _crear_cliente_por_form
 
 
-def _assert_csrf_html_403(response) -> None:
-    """FAC-62: rechazo /ui/ es HTML con guía de recarga, no el JSON genérico."""
+def _assert_csrf_html_403(response, *, recovery_href: str = "/clientes") -> None:
+    """FAC-62: rechazo /ui/ es HTML con enlace GET, no reload del POST."""
     assert response.status_code == 403
     assert "text/html" in response.headers["content-type"]
     assert CSRF_UI_MESSAGE in response.text
     assert CSRF_JSON_DETAIL not in response.text
+    assert "javascript:location.reload()" not in response.text
+    assert f'href="{recovery_href}"' in response.text
+    assert "Volver al formulario" in response.text
 
 
 def test_tokens_match_rechaza_ausentes_y_distintos():
@@ -140,7 +143,22 @@ def test_authorize_ui_exige_csrf(api, arca):
         f"/ui/facturas/{invoice_id}/authorize",
         follow_redirects=False,
     )
-    _assert_csrf_html_403(missing)
+    _assert_csrf_html_403(
+        missing, recovery_href=f"/facturas/{invoice_id}/revisar"
+    )
+
+    # Referer same-origin gana al mapeo (p.ej. reintento desde el detalle).
+    from facturador.api.localhost_policy import loopback_base_url
+
+    base = loopback_base_url()
+    from_detalle = api.post(
+        f"/ui/facturas/{invoice_id}/authorize",
+        headers={"Referer": f"{base}/facturas/{invoice_id}"},
+        follow_redirects=False,
+    )
+    _assert_csrf_html_403(
+        from_detalle, recovery_href=f"/facturas/{invoice_id}"
+    )
 
     ok = api.post(
         f"/ui/facturas/{invoice_id}/authorize",
@@ -163,6 +181,69 @@ def test_respuesta_csrf_no_filtra_material_del_token(api):
     body = r.text
     assert token not in body
     assert submitted not in body
+
+
+def test_csrf_recovery_href_referer_y_mapeo():
+    """Referer same-origin gana; /ui/ y orígenes ajenos caen al mapeo del path."""
+    from starlette.requests import Request
+
+    from facturador.api.localhost_policy import loopback_base_url
+    from facturador.web.routes import csrf_recovery_href
+
+    base = loopback_base_url()
+    host = base.removeprefix("http://")
+
+    def _req(path: str, referer: str | None = None) -> Request:
+        headers: list[tuple[bytes, bytes]] = [
+            (b"host", host.encode("latin-1")),
+        ]
+        if referer is not None:
+            headers.append((b"referer", referer.encode("latin-1")))
+        return Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": path,
+                "raw_path": path.encode(),
+                "query_string": b"",
+                "headers": headers,
+                "client": ("127.0.0.1", 123),
+                "server": ("127.0.0.1", 8399),
+            }
+        )
+
+    invoice_id = "abc123"
+    assert (
+        csrf_recovery_href(_req(f"/ui/facturas/{invoice_id}/authorize"))
+        == f"/facturas/{invoice_id}/revisar"
+    )
+    assert (
+        csrf_recovery_href(
+            _req(
+                f"/ui/facturas/{invoice_id}/authorize",
+                referer=f"{base}/facturas/{invoice_id}",
+            )
+        )
+        == f"/facturas/{invoice_id}"
+    )
+    assert (
+        csrf_recovery_href(
+            _req("/ui/clientes", referer=f"{base}/ui/clientes")
+        )
+        == "/clientes"
+    )
+    assert (
+        csrf_recovery_href(
+            _req("/ui/clientes", referer="http://evil.example/clientes")
+        )
+        == "/clientes"
+    )
+    assert csrf_recovery_href(_req("/ui/facturas")) == "/"
+    assert csrf_recovery_href(_req("/ui/setup/certificado")) == "/setup"
+    assert csrf_recovery_href(_req("/ui/emisores/1/activar")) == "/configuracion"
 
 
 def test_csrf_rejected_fuera_de_ui_sigue_siendo_json():

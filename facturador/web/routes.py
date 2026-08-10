@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import sqlite3
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -100,10 +102,52 @@ templates = Jinja2Templates(
 )
 
 
+def csrf_recovery_href(request: Request) -> str:
+    """GET que vuelve a pintar el formulario con un token CSRF fresco.
+
+    ``location.reload()`` sobre el 403 del POST reenviaría el mismo body
+    con el token viejo. Preferimos el ``Referer`` same-origin (si no es
+    ``/ui/``) y, si falta, un mapeo estático del path del POST.
+    """
+    referer = request.headers.get("referer")
+    if referer:
+        parsed = urlparse(referer)
+        if (
+            parsed.scheme in ("", "http")
+            and parsed.path
+            and not parsed.path.startswith("/ui/")
+            and parsed.netloc in ("", request.url.netloc)
+        ):
+            href = parsed.path
+            if parsed.query:
+                href = f"{href}?{parsed.query}"
+            return href
+    return _recovery_from_ui_path(request.url.path)
+
+
+def _recovery_from_ui_path(path: str) -> str:
+    if path == "/ui/facturas":
+        return "/"
+    if path == "/ui/clientes":
+        return "/clientes"
+    if path.startswith("/ui/setup/"):
+        return "/setup"
+    if path.startswith("/ui/emisores") or path.startswith("/ui/configuracion/"):
+        return "/configuracion"
+    if path == "/ui/cambiar-ambiente":
+        return "/"
+    if path == "/ui/registry/catch-up":
+        return "/comprobantes"
+    m = re.fullmatch(r"/ui/facturas/([^/]+)/(?:authorize|descartar)", path)
+    if m:
+        return f"/facturas/{m.group(1)}/revisar"
+    return "/"
+
+
 async def csrf_rejected_handler(
     request: Request, exc: Exception
 ) -> HTMLResponse | JSONResponse:
-    """FAC-62: HTML con guía de recarga en ``/ui/``; JSON genérico fuera.
+    """FAC-62: HTML con guía de recuperación en ``/ui/``; JSON genérico fuera.
 
     El mensaje es fijo: nunca ecoa cookie ni el valor enviado en el form.
     La firma acepta ``Exception`` por el contrato de Starlette
@@ -115,7 +159,10 @@ async def csrf_rejected_handler(
         return templates.TemplateResponse(
             request,
             "csrf_error.html",
-            {"message": CSRF_UI_MESSAGE},
+            {
+                "message": CSRF_UI_MESSAGE,
+                "recovery_href": csrf_recovery_href(request),
+            },
             status_code=403,
         )
     return JSONResponse(
