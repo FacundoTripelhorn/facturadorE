@@ -248,6 +248,8 @@ def test_factura_permitida_cuando_ready(api):
         ("GET", "/invoices", True),
         ("GET", "/health/arca", True),
         ("GET", "/params/moneda", True),
+        ("GET", "/constatacion", True),
+        ("POST", "/ui/constatacion", True),
         ("GET", "/clientes", False),
         ("GET", "/clients", False),
         ("POST", "/ui/clientes", False),

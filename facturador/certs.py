@@ -205,14 +205,18 @@ def _make_private_temp(secrets_dir: Path, final_name: str) -> Path:
 
 
 def _invalidate_wsaa_ta_cache(profile: EnvironmentProfile) -> None:
-    """Borra ``ta-wsfex.json`` del perfil tras rotar el par cert/key."""
-    cache = profile.paths.wsaa_ta_cache
-    try:
-        cache.unlink(missing_ok=True)
-    except OSError as exc:
-        raise CertificateError(
-            "El par se guardó pero no se pudo invalidar el cache de TA de WSAA."
-        ) from exc
+    """Borra caches de TA WSAA del perfil tras rotar el par cert/key.
+
+    Incluye ``ta-wsfex.json`` (emisión) y ``ta-wscdc.json`` (constatación
+    FAC-84): ambos quedan inválidos para el certificado anterior.
+    """
+    for cache in (profile.paths.wsaa_ta_cache, profile.paths.wscdc_ta_cache):
+        try:
+            cache.unlink(missing_ok=True)
+        except OSError as exc:
+            raise CertificateError(
+                "El par se guardó pero no se pudo invalidar el cache de TA de WSAA."
+            ) from exc
 
 
 def read_live_certificate_pair(paths: ProfilePaths) -> tuple[bytes, bytes]:

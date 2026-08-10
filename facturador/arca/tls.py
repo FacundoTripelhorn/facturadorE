@@ -48,10 +48,22 @@ def wsfex_verify(env: ArcaEnvironment) -> ssl.SSLContext | bool:
     Production: ``SSLContext`` with SECLEVEL=1 (AFIP weak DH). Homologación:
     ``True`` (httpx/OpenSSL defaults). Never returns ``False``.
     """
+    return arca_servicios1_verify(env, label="WSFEX")
+
+
+def arca_servicios1_verify(
+    env: ArcaEnvironment, *, label: str = "servicios1"
+) -> ssl.SSLContext | bool:
+    """httpx ``verify`` for ARCA hosts on ``servicios1`` (prod weak DH).
+
+    Used by WSFEX and WSCDC (FAC-84). Homologación keeps defaults.
+    Never returns ``False``.
+    """
     if env != ArcaEnvironment.PROD:
         return True
     ctx = _prod_wsfex_ssl_context()
     logger.info(
-        "ARCA WSFEX TLS: SECLEVEL=1 (AFIP prod weak-DH workaround, FAC-81)"
+        "ARCA %s TLS: SECLEVEL=1 (AFIP prod weak-DH workaround, FAC-81)",
+        label,
     )
     return ctx

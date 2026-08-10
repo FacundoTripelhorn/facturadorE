@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import db, web
+from ..arca.wscdc import WscdcClient
 from ..arca.wsfex import WsfexClient
 from ..config import Config, load_config
 from ..profile import EnvironmentProfile, ProfileError
@@ -47,6 +48,7 @@ def create_app(
     config: Config | None = None,
     conn: sqlite3.Connection | None = None,
     wsfex: WsfexClient | None = None,
+    wscdc: WscdcClient | None = None,
     *,
     port: int | None = None,
     public_port: int | None = None,
@@ -82,6 +84,7 @@ def create_app(
         )
     conn = conn or db.connect(config.paths.db)
     wsfex = wsfex or WsfexClient(config)
+    wscdc = wscdc or WscdcClient(config)
     listen_port = resolve_listen_port(port)
     policy_ports = resolve_policy_ports(listen_port, public_port)
     # Sin callback: un perfil ya ready no dispara backup en cada arranque.
@@ -111,7 +114,7 @@ def create_app(
     app.state.profile = profile
     app.state.seed_backup = coordinator
     app.state.service = InvoiceService(
-        config, conn, wsfex, seed_backup=coordinator
+        config, conn, wsfex, seed_backup=coordinator, wscdc=wscdc
     )
     app.state.listen_port = listen_port
     app.state.policy_ports = policy_ports

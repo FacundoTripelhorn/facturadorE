@@ -1,12 +1,13 @@
 """Cliente WSAA: obtención y cache del Ticket de Acceso (TA).
 
 Flujo (design.md §1.2):
-  1. Armar LoginTicketRequest.xml (TRA) con service=wsfex y ventana amplia
-     de tiempos (gen -10 min / exp +10 min, checklist §2.1.1 punto 8).
+  1. Armar LoginTicketRequest.xml (TRA) con el ``service`` pedido (``wsfex``
+     para emisión, ``wscdc`` para constatación FAC-84) y ventana amplia de
+     tiempos (gen -10 min / exp +10 min, checklist §2.1.1 punto 8).
   2. Firmarlo como CMS/PKCS#7 con `cryptography` (sin subprocesos openssl).
   3. POST SOAP a LoginCms; la respuesta trae token + sign (~12 h de vida).
-  4. Cachear el TA en disco (sobrevive reinicios: ARCA rechaza pedir un TA
-     nuevo si ya hay uno vigente) y renovarlo solo al vencer.
+  4. Cachear el TA en disco por servicio (sobrevive reinicios: ARCA rechaza
+     pedir un TA nuevo si ya hay uno vigente) y renovarlo solo al vencer.
 
 Seguridad:
   - El TA recibido se valida antes de usarse: expirationTime parseado del
@@ -41,7 +42,10 @@ from ..constants import SOAP_ENV_NS
 
 logger = logging.getLogger(__name__)
 
-SERVICE = "wsfex"
+SERVICE_WSFEX = "wsfex"
+SERVICE_WSCDC = "wscdc"
+# Alias histórico: emisión WSFEX es el default del cliente.
+SERVICE = SERVICE_WSFEX
 
 # Ventana del TRA: tolera clock skew moderado (checklist punto 8).
 TRA_GENERATION_SLACK = dt.timedelta(minutes=10)
@@ -163,7 +167,12 @@ def _parse_datetime(raw: str, field_name: str) -> dt.datetime:
     return value
 
 
-def parse_login_response(body: bytes | str, environment: str) -> Ticket:
+def parse_login_response(
+    body: bytes | str,
+    environment: str,
+    *,
+    service: str = SERVICE,
+) -> Ticket:
     """Extrae y VALIDA el TA de la respuesta de LoginCms (checklist punto 2)."""
     root = ET.fromstring(body)
     ret = root.find(f".//{{{WSAA_NS}}}loginCmsReturn")
@@ -198,7 +207,7 @@ def parse_login_response(body: bytes | str, environment: str) -> Ticket:
         sign=sign,
         generation=generation,
         expiration=expiration,
-        service=SERVICE,
+        service=service,
         environment=environment,
     )
 
@@ -263,17 +272,32 @@ class TicketCache:
 
 
 class WsaaClient:
-    def __init__(self, config: Config, http: httpx.Client | None = None):
+    def __init__(
+        self,
+        config: Config,
+        http: httpx.Client | None = None,
+        *,
+        service: str = SERVICE,
+        cache_path: Path | None = None,
+    ):
         self.config = config
+        self.service = service
         # TLS verify queda en el default de httpx (activo) — checklist punto 5.
         self.http = http or httpx.Client(timeout=30.0)
         # Sin sufijo de ambiente en el nombre: el perfil YA es el ambiente
         # (FAC-25); load() igual valida service/environment del TA.
-        self.cache = TicketCache(config.paths.wsaa_ta_cache)
+        # Un TA por servicio WSAA: wsfex y wscdc no se comparten (FAC-84).
+        if cache_path is not None:
+            path = cache_path
+        elif service == SERVICE_WSCDC:
+            path = config.paths.wscdc_ta_cache
+        else:
+            path = config.paths.wsaa_ta_cache
+        self.cache = TicketCache(path)
 
     def get_ticket(self) -> Ticket:
         """TA cacheado si sigue vigente; si no, pide uno nuevo y lo persiste."""
-        cached = self.cache.load(self.config.env)
+        cached = self.cache.load(self.config.env, service=self.service)
         if cached is not None:
             logger.info("TA vigente reutilizado: %s", cached)
             return cached
@@ -283,7 +307,7 @@ class WsaaClient:
         return ticket
 
     def _request_new_ticket(self) -> Ticket:
-        tra = build_tra()
+        tra = build_tra(service=self.service)
         # Lectura bajo el mismo lock que store_certificate_pair: evita firmar
         # con cert nuevo + key vieja si hay una rotación en curso (FAC-36).
         cert_pem, key_pem = read_live_certificate_pair(self.config.paths)
@@ -310,4 +334,6 @@ class WsaaClient:
                 # faultstring de WSAA no contiene credenciales; es seguro mostrarlo.
                 raise WsaaError(f"WSAA fault [{code}]: {message}")
             raise WsaaError(f"WSAA HTTP {response.status_code}")
-        return parse_login_response(response.text, self.config.env)
+        return parse_login_response(
+            response.text, self.config.env, service=self.service
+        )

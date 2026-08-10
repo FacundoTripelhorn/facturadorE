@@ -150,9 +150,10 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 
 | What | Where |
 |------|-------|
-| WSAA: TRA, CMS sign, TA cache | `facturador/arca/wsaa.py` |
+| WSAA: TRA, CMS sign, TA cache (`wsfex` / `wscdc`) | `facturador/arca/wsaa.py` |
 | WSFEX: SOAP build/parse, `FEXAuthorize`, params | `facturador/arca/wsfex.py` |
-| Environment URLs (`homo` / `prod`) | `facturador/constants.py` (`WSAA_URLS`, `WSFEX_URLS`) |
+| WSCDC: `ComprobanteConstatar` (FAC-84, botón Constatar) | `facturador/arca/wscdc.py`, UI `/constatacion` |
+| Environment URLs (`homo` / `prod`) | `facturador/constants.py` (`WSAA_URLS`, `WSFEX_URLS`, `WSCDC_URLS`) |
 | Profile roots & runtime paths | `facturador/profile.py` (`EnvironmentProfile`, `ProfilePaths`) |
 | Boot: inject one environment, validate certs | `facturador/config.py` (`resolve_boot_profile`, `load_config`) |
 | Domain rules & checklist | `docs/design.md` §1–2 |
