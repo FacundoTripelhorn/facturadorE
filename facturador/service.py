@@ -634,20 +634,21 @@ class InvoiceService:
             raise DomainError(
                 "Doc. receptor: ingresar la CUIT país (solo números)"
             )
-        try:
-            req = ConstatacionRequest(
-                cuit_emisor=self.wscdc.cuit,
-                punto_venta=punto_venta,
-                cbte_tipo=CBTE_TIPO_FACTURA_E,
-                cbte_nro=cbte_nro,
-                fecha_cbte=fecha_cbte,
-                imp_total=imp_total,
-                cae=cae,
-                doc_tipo_receptor=str(TIPO_DOC_CUIT),
-                doc_nro_receptor=doc_nro_receptor,
-            )
-        except CertificateError as exc:
-            raise ArcaUnavailableError(f"WSCDC no disponible: {exc}") from exc
+        # Identidad fiscal ANTES de WSCDC (FAC-39): resolver sella el CUIT
+        # del perfil si esta es su primera operación fiscal, y después exige
+        # sello/cert consistentes. Leer el cert directo saltaría ese control.
+        cuit_emisor = int(self._resolve_fiscal_cuit())
+        req = ConstatacionRequest(
+            cuit_emisor=cuit_emisor,
+            punto_venta=punto_venta,
+            cbte_tipo=CBTE_TIPO_FACTURA_E,
+            cbte_nro=cbte_nro,
+            fecha_cbte=fecha_cbte,
+            imp_total=imp_total,
+            cae=cae,
+            doc_tipo_receptor=str(TIPO_DOC_CUIT),
+            doc_nro_receptor=doc_nro_receptor,
+        )
         return self._constatar(req)
 
     def _constatar(self, req: ConstatacionRequest) -> ConstatacionResult:

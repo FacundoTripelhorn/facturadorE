@@ -67,6 +67,7 @@ from ..schemas import (
 )
 from ..service import (
     ArcaUnavailableError,
+    ConflictError,
     DomainError,
     NotFoundError,
     ServiceError,
@@ -678,7 +679,13 @@ def _constatar_manual(
             doc_nro_receptor=doc_nro_receptor.strip(),
         )
     except (DomainError, ArcaUnavailableError, ServiceError) as exc:
-        return fail(str(exc), 422 if isinstance(exc, DomainError) else 503)
+        if isinstance(exc, ConflictError):
+            status = 409
+        elif isinstance(exc, DomainError):
+            status = 422
+        else:
+            status = 503
+        return fail(str(exc), status)
     return _pagina_constatacion(
         request, service, modo_manual=True, manual=manual, resultado=resultado
     )

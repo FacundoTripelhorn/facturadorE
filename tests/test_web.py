@@ -16,6 +16,7 @@ from facturador.api.localhost_policy import loopback_base_url
 from facturador.arca.wsfex import WsfexClient
 from facturador.config import Config
 from facturador.constants import ArcaEnvironment
+from facturador.fiscal_identity import get_sealed_fiscal_cuit
 from facturador.profile import EnvironmentProfile
 from facturador.settings import get_active_emisor_id
 from tests.arca_fake import FakeWsaa
@@ -367,6 +368,18 @@ def test_constatacion_manual_rechaza_importe_no_finito(api, arca):
         assert r.status_code == 422, valor
         assert "importe" in r.text.lower()
     assert arca.calls["ComprobanteConstatar"] == 0
+
+
+def test_constatacion_manual_sella_cuit_fiscal(api, arca):
+    """FAC-39 (Codex P2): la constatación manual puede ser la PRIMERA
+    operación fiscal del perfil — debe sellar el CUIT (igual que emitir)."""
+    assert get_sealed_fiscal_cuit(api.conn) is None
+
+    r = api.post("/ui/constatacion", data=with_csrf(api, _MANUAL_FORM))
+    assert r.status_code == 200
+    assert get_sealed_fiscal_cuit(api.conn) == TEST_CUIT
+    assert arca.last_constatar_req is not None
+    assert arca.last_constatar_req["CuitEmisor"] == TEST_CUIT
 
 
 def test_detalle_de_borrador_redirige_a_revision(api, arca):
