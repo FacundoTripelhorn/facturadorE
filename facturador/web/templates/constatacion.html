@@ -11,25 +11,69 @@
     </p>
 
     {% if not facturas %}
-    <p class="vacio">No hay facturas autorizadas para constatar.</p>
-    {% else %}
+    <p class="nota">
+      No hay facturas autorizadas en el registro local. Para un comprobante
+      emitido por fuera de la app (p.ej. Comprobantes en Línea u otro punto
+      de venta), completá los mismos datos del portal.
+    </p>
+    {% endif %}
     <form method="post" action="/ui/constatacion" id="form-constatar">
       {% include "_csrf_field.html" %}
-      <label for="invoice_id">Factura E autorizada</label>
-      <select name="invoice_id" id="invoice_id" required
-              onchange="window.location='/constatacion?invoice_id='+encodeURIComponent(this.value)">
+      <label for="fuente">Comprobante</label>
+      <select id="fuente"
+              onchange="if(this.value==='manual'){window.location='/constatacion?modo=manual'}else{window.location='/constatacion?invoice_id='+encodeURIComponent(this.value)}">
         {% for f in facturas %}
         <option value="{{ f['id'] }}"
-          {% if selected and selected['id'] == f['id'] %}selected{% endif %}>
+          {% if not modo_manual and selected and selected['id'] == f['id'] %}selected{% endif %}>
           {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
           · {{ f["cliente"] }}
           · CAE {{ f["cae"] }}
           · {{ f["imp_total"] }} {{ f["moneda_id"] }}
         </option>
         {% endfor %}
+        <option value="manual" {% if modo_manual %}selected{% endif %}>
+          Otro comprobante (externo)…
+        </option>
       </select>
 
-      {% if selected %}
+      {% if modo_manual %}
+      <div class="revisar-grid" style="margin-top:1.25rem">
+        <div>
+          <label for="punto_venta">Punto de venta</label>
+          <input type="number" name="punto_venta" id="punto_venta" min="1" required
+                 value="{{ manual.get('punto_venta', '') }}">
+        </div>
+        <div>
+          <label for="cbte_nro">Número</label>
+          <input type="number" name="cbte_nro" id="cbte_nro" min="1" required
+                 value="{{ manual.get('cbte_nro', '') }}">
+        </div>
+        <div>
+          <label for="fecha_cbte">Fecha</label>
+          <input type="date" name="fecha_cbte" id="fecha_cbte" required
+                 value="{{ manual.get('fecha_cbte', '') }}">
+        </div>
+        <div>
+          <label for="imp_total">Importe (moneda original)</label>
+          <input type="text" inputmode="decimal" name="imp_total" id="imp_total"
+                 required value="{{ manual.get('imp_total', '') }}">
+        </div>
+        <div>
+          <label for="cae">CAE</label>
+          <input type="text" inputmode="numeric" name="cae" id="cae" required
+                 minlength="14" maxlength="14" pattern="[0-9]{14}"
+                 value="{{ manual.get('cae', '') }}">
+        </div>
+        <div>
+          <label for="doc_nro_receptor">CUIT país del receptor</label>
+          <input type="text" inputmode="numeric" name="doc_nro_receptor"
+                 id="doc_nro_receptor" required
+                 value="{{ manual.get('doc_nro_receptor', '') }}">
+          <span class="nota">(CUIT país, no el tax ID extranjero)</span>
+        </div>
+      </div>
+      {% elif selected %}
+      <input type="hidden" name="invoice_id" value="{{ selected['id'] }}">
       <dl class="revisar-grid" style="margin-top:1.25rem">
         <div>
           <dt>CUIT emisor</dt>
@@ -69,7 +113,6 @@
         <span class="spinner" aria-hidden="true"></span>
       </button>
     </form>
-    {% endif %}
   </div>
 </section>
 

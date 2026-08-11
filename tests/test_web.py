@@ -19,7 +19,13 @@ from facturador.constants import ArcaEnvironment
 from facturador.profile import EnvironmentProfile
 from facturador.settings import get_active_emisor_id
 from tests.arca_fake import FakeWsaa
-from tests.conftest import install_test_cert_pair, seed_params, seed_settings, with_csrf
+from tests.conftest import (
+    TEST_CUIT,
+    install_test_cert_pair,
+    seed_params,
+    seed_settings,
+    with_csrf,
+)
 
 CLIENTE_FORM = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -266,6 +272,87 @@ def test_constatacion_html_outage_es_503_operador(
     assert outage.status_code == 503
     assert "No se pudo constatar" in outage.text
     assert "WSCDC" in outage.text
+
+
+# --- constatación manual: comprobante externo (grill FAC-84 #4b) ---
+
+_MANUAL_FORM = {
+    "punto_venta": "7",
+    "cbte_nro": "42",
+    "fecha_cbte": "2026-08-01",
+    "imp_total": "1500.00",
+    "cae": "76100000000001",
+    "doc_nro_receptor": "55000002002",
+}
+
+
+def test_constatacion_manual_comprobante_externo(api, arca):
+    """Constatar un CAE de un comprobante NO emitido por la app (p.ej.
+    Comprobantes en Línea u otro PV) tipeando los campos del portal."""
+    pagina = api.get("/constatacion")
+    assert pagina.status_code == 200
+    # Sin facturas locales el modo manual es la única vía.
+    assert 'name="cae"' in pagina.text
+    assert 'name="punto_venta"' in pagina.text
+    assert "Otro comprobante" in pagina.text
+
+    r = api.post("/ui/constatacion", data=with_csrf(api, _MANUAL_FORM))
+    assert r.status_code == 200
+    assert "CAE constatado" in r.text
+    assert arca.calls["ComprobanteConstatar"] == 1
+    req = arca.last_constatar_req
+    assert req is not None
+    assert req["CuitEmisor"] == TEST_CUIT
+    assert req["PtoVta"] == "7"
+    assert req["CbteNro"] == "42"
+    assert req["CbteFch"] == "20260801"  # date input ISO → AAAAMMDD
+    assert req["ImpTotal"] == "1500.00"
+    assert req["CodAutorizacion"] == "76100000000001"
+    assert req["CbteTipo"] == "19"
+    assert req["CbteModo"] == "CAE"
+    assert req["DocTipoReceptor"] == "80"
+    assert req["DocNroReceptor"] == "55000002002"
+
+
+def test_constatacion_modo_manual_con_registro_local(api, arca):
+    """Con facturas locales, el selector permite pasar al modo manual."""
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    _autorizar(api, invoice_id)
+
+    pagina = api.get("/constatacion?modo=manual")
+    assert pagina.status_code == 200
+    assert 'name="cae"' in pagina.text
+    assert "Otro comprobante" in pagina.text
+
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {**_MANUAL_FORM, "punto_venta": "9"}),
+    )
+    assert r.status_code == 200
+    assert "CAE constatado" in r.text
+    assert arca.last_constatar_req is not None
+    assert arca.last_constatar_req["PtoVta"] == "9"
+
+
+def test_constatacion_manual_valida_cae(api, arca):
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {**_MANUAL_FORM, "cae": "123"}),
+    )
+    assert r.status_code == 422
+    assert "14 dígitos" in r.text
+    assert arca.calls["ComprobanteConstatar"] == 0
+
+
+def test_constatacion_manual_rechaza_importe_no_numerico(api, arca):
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {**_MANUAL_FORM, "imp_total": "abc"}),
+    )
+    assert r.status_code == 422
+    assert "numéricos" in r.text
+    assert arca.calls["ComprobanteConstatar"] == 0
 
 
 def test_detalle_de_borrador_redirige_a_revision(api, arca):
