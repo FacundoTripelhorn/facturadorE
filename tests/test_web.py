@@ -355,6 +355,20 @@ def test_constatacion_manual_rechaza_importe_no_numerico(api, arca):
     assert arca.calls["ComprobanteConstatar"] == 0
 
 
+def test_constatacion_manual_rechaza_importe_no_finito(api, arca):
+    """Decimal("NaN")/Decimal("Infinity") parsean bien pero no son montos:
+    NaN rompería la comparación (InvalidOperation → 500) e Infinity llegaría
+    a WSCDC. Ambos deben ser 422 sin llamada a ARCA."""
+    for valor in ("NaN", "Infinity", "-Infinity"):
+        r = api.post(
+            "/ui/constatacion",
+            data=with_csrf(api, {**_MANUAL_FORM, "imp_total": valor}),
+        )
+        assert r.status_code == 422, valor
+        assert "importe" in r.text.lower()
+    assert arca.calls["ComprobanteConstatar"] == 0
+
+
 def test_detalle_de_borrador_redirige_a_revision(api, arca):
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)

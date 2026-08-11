@@ -624,8 +624,10 @@ class InvoiceService:
             dt.datetime.strptime(fecha_cbte, "%Y%m%d")
         except ValueError:
             raise DomainError("Fecha inválida: usar formato AAAAMMDD") from None
-        if imp_total <= 0:
-            raise DomainError("El importe debe ser mayor a cero")
+        if not imp_total.is_finite() or imp_total <= 0:
+            # NaN parsea como Decimal y las comparaciones de orden lanzan
+            # InvalidOperation (500); Infinity pasaría "> 0" y llegaría a WSCDC.
+            raise DomainError("El importe debe ser un número finito mayor a cero")
         if not (cae.isdigit() and len(cae) == 14):
             raise DomainError("El CAE debe tener 14 dígitos")
         if not doc_nro_receptor.isdigit():
