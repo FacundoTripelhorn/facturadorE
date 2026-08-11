@@ -138,7 +138,10 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
 3. Constatar el CAE desde el menú **«Constatación de CAE»** (botón
    **Constatar** — no corre solo tras autorizar). Usa WSCDC con los mismos
    campos del portal (para Factura E el doc. del receptor es **CUIT 80** =
-   `cuit_pais_cliente`). `FEXGetCMP` post-emisión sigue siendo la
+   `cuit_pais_cliente`). Para un comprobante **no emitido por la app** (p.ej.
+   Comprobantes en Línea u otro punto de venta), elegir **«Otro comprobante
+   (externo)…»** en el selector y tipear PV, número, fecha, importe, CAE y
+   CUIT país del receptor. `FEXGetCMP` post-emisión sigue siendo la
    reconciliación de authorize, no reemplaza esta verificación. Si WSCDC no
    está asociado o falla, el portal ARCA **"Constatación de Comprobantes"**
    sigue siendo el respaldo.

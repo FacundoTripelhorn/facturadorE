@@ -197,7 +197,12 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
    **WSCDC (FAC-84):** menú propio «Constatación de CAE» + botón **Constatar**
    (nunca auto tras `FEXAuthorize` / `FEXGetCMP`). Request con CUIT emisor,
    CAE, fecha, tipo 19, PV, nro, importe en moneda original, receptor tipo
-   **80** + `cuit_pais_cliente` (CUIT país, no el tax ID extranjero). TA WSAA
+   **80** + `cuit_pais_cliente` (CUIT país, no el tax ID extranjero). El
+   selector cubre dos modos (grill #4): comprobante del registro local
+   (prefill desde el snapshot) u **«Otro comprobante (externo)…»**, donde el
+   operador tipea los mismos campos del portal para una Factura E no emitida
+   por la app (p.ej. Comprobantes en Línea u otro PV; el CUIT emisor sale del
+   certificado del perfil). TA WSAA
    con `service=wscdc` y cache aparte de `wsfex`. Portal ARCA sigue como
    respaldo si el servicio no está asociado o no responde.
 7. **WSDL/cache desactualizado:** pyafipws documenta fallos por WSDL cacheado viejo (campos nuevos rechazados, ej. RG 5616). Al usar templates propios esto se transforma en: versionar los templates y tener contract tests contra homologación en CI que fallen ruidosamente si ARCA cambió el esquema.

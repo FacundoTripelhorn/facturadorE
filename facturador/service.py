@@ -24,7 +24,12 @@ import httpx
 
 from . import repo
 from .arca.wsaa import WsaaError
-from .arca.wscdc import ConstatacionResult, WscdcClient, WscdcError
+from .arca.wscdc import (
+    ConstatacionRequest,
+    ConstatacionResult,
+    WscdcClient,
+    WscdcError,
+)
 from .arca.wsfex import (
     CmpNotFoundError,
     CmpRecord,
@@ -37,6 +42,7 @@ from .config import Config
 from .constants import (
     CBTE_TIPO_FACTURA_E,
     PDF_RENDER_VERSION,
+    TIPO_DOC_CUIT,
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
     InvoiceSource,
@@ -588,6 +594,77 @@ class InvoiceService:
             req = WscdcClient.request_from_invoice_row(
                 inv, cuit_emisor=cuit_emisor
             )
+        except WscdcError as exc:
+            if exc.code == "local":
+                raise DomainError(exc.message) from exc
+            raise ArcaUnavailableError(f"WSCDC no disponible: {exc}") from exc
+        return self._constatar(req)
+
+    def constatar_cae_manual(
+        self,
+        *,
+        punto_venta: int,
+        cbte_nro: int,
+        fecha_cbte: str,
+        imp_total: Decimal,
+        cae: str,
+        doc_nro_receptor: str,
+    ) -> ConstatacionResult:
+        """Constatación WSCDC de un comprobante externo (FAC-84, grill #4b).
+
+        Para Facturas E NO emitidas por la app (p.ej. Comprobantes en Línea
+        u otro punto de venta): el operador tipea los mismos campos del
+        portal. El CUIT emisor sale del certificado del perfil (identidad
+        fiscal única, FAC-39); tipo 19, modo CAE y receptor CUIT (80) van
+        fijos por alcance del producto.
+        """
+        if punto_venta <= 0 or cbte_nro <= 0:
+            raise DomainError("Punto de venta y número deben ser positivos")
+        try:
+            dt.datetime.strptime(fecha_cbte, "%Y%m%d")
+        except ValueError:
+            raise DomainError("Fecha inválida: usar formato AAAAMMDD") from None
+        if not imp_total.is_finite() or imp_total <= 0:
+            # NaN parsea como Decimal y las comparaciones de orden lanzan
+            # InvalidOperation (500); Infinity pasaría "> 0" y llegaría a WSCDC.
+            raise DomainError("El importe debe ser un número finito mayor a cero")
+        # Formato ARCA ImpTotal: hasta 13 enteros y 2 decimales (manual WSCDC).
+        # Sin esta cota, Decimal("1e1000000000") pasaría los chequeos y
+        # format(x, "f") materializaría un string de ~1 GB (DoS del proceso).
+        # Ojo: normalize() aplica el contexto decimal (Emax=999999) y lanzaría
+        # Overflow con exponentes enormes; as_tuple/adjusted son context-free.
+        tup = imp_total.as_tuple()
+        exp = tup.exponent
+        ajustado = len(tup.digits) + exp - 1 if isinstance(exp, int) else 0
+        if ajustado > 12 or (isinstance(exp, int) and exp < -2):
+            raise DomainError(
+                "El importe excede el formato ARCA (hasta 13 enteros y 2 decimales)"
+            )
+        if not (cae.isdigit() and len(cae) == 14):
+            raise DomainError("El CAE debe tener 14 dígitos")
+        if not doc_nro_receptor.isdigit():
+            raise DomainError(
+                "Doc. receptor: ingresar la CUIT país (solo números)"
+            )
+        # Identidad fiscal ANTES de WSCDC (FAC-39): resolver sella el CUIT
+        # del perfil si esta es su primera operación fiscal, y después exige
+        # sello/cert consistentes. Leer el cert directo saltaría ese control.
+        cuit_emisor = int(self._resolve_fiscal_cuit())
+        req = ConstatacionRequest(
+            cuit_emisor=cuit_emisor,
+            punto_venta=punto_venta,
+            cbte_tipo=CBTE_TIPO_FACTURA_E,
+            cbte_nro=cbte_nro,
+            fecha_cbte=fecha_cbte,
+            imp_total=imp_total,
+            cae=cae,
+            doc_tipo_receptor=str(TIPO_DOC_CUIT),
+            doc_nro_receptor=doc_nro_receptor,
+        )
+        return self._constatar(req)
+
+    def _constatar(self, req: ConstatacionRequest) -> ConstatacionResult:
+        try:
             return self.wscdc.constatar(req)
         except WscdcError as exc:
             if exc.code == "local":
