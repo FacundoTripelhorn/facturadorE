@@ -370,6 +370,36 @@ def test_constatacion_manual_rechaza_importe_no_finito(api, arca):
     assert arca.calls["ComprobanteConstatar"] == 0
 
 
+@pytest.mark.parametrize(
+    "importe",
+    ["1e300", "1e1000000000", "12345678901234.00", "1.234"],
+)
+def test_constatacion_manual_rechaza_importe_fuera_de_formato_arca(
+    api, arca, importe
+):
+    """1e1000000000 pasaba todos los chequeos y format(x, "f") materializaba
+    un string de ~1 GB en el request SOAP (DoS local). El formato ARCA
+    ImpTotal (13 enteros + 2 decimales) los rechaza antes, sin renderizar."""
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {**_MANUAL_FORM, "imp_total": importe}),
+    )
+    assert r.status_code == 422
+    assert "13 enteros" in r.text
+    assert arca.calls["ComprobanteConstatar"] == 0
+
+
+def test_constatacion_manual_acepta_importes_limite(api, arca):
+    """Bordes válidos del formato: 13 enteros + 2 decimales exactos, y el
+    mínimo positivo 0.01. Los ceros finales no cuentan como decimales."""
+    for importe in ("9999999999999.99", "0.01", "100.10"):
+        r = api.post(
+            "/ui/constatacion",
+            data=with_csrf(api, {**_MANUAL_FORM, "imp_total": importe}),
+        )
+        assert r.status_code == 200, importe
+
+
 def test_constatacion_manual_sella_cuit_fiscal(api, arca):
     """FAC-39 (Codex P2): la constatación manual puede ser la PRIMERA
     operación fiscal del perfil — debe sellar el CUIT (igual que emitir)."""

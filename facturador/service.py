@@ -628,6 +628,18 @@ class InvoiceService:
             # NaN parsea como Decimal y las comparaciones de orden lanzan
             # InvalidOperation (500); Infinity pasaría "> 0" y llegaría a WSCDC.
             raise DomainError("El importe debe ser un número finito mayor a cero")
+        # Formato ARCA ImpTotal: hasta 13 enteros y 2 decimales (manual WSCDC).
+        # Sin esta cota, Decimal("1e1000000000") pasaría los chequeos y
+        # format(x, "f") materializaría un string de ~1 GB (DoS del proceso).
+        # Ojo: normalize() aplica el contexto decimal (Emax=999999) y lanzaría
+        # Overflow con exponentes enormes; as_tuple/adjusted son context-free.
+        tup = imp_total.as_tuple()
+        exp = tup.exponent
+        ajustado = len(tup.digits) + exp - 1 if isinstance(exp, int) else 0
+        if ajustado > 12 or (isinstance(exp, int) and exp < -2):
+            raise DomainError(
+                "El importe excede el formato ARCA (hasta 13 enteros y 2 decimales)"
+            )
         if not (cae.isdigit() and len(cae) == 14):
             raise DomainError("El CAE debe tener 14 dígitos")
         if not doc_nro_receptor.isdigit():
