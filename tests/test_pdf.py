@@ -2,26 +2,30 @@
 
 Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
 endpoint (200/409/404), cache local descartable en data/pdfs (FAC-53),
-escaping de datos hostiles, snapshot inmutable (FAC-10 / FAC-52) y
-despacho por ``pdf_render_version``.
+datos hostiles impresos literales, snapshot inmutable, despacho por
+``pdf_render_version`` y el motor fpdf2 de una sola página. El contenido
+se verifica extrayendo el texto del PDF real.
 """
 
 import base64
 import datetime as dt
+import io
 import json
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from pypdf import PdfReader
 
 from facturador import repo
 from facturador.constants import PDF_RENDER_VERSION
 from facturador.pdf import (
+    PdfLayoutError,
     get_or_render_invoice_pdf,
     invoice_pdf_cache_path,
     known_pdf_render_versions,
-    render_invoice_html,
+    render_invoice_pdf,
 )
 from facturador.pdf.qr import QR_BASE_URL, build_qr_payload, qr_url
 from facturador.pdf.registry import PDF_RENDERERS
@@ -37,6 +41,19 @@ CLIENTE = {
     "descripcion_default": "Servicios de desarrollo de software",
     "is_default": True,
 }
+
+
+def _texto(pdf: bytes) -> str:
+    """Texto del PDF con los espacios normalizados (una sola página)."""
+    reader = PdfReader(io.BytesIO(pdf))
+    assert len(reader.pages) == 1
+    return " ".join(reader.pages[0].extract_text().split())
+
+
+def _pdf_de(api, factura) -> bytes:
+    inv = repo.get_invoice(api.conn, factura["id"])
+    items = repo.get_invoice_items(api.conn, factura["id"])
+    return render_invoice_pdf(inv, items)
 
 
 def _factura_autorizada(api, **cliente_overrides):
@@ -101,28 +118,6 @@ def test_qr_exige_factura_con_cae(api, arca):
 # --- endpoint /invoices/:id/pdf ---
 
 
-def _playwright_chromium_disponible() -> bool:
-    """True si Playwright puede lanzar Chromium (browser instalado)."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return False
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            browser.close()
-    except Exception:
-        return False
-    return True
-
-
-@pytest.mark.skipif(
-    not _playwright_chromium_disponible(),
-    reason=(
-        "Playwright Chromium no instalado; "
-        "correr: uv run playwright install chromium"
-    ),
-)
 def test_pdf_de_factura_autorizada(api, arca, test_config):
     factura = _factura_autorizada(api)
 
@@ -145,24 +140,45 @@ def test_pdf_de_draft_es_conflicto(api, arca):
     assert "draft" in r.json()["detail"]
 
 
-def test_pdf_sin_chromium_responde_503_accionable(api, arca, monkeypatch):
-    """Chromium ausente: mensaje claro con hint de install, no 500 opaco."""
+def test_pdf_que_no_entra_en_una_pagina_es_409_accionable(api, arca):
+    """Sin multipágina: un comprobante demasiado largo falla en claro."""
     factura = _factura_autorizada(api)
-
-    def boom(*_args, **_kwargs):
-        raise RuntimeError(
-            "No se pudo generar el PDF: falta Chromium de Playwright. "
-            "Instalá el browser con: uv run playwright install chromium "
-            "(en Linux: uv run playwright install --with-deps chromium)"
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoice_items SET pro_ds = ? WHERE invoice_id = ?",
+            ("Servicio muy detallado " * 400, factura["id"]),
         )
 
-    monkeypatch.setattr(
-        "facturador.api.invoices.get_or_render_invoice_pdf", boom
-    )
     r = api.get(f"/invoices/{factura['id']}/pdf")
-    assert r.status_code == 503
-    assert "Chromium" in r.json()["detail"]
-    assert "playwright install chromium" in r.json()["detail"]
+
+    assert r.status_code == 409
+    assert "no entra en una página A4" in r.json()["detail"]
+
+
+def test_layout_error_es_value_error():
+    """La ruta mapea ValueError → 409; PdfLayoutError tiene que caer ahí."""
+    assert issubclass(PdfLayoutError, ValueError)
+
+
+def test_observaciones_largas_tambien_hacen_overflow(api, arca):
+    factura = _factura_autorizada(api)
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET obs = ? WHERE id = ?",
+            ("Observación extensa. " * 600, factura["id"]),
+        )
+    with pytest.raises(PdfLayoutError, match="no entra en una página A4"):
+        _pdf_de(api, factura)
+
+
+def test_observaciones_se_imprimen(api, arca):
+    factura = _factura_autorizada(api)
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET obs = ? WHERE id = ?",
+            ("Pago en dos cuotas", factura["id"]),
+        )
+    assert "Observaciones: Pago en dos cuotas" in _texto(_pdf_de(api, factura))
 
 
 def test_pdf_inexistente_es_404(api):
@@ -389,8 +405,8 @@ def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
     assert "umed-mutada" not in item["pro_umed_ds"]
 
 
-def test_html_usa_solo_snapshot_sin_lookups_externos(api, arca):
-    """FAC-52: render_invoice_html(inv, items) sin kwargs de params/emisor."""
+def test_pdf_usa_solo_snapshot_sin_lookups_externos(api, arca):
+    """render_invoice_pdf(inv, items) sin kwargs de params/emisor."""
     factura = _factura_autorizada(api)
     # Envenenar el cache: si el render lo leyera, el HTML saldría mutado.
     repo.replace_params(
@@ -399,73 +415,101 @@ def test_html_usa_solo_snapshot_sin_lookups_externos(api, arca):
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items)
+    texto = _texto(render_invoice_pdf(inv, items))
 
-    assert "URUGUAY" in html
-    assert "XX-MUTADO" not in html
-    assert "URUGUAY - Persona Juridica" in html
-    assert "Dolar Estadounidense" in html
-    assert "U. Medida: unidades" in html
-
-
-# --- contenido y escaping del HTML ---
+    assert "URUGUAY" in texto
+    assert "XX-MUTADO" not in texto
+    assert "URUGUAY - Persona Juridica" in texto
+    assert "Dolar Estadounidense" in texto
+    assert "U. Medida: unidades" in texto
 
 
-def test_html_contiene_los_datos_del_comprobante(api, arca):
+# --- contenido del PDF y datos hostiles ---
+
+
+def test_pdf_contiene_los_datos_del_comprobante(api, arca):
     # Los datos del emisor y las descripciones salen del snapshot (FAC-10/52).
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items)
+    pdf = render_invoice_pdf(inv, items)
+    texto = _texto(pdf)
 
-    assert "MI EMPRESA S.R.L." in html
+    assert "MI EMPRESA S.R.L." in texto
     # IIBB sale literal de la config ("Exento" en el comprobante real),
     # nunca el CUIT como reemplazo.
-    assert "Exento" in html
-    assert "01/08/2020" in html
-    assert "IVA Responsable Inscripto" in html
-    assert "CLIENTE URUGUAY S.A." in html
+    assert "Ingresos Brutos: Exento" in texto
+    assert "Fecha de Inicio de Actividades: 01/08/2020" in texto
+    assert "Condición frente al IVA: IVA Responsable Inscripto" in texto
+    assert f"CUIT: {TEST_CUIT}" in texto
+    assert "Señor(es): CLIENTE URUGUAY S.A." in texto
+    assert "Domicilio: Av. Siempreviva 123, Montevideo" in texto
+    assert "ID Impositivo: RUT 219999830019" in texto
     # Paridad con el comprobante real de Comprobantes en Línea:
-    assert "Destino del Comprobante:</b> URUGUAY" in html
-    assert "(URUGUAY - Persona Juridica)" in html         # CUIT País con descripción
-    assert "USD - Dolar Estadounidense" in html           # divisa con descripción
-    assert "Compr. Nro:</b> 00001-00000001" in html       # rótulo real, con la "r"
+    assert "Destino del Comprobante: URUGUAY" in texto
+    assert "(URUGUAY - Persona Juridica)" in texto        # CUIT País con descripción
+    assert "Divisa: USD - Dolar Estadounidense" in texto  # divisa con descripción
+    assert "Compr. Nro: 00001-00000001" in texto          # rótulo real, con la "r"
+    assert "Forma de Pago: WIRE TRANSFER" in texto
+    assert "Incoterms:" in texto
     # Descripción con el código adelante, como imprime Comprobantes en Línea.
-    assert "0001 - Servicios de desarrollo de software" in html
+    assert "0001 - Servicios de desarrollo de software" in texto
     # U. Medida no es columna propia: va como sub-línea bajo la cantidad.
-    assert "U. Medida: unidades" in html
-    assert "<th>U. Medida</th>" not in html
-    assert "1500,00" in html                              # importes con coma, 2 dec
-    assert "1,000000" in html                             # cantidad con 6 decimales
-    assert "1500,000000" in html                          # precio unit. con 6 dec
-    assert "1145.569000" in html                          # cotización: punto, 6 dec
-    assert "IVA EXENTO OPERACIÓN DE EXPORTACIÓN" in html
-    assert "Comprobante Autorizado" in html
-    assert "76100000000001" in html                       # CAE
-    assert "data:image/png;base64," in html               # QR incrustado
-    assert "SIN VALOR FISCAL" in html                     # marca de homologación
+    assert "U. Medida: unidades" in texto
+    assert "1500,00" in texto                             # importes con coma, 2 dec
+    assert "1,000000" in texto                            # cantidad con 6 decimales
+    assert "1500,000000" in texto                         # precio unit. con 6 dec
+    assert "Tipo de Cambio: 1145.569000" in texto         # cotización: punto, 6 dec
+    assert "Importe Total: USD 1500,00" in texto
+    assert "IVA EXENTO OPERACIÓN DE EXPORTACIÓN" in texto
+    assert "FACTURA DE EXPORTACIÓN" in texto
+    assert "COD. 19" in texto
+    assert "Comprobante Autorizado" in texto
+    assert "CAE N°: 76100000000001" in texto
+    assert "Fecha de Vto. de CAE:" in texto
+    assert "SIN VALOR FISCAL" in texto                    # marca de homologación
+    # QR RG 4892 incrustado como imagen.
+    assert len(PdfReader(io.BytesIO(pdf)).pages[0].images) == 1
 
 
-def test_datos_hostiles_quedan_escapados_en_el_html(api, arca):
-    factura = _factura_autorizada(
-        api, razon_social='PYME <script>alert(1)</script> & "CO"'
-    )
-    inv = repo.get_invoice(api.conn, factura["id"])
-    items = repo.get_invoice_items(api.conn, factura["id"])
-
-    html = render_invoice_html(inv, items)
-
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
-
-
-def test_datos_hostiles_del_emisor_quedan_escapados_en_el_html(api, arca):
-    """Los datos del emisor ahora también son texto libre (vienen de la DB
-    vía la UI): mismo tratamiento que los del cliente (checklist §2.1.1
-    punto 4 aplicado al HTML)."""
+def test_pdf_de_produccion_no_lleva_marca_de_homologacion(api, arca):
     factura = _factura_autorizada(api)
-    inv = repo.get_invoice(api.conn, factura["id"])
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET environment = 'prod' WHERE id = ?",
+            (factura["id"],),
+        )
+    assert "SIN VALOR FISCAL" not in _texto(_pdf_de(api, factura))
+
+
+def test_datos_hostiles_se_imprimen_literales(api, arca):
+    """fpdf2 no interpreta markup: el texto hostil sale tal cual, sin
+    ejecutarse ni formatearse (checklist §2.1.1 punto 4)."""
+    factura = _factura_autorizada(
+        api, razon_social='PYME <script>alert(1)</script> & "CO" **negrita**'
+    )
+
+    texto = _texto(_pdf_de(api, factura))
+
+    assert 'PYME <script>alert(1)</script> & "CO" **negrita**' in texto
+
+
+def test_caracteres_fuera_de_latin1_se_imprimen(api, arca):
+    """La fuente embebida (Liberation Sans) cubre UTF-8 más allá de Latin-1."""
+    factura = _factura_autorizada(
+        api, razon_social="Łódź Spółka — Žilina s.r.o. €"
+    )
+
+    texto = _texto(_pdf_de(api, factura))
+
+    assert "Łódź Spółka — Žilina s.r.o. €" in texto
+
+
+def test_datos_hostiles_del_emisor_se_imprimen_literales(api, arca):
+    """Los datos del emisor también son texto libre (vienen de la DB vía la
+    UI): mismo tratamiento que los del cliente."""
+    factura = _factura_autorizada(api)
     # Inyectar texto hostil en el snapshot de la fila (fuente real del PDF).
     with api.conn:
         api.conn.execute(
@@ -477,14 +521,11 @@ def test_datos_hostiles_del_emisor_quedan_escapados_en_el_html(api, arca):
                 factura["id"],
             ),
         )
-    inv = repo.get_invoice(api.conn, factura["id"])
-    items = repo.get_invoice_items(api.conn, factura["id"])
 
-    html = render_invoice_html(inv, items)
+    texto = _texto(_pdf_de(api, factura))
 
-    assert "<img src=x" not in html
-    assert "&lt;img src=x" in html
-    assert "<b>Negrita</b>" not in html
+    assert '<img src=x onerror=alert(1)> & "SA"' in texto
+    assert "Av. <b>Negrita</b> 1" in texto
 
 
 def test_baseline_incluye_snapshot_de_render(tmp_path):
@@ -534,7 +575,7 @@ def test_version_desconocida_falla_en_claro(api, arca):
     items = repo.get_invoice_items(api.conn, factura["id"])
 
     with pytest.raises(ValueError, match="pdf_render_version=999") as exc:
-        render_invoice_html(inv, items)
+        render_invoice_pdf(inv, items)
     assert "versiones conocidas: 1" in str(exc.value)
 
     r = api.get(f"/invoices/{factura['id']}/pdf")
@@ -683,6 +724,71 @@ def test_cache_write_fallido_no_deja_pdf_parcial(
 
     assert not cache.exists()
     assert list(test_config.paths.pdf_dir.glob(".*.tmp")) == []
+
+
+def test_renders_concurrentes_del_mismo_comprobante_renderizan_una_vez(
+    api, arca, test_config, monkeypatch
+):
+    """Dos pedidos en frío a la vez del mismo comprobante → 1 render."""
+    import threading
+
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+
+    calls = {"n": 0}
+    rendering = threading.Event()
+    release = threading.Event()
+
+    def slow_render(_inv, _items):
+        calls["n"] += 1
+        rendering.set()
+        assert release.wait(timeout=5)
+        return b"%PDF-una-vez"
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", slow_render)
+
+    results: list[bytes] = []
+
+    def pedir() -> None:
+        results.append(
+            get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+        )
+
+    primero = threading.Thread(target=pedir)
+    primero.start()
+    assert rendering.wait(timeout=5)
+    segundo = threading.Thread(target=pedir)
+    segundo.start()
+    release.set()
+    primero.join(timeout=5)
+    segundo.join(timeout=5)
+
+    assert calls["n"] == 1
+    assert results == [b"%PDF-una-vez", b"%PDF-una-vez"]
+
+
+def test_render_fallido_libera_el_lock_y_reintenta(
+    api, arca, test_config, monkeypatch
+):
+    """Si el render falla, el próximo pedido vuelve a intentar."""
+    factura = _factura_autorizada(api)
+    inv = repo.get_invoice(api.conn, factura["id"])
+    assert inv is not None
+
+    def boom(_inv, _items):
+        raise RuntimeError("el render falló")
+
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", boom)
+    with pytest.raises(RuntimeError, match="el render falló"):
+        get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+
+    monkeypatch.setattr(
+        "facturador.pdf.render.render_invoice_pdf",
+        lambda _inv, _items: b"%PDF-reintento",
+    )
+    pdf = get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
+    assert pdf == b"%PDF-reintento"
 
 
 def test_cache_key_incluye_cbte_tipo(tmp_path, monkeypatch):

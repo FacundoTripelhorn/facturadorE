@@ -150,33 +150,21 @@ Open `/setup` (or follow the redirect from `/`) and finish the pending step.
 
 ---
 
-## PDF download fails when Chromium is missing (Playwright)
+## PDF returns 409 "no entra en una página A4"
 
-**Symptom:** `GET /invoices/{id}/pdf` returns **503** mentioning Chromium /
-Playwright / `playwright install chromium`. Invoice authorize and the rest of
-the app still work.
+**Symptom:** `GET /invoices/{id}/pdf` returns **409** saying the invoice does
+not fit on one A4 page. Authorize succeeded and the CAE is valid.
 
-**Expected (FAC-82).** PDF render uses headless Chromium via Playwright, not
-WeasyPrint/GTK. The Python package alone is not enough: the browser binary
-must be installed once per machine/venv. Docker installs it in the image
-build; the native launcher expects `uv run playwright install chromium` after
-`uv sync`. On native Linux hosts that lack Chromium OS libraries, use
-`--with-deps` so Playwright installs those system packages too.
+**Expected.** The PDF is drawn with fpdf2 (pure Python, no browser)
+and v1 is deliberately **single-page**: when items, descriptions or
+observaciones are too long, `PdfLayoutError` is raised instead of clipping or
+splitting the comprobante. Volume is ~1 short invoice/week, so multi-page was
+scoped out.
 
-**Fix:**
-
-```bash
-uv run playwright install chromium
-# Linux (missing OS libs for Chromium):
-uv run playwright install --with-deps chromium
-```
-
-Then retry the PDF download (cache is optional; regenerate from the invoice
-snapshot). FAC-69 decided to change the PDF engine rather than ship GTK/MSYS2
-for WeasyPrint; that decision is implemented by FAC-82.
-
-**Do not** treat authorize success + PDF failure as a broken CAE/snapshot, and
-do not install GTK for WeasyPrint — that stack is gone.
+**Do not** treat this as a broken CAE/snapshot, and do not reintroduce
+Playwright/Chromium or WeasyPrint to "fix" it: the engine moved from
+WeasyPrint to Chromium to fpdf2 on purpose. Multi-page
+support, if ever needed, is a new scoped change to the v1 renderer.
 
 ---
 

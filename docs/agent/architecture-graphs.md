@@ -40,7 +40,7 @@ flowchart TB
     WEB["web/<br/>Jinja + HTMX + badge"]
     SVC["service.py<br/>InvoiceService"]
     REPO["repo/<br/>SQLite queries"]
-    PDF["pdf/<br/>Playwright + QR"]
+    PDF["pdf/<br/>fpdf2 + QR"]
     ARCA["arca/<br/>WsaaClient + WsfexClient + WscdcClient"]
   end
 

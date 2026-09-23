@@ -14,7 +14,7 @@ Qué incluye:
   reconciliación ante timeouts.
 - **Frontend web** (Jinja2 + HTMX) servido por la misma app: form precargado con
   el cliente habitual, revisión antes de enviar, listado y detalle read-only.
-- **PDF del comprobante** con QR según RG 4892 (Playwright Chromium).
+- **PDF del comprobante** con QR según RG 4892 (fpdf2, Python puro, sin browser).
 - **SQLite** como única fuente de verdad local; sin servicios externos.
 - **Empaquetado Docker** (misma imagen para Windows y macOS) con el puerto
   publicado solo en `127.0.0.1`, y launchers de doble click.
@@ -26,13 +26,9 @@ Qué incluye:
 
 ## Requisitos
 
-- **Docker Desktop** (runtime recomendado; trae Chromium en la imagen), o bien
-  **Python ≥ 3.12** + [uv](https://docs.astral.sh/uv/) para correr sin Docker —
-  en ese caso, tras `uv sync`, instalá Chromium una vez con
-  `uv run playwright install chromium` (en Linux, si faltan librerías del
-  sistema: `uv run playwright install --with-deps chromium`). Sin el browser
-  el resto de la app funciona igual; solo la descarga del PDF falla (503 con
-  hint de install).
+- **Docker Desktop** (runtime recomendado), o bien **Python ≥ 3.12** +
+  [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
+  nada más que `uv sync`: se genera con fpdf2 en Python puro.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.

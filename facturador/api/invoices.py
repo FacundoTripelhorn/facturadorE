@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Query, Response
 
 from .. import repo
 from ..constants import CBTE_TIPO_FACTURA_E, InvoiceStatus
@@ -87,17 +87,16 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
             f"(estado actual: {inv['status']})"
         )
     items = repo.get_invoice_items(service.conn, invoice_id)
-    # FAC-52/53: render solo desde snapshot; cache local opcional bajo
-    # pdf_dir (descartable; regenera si falta).
+    # Render solo desde snapshot; cache local opcional bajo pdf_dir
+    # (descartable; regenera si falta). ValueError cubre snapshot
+    # incompleto, versión desconocida y PdfLayoutError (no entra en una
+    # página A4).
     try:
         pdf = get_or_render_invoice_pdf(
             inv, items, service.config.paths.pdf_dir
         )
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
-    except RuntimeError as exc:
-        # Chromium de Playwright ausente o fallo de launch: 503 accionable.
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
     filename = invoice_pdf_filename(inv)
     return Response(
         content=pdf,
