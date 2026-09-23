@@ -1,0 +1,66 @@
+{# Descarga del PDF con verificación previa: antes de abrir el diálogo de
+   guardado se pide el PDF; si la API responde con error (p.ej. el
+   comprobante no entra en una página), el mensaje se muestra junto al link
+   en lugar de guardar la respuesta de error como archivo. Sin JavaScript el
+   link sigue descargando directo. Incluir una vez por página. #}
+<style>
+  .error-descarga-pdf {
+    display: block; min-width: 16rem; color: var(--error);
+    font-size: .82rem; font-weight: 600;
+  }
+</style>
+<script>
+(function () {
+  if (window.__descargaPdfLista) { return; }
+  window.__descargaPdfLista = true;
+
+  function mensajeDeError(r) {
+    return r.json()
+      .then(function (body) { return body.detail || r.statusText; })
+      .catch(function () { return "No se pudo generar el PDF (" + r.status + ")."; });
+  }
+
+  function mostrarError(link, mensaje) {
+    var aviso = link.nextElementSibling;
+    if (!aviso || !aviso.classList.contains("error-descarga-pdf")) {
+      aviso = document.createElement("span");
+      aviso.className = "error-descarga-pdf";
+      aviso.setAttribute("role", "alert");
+      link.insertAdjacentElement("afterend", aviso);
+    }
+    aviso.textContent = mensaje;
+  }
+
+  function limpiarError(link) {
+    var aviso = link.nextElementSibling;
+    if (aviso && aviso.classList.contains("error-descarga-pdf")) { aviso.remove(); }
+  }
+
+  document.addEventListener("click", function (ev) {
+    var link = ev.target.closest("a[data-descarga-pdf]");
+    if (!link) { return; }
+    ev.preventDefault();
+    if (link.getAttribute("aria-busy") === "true") { return; }
+    link.setAttribute("aria-busy", "true");
+    limpiarError(link);
+
+    fetch(link.href, { cache: "no-store" })
+      .then(function (r) { return r.ok ? null : mensajeDeError(r); })
+      .then(function (mensaje) {
+        if (mensaje !== null) { mostrarError(link, mensaje); return; }
+        // El PDF ya está generado y en cache: la descarga real es inmediata.
+        // Un link temporal sin data-descarga-pdf no vuelve a pasar por acá.
+        var real = document.createElement("a");
+        real.href = link.href;
+        real.setAttribute("download", "");
+        document.body.appendChild(real);
+        real.click();
+        real.remove();
+      })
+      .catch(function () {
+        mostrarError(link, "No se pudo contactar a la app para generar el PDF.");
+      })
+      .finally(function () { link.removeAttribute("aria-busy"); });
+  });
+})();
+</script>

@@ -9,7 +9,7 @@
     (vence {{ f["cae_fch_vto"] | fecha }})
     <p class="acciones-pdf">
       <button type="button" id="ver-pdf">Ver PDF</button>
-      <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download>Descargar PDF</a>
+      <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download data-descarga-pdf>Descargar PDF</a>
     </p>
   </div>
 </div>
@@ -117,6 +117,7 @@
   modal.addEventListener("close", function () { visor.removeAttribute("src"); });
 })();
 </script>
+{% include "_descarga_pdf.html" %}
 {% else %}
 <div class="panel error">
   <div>

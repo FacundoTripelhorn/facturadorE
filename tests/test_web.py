@@ -183,7 +183,11 @@ def test_detalle_autorizado_ofrece_ver_y_descargar_el_pdf_sin_salir_de_la_app(
 
     assert 'id="ver-pdf"' in html
     assert '<dialog id="modal-pdf"' in html
-    assert f'href="/invoices/{invoice_id}/pdf?descargar=1" download' in html
+    assert (
+        f'href="/invoices/{invoice_id}/pdf?descargar=1" download data-descarga-pdf'
+        in html
+    )
+    assert "__descargaPdfLista" in html  # verificación previa a la descarga
     assert f'var pdfUrl = "/invoices/{invoice_id}/pdf";' in html
     assert 'target="_blank"' not in html
 
@@ -207,7 +211,11 @@ def test_listado_descarga_el_pdf_directo(api, arca):
 
     html = api.get("/comprobantes").text
 
-    assert f'href="/invoices/{invoice_id}/pdf?descargar=1" download' in html
+    assert (
+        f'href="/invoices/{invoice_id}/pdf?descargar=1" download data-descarga-pdf'
+        in html
+    )
+    assert "__descargaPdfLista" in html  # verificación previa a la descarga
     assert 'target="_blank"' not in html
 
 
