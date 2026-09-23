@@ -48,7 +48,7 @@ finishing.
 | CSRF browser forms | `facturador/api/csrf.py`, `facturador/web/` | `uv run pytest tests/test_csrf.py tests/test_web.py` |
 | ARCA clients (WSAA / WSFEX) | `facturador/arca/` | `uv run pytest tests/test_wsaa.py tests/test_wsfex.py` |
 | HTMX / HTML UI | `facturador/web/` | `uv run pytest tests/test_web.py` |
-| PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (needs `uv run playwright install chromium`, or `--with-deps` on Linux; CI installs it) |
+| PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (fpdf2, pure Python; nothing to install beyond `uv sync`) |
 | Row ↔ SOAP mapping | `facturador/mappers.py`, `facturador/constants.py` | `uv run pytest tests/test_mappers.py tests/test_constants.py` |
 | Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |
 | Setup state / onboarding guard | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py`, `facturador/api/app.py` | `uv run pytest tests/test_setup.py tests/test_config.py` |
@@ -126,7 +126,7 @@ check that matters for the task — not only failures.
 | **Passed** | Command ran; exit code 0 | `ruff`, `mypy`, `pytest`, `docker build`, manual check succeeded |
 | **Failed** | Command ran; errors found | Include the command and a one-line summary of the failure |
 | **Not run** | Deliberately omitted; no blocker | Docs-only change, out of scope, or full suite deferred with reason |
-| **Skipped** | Would run but could not | Missing Playwright Chromium, no profile certs, no homologación cert |
+| **Skipped** | Would run but could not | No profile certs, no homologación cert |
 | **Blocked** | External constraint prevents the check | Wrong repo access, CI secret unavailable, network policy |
 
 For **Skipped** or **Blocked**, always add **why** and **residual risk** (what

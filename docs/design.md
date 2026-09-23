@@ -53,7 +53,7 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
 
-**Layout impreso del comprobante real** (replicado en `facturador/pdf/invoice.html`; posiciones verificadas contra el PDF de Comprobantes en Línea):
+**Layout impreso del comprobante real** (replicado en `facturador/pdf/render.py`, renderer v1 con fpdf2; posiciones verificadas contra el PDF de Comprobantes en Línea):
 
 - **Cabecera** partida al medio por la caja `E / COD. 19`. Izquierda: razón social en grande y los rótulos `Razón Social:`, `Domicilio Comercial:`, `Condición frente al IVA:`. Derecha: `FACTURA DE EXPORTACIÓN`, `Compr. Nro:` (con "r", número completo `PPPPP-NNNNNNNN`), `Fecha de Emisión:`, `CUIT:`, `Ingresos Brutos:` (texto literal de la condición, p.ej. "Exento" — nunca el CUIT como reemplazo), `Fecha de Inicio de Actividades:` (DD/MM/AAAA) y la leyenda `IVA EXENTO OPERACIÓN DE EXPORTACIÓN` cerrando la columna. La leyenda NO es una banda centrada después de los ítems.
 - **Receptor**: `Señor(es):` y `Domicilio:` comparten fila; `CUIT País:` (con la descripción del cache de params entre paréntesis) e `ID Impositivo:` a línea completa debajo.
@@ -155,9 +155,9 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
                                    │
                               ┌────▼─────┐   ┌──────────────┐
                               │ SQLite   │   │ PDF renderer │
-                              │ (Postgres│   │ (Playwright  │
-                              │ si crece)│   │  Chromium +  │
-                              │          │   │  QR RG4892)  │
+                              │ (Postgres│   │ (fpdf2 +     │
+                              │ si crece)│   │  QR RG4892)  │
+                              │          │   │              │
                               └──────────┘   └──────────────┘
 ```
 
@@ -166,10 +166,11 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
 - **API:** FastAPI + Pydantic (validación de dominio) + SQLite. Un solo proceso, sin colas ni workers: el volumen es ~1 factura/semana.
 - **Cliente ARCA:** implementación propia (`ArcaClient`) con `httpx` y XML SOAP armado con templates (los requests de WSFEX son pocos y estables; no generar clientes desde el WSDL). Alternativa aceptable si se traba: `zeep` como cliente SOAP dinámico.
 - **Firma CMS (WSAA):** librería `cryptography` → `pkcs7.PKCS7SignatureBuilder` (firma nativa, sin subprocesos de openssl).
-- **PDF:** Playwright Chromium headless (HTML→PDF; FAC-82, reemplaza WeasyPrint)
-  + `qrcode` para el QR RG 4892. Solo HTML local de confianza (`set_content`);
-  sin Pango/GTK. Tras instalar deps: `playwright install chromium` (en Linux,
-  si faltan libs del sistema: `playwright install --with-deps chromium`).
+- **PDF:** `fpdf2` (Python puro, sin browser ni subprocesos; FAC-88 reemplaza a
+  Playwright Chromium de FAC-82, que a su vez reemplazó a WeasyPrint) + `qrcode`
+  para el QR RG 4892. El layout v1 se dibuja en código (`facturador/pdf/render.py`)
+  con Liberation Sans embebida (SIL OFL, UTF-8). Una sola página A4: si el
+  contenido no entra, `PdfLayoutError` (409) en lugar de recortar.
 - **Frontend:** Jinja2 + HTMX servido por la misma app FastAPI. Cero build tooling de JS; si a futuro se quiere SPA, la API JSON ya existe.
 - **DB:** SQLite alcanza incluso más allá del spike dado el volumen; migrar a Postgres solo si aparece multiusuario real. La app es el único registro y fuente de verdad local; no se sincroniza con herramientas externas. El esquema (siempre bajo un perfil) se versiona con migraciones transaccionales (`facturador.migrations`, FAC-43): al conectar se aplica lo pendiente, un fallo hace rollback y bloquea el arranque, y cada conexión habilita `PRAGMA foreign_keys=ON`. La baseline es el esquema de perfiles aislados.
 - **Secretos:** cert + key nunca en el repo. Variables de entorno o archivo montado con permisos 400; la key privada es equivalente a la firma fiscal de la empresa.

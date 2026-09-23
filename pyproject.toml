@@ -10,12 +10,12 @@ dependencies = [
     "python-dotenv>=1.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
-    "playwright>=1.49,<2",
     "qrcode[pil]>=8.2",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
     "boto3>=1.35",
     "pywebview>=6.2.1",
+    "fpdf2>=2.8",
 ]
 
 [dependency-groups]
@@ -23,6 +23,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.8",
     "mypy>=1.13",
+    "pypdf>=5",
 ]
 
 [tool.pytest.ini_options]
@@ -52,8 +53,6 @@ no_implicit_optional = true
 
 [[tool.mypy.overrides]]
 module = [
-    "playwright",
-    "playwright.*",
     "qrcode",
     "boto3",
     "boto3.*",

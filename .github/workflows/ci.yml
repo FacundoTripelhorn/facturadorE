@@ -29,10 +29,6 @@ jobs:
           age --version
           age-keygen --version
       - run: uv sync --frozen
-      # Chromium de Playwright (FAC-82): el test real del PDF corre acá.
-      # ``--with-deps`` instala libs de sistema del browser en el runner.
-      - name: Instalar Chromium (Playwright)
-        run: uv run playwright install --with-deps chromium
       - run: uv run ruff check .
       - run: uv run mypy
       - run: uv run pytest -q

@@ -3,11 +3,9 @@
 # el chequeo de arranque se resuelven una sola vez acá adentro (Linux).
 FROM python:3.12-slim
 
-# Chromium de Playwright (FAC-82) + fuentes + curl (HEALTHCHECK).
-# ``playwright install --with-deps`` trae las libs de sistema del browser;
-# no hace falta Pango/GTK (WeasyPrint ya no se usa).
+# curl para el HEALTHCHECK. El PDF (FAC-88) es fpdf2 en Python puro con la
+# fuente embebida en el paquete: no hacen falta browser ni fuentes del sistema.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        fonts-dejavu-core \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -15,8 +13,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY facturador/ facturador/
-RUN pip install --no-cache-dir . \
-    && playwright install --with-deps chromium
+RUN pip install --no-cache-dir .
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

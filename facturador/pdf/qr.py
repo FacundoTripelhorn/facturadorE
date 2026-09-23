@@ -53,10 +53,9 @@ def qr_url(payload: dict) -> str:
     return f"{QR_BASE_URL}?p={encoded}"
 
 
-def qr_png_data_uri(url: str) -> str:
-    """PNG del QR como data URI, para incrustar en el HTML del PDF."""
+def qr_png(url: str) -> bytes:
+    """PNG del QR, para incrustar en el PDF (FAC-88: fpdf2)."""
     image = qrcode.make(url, box_size=6, border=2)
     buffer = io.BytesIO()
     image.save(buffer)  # PilImage emite PNG por defecto
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return buffer.getvalue()
