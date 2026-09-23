@@ -7,9 +7,118 @@
     <span class="cae-grande num">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} autorizada</span><br>
     CAE <span class="num">{{ f["cae"] }}</span>
     (vence {{ f["cae_fch_vto"] | fecha }})
-    — <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">Descargar PDF</a>
+    <p class="acciones-pdf">
+      <button type="button" id="ver-pdf">Ver PDF</button>
+      <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download data-descarga-pdf
+         data-comprobante="{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}">Descargar PDF</a>
+    </p>
   </div>
 </div>
+
+{# Visor del PDF dentro de la app: el iframe usa el visor nativo del webview.
+   Antes de cargarlo se pide el PDF con fetch para mostrar el error de la API
+   dentro del modal; la segunda carga sale del cache local. #}
+<dialog id="modal-pdf" class="modal-pdf" aria-labelledby="modal-pdf-titulo">
+  <div class="modal-pdf-barra">
+    <strong id="modal-pdf-titulo">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}</strong>
+    <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download id="modal-pdf-descargar">Descargar</a>
+    <button type="button" class="secundario" id="modal-pdf-cerrar" aria-label="Cerrar">Cerrar</button>
+  </div>
+  <div class="modal-pdf-cuerpo">
+    <p id="modal-pdf-cargando" class="nota">Generando PDF…</p>
+    <div id="modal-pdf-error" class="panel error" hidden><div></div></div>
+    <p id="modal-pdf-sin-visor" class="nota" hidden>La vista previa no está
+      disponible en esta ventana. Usá <strong>Descargar</strong> para guardar
+      el PDF.</p>
+    <iframe id="modal-pdf-visor" title="PDF del comprobante" hidden></iframe>
+  </div>
+</dialog>
+
+<style>
+  .acciones-pdf { display: flex; gap: 1rem; align-items: center; }
+  .modal-pdf {
+    width: min(960px, 94vw); height: 90vh; padding: 0; border: none;
+    border-radius: var(--radio); display: none; flex-direction: column;
+  }
+  .modal-pdf[open] { display: flex; }
+  .modal-pdf::backdrop { background: rgba(16, 28, 61, .55); }
+  /* ``.panel`` y otras clases fijan ``display``: ``hidden`` tiene que ganar. */
+  .modal-pdf [hidden] { display: none !important; }
+  .modal-pdf-barra {
+    display: flex; align-items: center; gap: 1rem; padding: .6rem 1rem;
+    border-bottom: 1px solid var(--borde);
+  }
+  .modal-pdf-barra strong { margin-right: auto; }
+  .modal-pdf-cuerpo { flex: 1; display: flex; flex-direction: column; padding: 1rem; }
+  .modal-pdf-cuerpo iframe { flex: 1; width: 100%; border: 1px solid var(--borde); }
+</style>
+
+<script>
+(function () {
+  var pdfUrl = "/invoices/{{ f['id'] }}/pdf";
+  var modal = document.getElementById("modal-pdf");
+  var cargando = document.getElementById("modal-pdf-cargando");
+  var error = document.getElementById("modal-pdf-error");
+  var sinVisor = document.getElementById("modal-pdf-sin-visor");
+  var visor = document.getElementById("modal-pdf-visor");
+  var descargar = document.getElementById("modal-pdf-descargar");
+
+  function mostrarError(mensaje) {
+    cargando.hidden = true;
+    // Sin PDF no hay nada que guardar: el link bajaría el JSON del error.
+    descargar.hidden = true;
+    error.firstElementChild.textContent = mensaje;
+    error.hidden = false;
+  }
+
+  function abrir() {
+    cargando.hidden = false;
+    descargar.hidden = false;
+    error.hidden = true;
+    sinVisor.hidden = true;
+    visor.hidden = true;
+    visor.removeAttribute("src");
+    modal.showModal();
+
+    fetch(pdfUrl, { cache: "no-store" })
+      .then(function (r) {
+        if (r.ok) { return null; }
+        return r.json()
+          .then(function (body) { return body.detail || r.statusText; })
+          .catch(function () { return "No se pudo generar el PDF (" + r.status + ")."; });
+      })
+      .then(function (mensaje) {
+        if (mensaje !== null) { mostrarError(mensaje); return; }
+        if (navigator.pdfViewerEnabled === false) {
+          // Webview sin visor de PDF embebido: solo queda descargar.
+          cargando.hidden = true;
+          sinVisor.hidden = false;
+          return;
+        }
+        // El PDF ya está generado y en cache: el iframe carga al instante.
+        // No se espera su evento load porque no todos los webviews lo
+        // disparan para un PDF embebido.
+        cargando.hidden = true;
+        visor.hidden = false;
+        visor.src = pdfUrl;
+      })
+      .catch(function () {
+        mostrarError("No se pudo contactar a la app para generar el PDF.");
+      });
+  }
+
+  document.getElementById("ver-pdf").addEventListener("click", abrir);
+  document.getElementById("modal-pdf-cerrar").addEventListener("click", function () {
+    modal.close();
+  });
+  // Click en el fondo (fuera del contenido) cierra; Esc lo cierra el <dialog>.
+  modal.addEventListener("click", function (ev) {
+    if (ev.target === modal) { modal.close(); }
+  });
+  modal.addEventListener("close", function () { visor.removeAttribute("src"); });
+})();
+</script>
+{% include "_descarga_pdf.html" %}
 {% else %}
 <div class="panel error">
   <div>

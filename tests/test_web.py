@@ -170,6 +170,57 @@ def test_confirmar_autoriza_y_muestra_detalle(api, arca):
     assert "Generar" not in detalle.text      # sin form de nueva factura
 
 
+def test_detalle_autorizado_ofrece_ver_y_descargar_el_pdf_sin_salir_de_la_app(
+    api, arca
+):
+    """El PDF se ve en un modal propio y se descarga con diálogo de guardado;
+    ningún link abre una pestaña nueva (en pywebview iría al browser externo)."""
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    _autorizar(api, invoice_id)
+
+    html = api.get(f"/facturas/{invoice_id}").text
+
+    assert 'id="ver-pdf"' in html
+    assert '<dialog id="modal-pdf"' in html
+    assert (
+        f'href="/invoices/{invoice_id}/pdf?descargar=1" download data-descarga-pdf'
+        in html
+    )
+    assert 'data-comprobante="00001-00000001"' in html
+    assert "__descargaPdfLista" in html  # verificación previa a la descarga
+    assert f'var pdfUrl = "/invoices/{invoice_id}/pdf";' in html
+    assert 'target="_blank"' not in html
+
+
+def test_detalle_rechazado_no_ofrece_pdf(api, arca):
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    arca.authorize_mode = "reject"
+    _autorizar(api, invoice_id)
+
+    html = api.get(f"/facturas/{invoice_id}").text
+
+    assert 'id="ver-pdf"' not in html
+    assert "modal-pdf" not in html
+
+
+def test_listado_descarga_el_pdf_directo(api, arca):
+    _crear_cliente_por_form(api)
+    invoice_id = _generar_borrador(api)
+    _autorizar(api, invoice_id)
+
+    html = api.get("/comprobantes").text
+
+    assert (
+        f'href="/invoices/{invoice_id}/pdf?descargar=1" download data-descarga-pdf'
+        in html
+    )
+    assert 'data-comprobante="00001-00000001"' in html
+    assert "__descargaPdfLista" in html  # verificación previa a la descarga
+    assert 'target="_blank"' not in html
+
+
 def test_constatacion_menu_y_boton_constatar(api, arca):
     """FAC-84: menú propio + Constatar explícito (happy path con fake)."""
     _crear_cliente_por_form(api)

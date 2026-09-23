@@ -93,6 +93,7 @@ def open_app_ui(
 
     interrupted = False
     try:
+        _enable_downloads(webview)
         window = webview.create_window(
             title,
             url,
@@ -139,6 +140,27 @@ def open_app_ui(
     if interrupted:
         return UiOpenResult(reason=UiEndReason.INTERRUPTED)
     return UiOpenResult(reason=UiEndReason.CLOSED)
+
+
+def _enable_downloads(webview: Any) -> None:
+    """Descargas dentro de la ventana: respuestas ``attachment`` y links con
+    ``download`` abren el diálogo de guardado nativo en lugar de cancelarse.
+
+    pywebview las bloquea por defecto. Si el módulo no expone ``settings``
+    (versión vieja o doble de test), se sigue sin descargas: la ventana
+    abre igual y el usuario todavía ve el PDF en el modal.
+    """
+    settings = getattr(webview, "settings", None)
+    if settings is None:
+        _log.warning("pywebview sin 'settings'; las descargas quedan bloqueadas")
+        return
+    try:
+        settings["ALLOW_DOWNLOADS"] = True
+    except (KeyError, TypeError):
+        _log.warning(
+            "pywebview no acepta ALLOW_DOWNLOADS; las descargas quedan bloqueadas",
+            exc_info=True,
+        )
 
 
 def _open_system_browser(opener: Callable[[str], Any], url: str) -> None:
