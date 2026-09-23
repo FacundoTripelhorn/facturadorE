@@ -132,6 +132,31 @@ def test_pdf_de_factura_autorizada(api, arca, test_config):
     assert (test_config.paths.pdf_dir / filename).read_bytes() == r.content
 
 
+def test_pdf_inline_por_defecto_y_attachment_al_descargar(api, arca):
+    """Inline para el visor del modal; attachment para el diálogo de guardado."""
+    factura = _factura_autorizada(api)
+    filename = "factura-E-19-00001-00000001-homo.pdf"
+
+    inline = api.get(f"/invoices/{factura['id']}/pdf")
+    descarga = api.get(f"/invoices/{factura['id']}/pdf?descargar=1")
+
+    assert inline.headers["content-disposition"] == f'inline; filename="{filename}"'
+    assert (
+        descarga.headers["content-disposition"]
+        == f'attachment; filename="{filename}"'
+    )
+    assert descarga.content == inline.content
+
+
+def test_pdf_solo_se_puede_embeber_desde_la_propia_app(api, arca):
+    factura = _factura_autorizada(api)
+
+    r = api.get(f"/invoices/{factura['id']}/pdf")
+
+    assert r.headers["x-frame-options"] == "SAMEORIGIN"
+    assert r.headers["content-security-policy"] == "frame-ancestors 'self'"
+
+
 def test_pdf_de_draft_es_conflicto(api, arca):
     api.post("/clients", json=CLIENTE)
     draft = api.post("/invoices", json={"imp_total": "10.00"}).json()

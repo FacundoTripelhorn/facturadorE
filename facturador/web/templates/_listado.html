@@ -29,7 +29,7 @@
       <td class="num oculta-movil">{{ f["cae"] or "—" }}</td>
       <td>
         {% if f["status"] == AUTHORIZED %}
-        <a href="/invoices/{{ f['id'] }}/pdf" target="_blank">PDF</a>
+        <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download>PDF</a>
         {% elif f["status"] == DRAFT %}
         {# Un borrador pasa siempre por la revisión, nunca directo a ARCA. #}
         <a href="/facturas/{{ f['id'] }}/revisar">Revisar</a>

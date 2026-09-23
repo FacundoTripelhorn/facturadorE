@@ -113,6 +113,11 @@ título `FacturadorE — Homologación` o `FacturadorE — Producción`. Cerrar 
 ventana detiene el backend. Si el webview no está disponible, cae al navegador
 del sistema. Para automatización / agents: `--no-browser`.
 
+El PDF se ve y se descarga sin salir de la ventana: "Ver PDF" lo abre en un
+modal con el visor del webview y "Descargar" abre el diálogo de guardado del
+sistema. Si el webview no tiene visor de PDF embebido, el modal ofrece solo
+la descarga.
+
 La app escucha **solo en localhost** por diseño (el host no es configurable):
 la única conexión de red es saliente hacia ARCA.
 
@@ -156,7 +161,8 @@ perfil local y el cifrado del backup al salir de la máquina.
 3. **Revisar** — página que muestra exactamente qué se va a enviar a ARCA. Nada
    viaja sin pasar por acá.
 4. **Confirmar** — ejecuta la autorización (WSFEX `FEXAuthorize`) y redirige al
-   detalle con el CAE, su vencimiento y el botón de descarga del PDF.
+   detalle con el CAE, su vencimiento y los botones para ver (en un modal) y
+   descargar el PDF.
 5. **`/comprobantes`** — listado con tabs por estado (borradores, autorizadas,
    que requieren atención) y **`/clientes`** para el ABM de clientes.
 

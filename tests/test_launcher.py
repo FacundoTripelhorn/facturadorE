@@ -660,6 +660,63 @@ def test_open_app_ui_webview_closed_con_modulo_inyectado():
     assert browser_hits == []
 
 
+def test_open_app_ui_habilita_descargas_antes_de_crear_la_ventana():
+    """Las descargas del PDF abren el diálogo de guardado dentro de la app."""
+    from webview.util import ImmutableDict
+
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    # Mismo tipo que ``webview.settings``: solo acepta claves existentes.
+    settings = ImmutableDict({"ALLOW_DOWNLOADS": False})
+    visto_al_crear: list[bool] = []
+
+    class _FakeWebview:
+        def __init__(self) -> None:
+            self.settings = settings
+
+        def create_window(self, title, url=None, **_kwargs):
+            visto_al_crear.append(settings["ALLOW_DOWNLOADS"])
+            return object()
+
+        def start(self, func=None, args=None, **_kwargs):
+            return None
+
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_FakeWebview(),
+        browser_opener=lambda _u: None,
+    )
+    assert result.reason is UiEndReason.CLOSED
+    assert visto_al_crear == [True]
+
+
+def test_open_app_ui_sin_settings_abre_la_ventana_igual():
+    """Un pywebview sin ``settings`` no impide abrir la UI (solo sin descargas)."""
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    created: list[str] = []
+
+    class _FakeWebview:
+        def create_window(self, title, url=None, **_kwargs):
+            created.append(url or "")
+            return object()
+
+        def start(self, func=None, args=None, **_kwargs):
+            return None
+
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_FakeWebview(),
+        browser_opener=lambda _u: (_ for _ in ()).throw(
+            AssertionError("no debe caer al browser")
+        ),
+    )
+    assert result.reason is UiEndReason.CLOSED
+    assert created == ["http://127.0.0.1:8399/"]
+
+
 def test_open_app_ui_interrupt_destruye_ventana():
     from facturador.launcher import UiEndReason, open_app_ui
 

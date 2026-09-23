@@ -79,7 +79,14 @@ def list_invoices(
 
 
 @router.get("/{invoice_id}/pdf")
-def invoice_pdf(invoice_id: str, service: ServiceDep):
+def invoice_pdf(
+    invoice_id: str,
+    service: ServiceDep,
+    descargar: bool = Query(
+        default=False,
+        description="True → attachment (diálogo de guardado); False → inline",
+    ),
+):
     inv = service.get_invoice(invoice_id)  # 404 si no existe; reconcilia unknown
     if inv["status"] != InvoiceStatus.AUTHORIZED:
         raise ConflictError(
@@ -98,8 +105,15 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
     filename = invoice_pdf_filename(inv)
+    disposition = "attachment" if descargar else "inline"
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{filename}"',
+            # La UI lo muestra en un iframe propio; ningún otro origen puede
+            # embeberlo.
+            "X-Frame-Options": "SAMEORIGIN",
+            "Content-Security-Policy": "frame-ancestors 'self'",
+        },
     )
