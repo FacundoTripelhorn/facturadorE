@@ -1,13 +1,16 @@
 {# Descarga del PDF con verificación previa: antes de abrir el diálogo de
    guardado se pide el PDF; si la API responde con error (p.ej. el
-   comprobante no entra en una página), el mensaje se muestra junto al link
-   en lugar de guardar la respuesta de error como archivo. Sin JavaScript el
-   link sigue descargando directo. Incluir una vez por página. #}
+   comprobante no entra en una página), el mensaje se muestra en un panel
+   arriba de la página en lugar de guardar la respuesta de error como
+   archivo. Sin JavaScript el link sigue descargando directo. Incluir una
+   vez por página. #}
 <style>
-  .error-descarga-pdf {
-    display: block; min-width: 16rem; color: var(--error);
-    font-size: .82rem; font-weight: 600;
+  .aviso-descarga-pdf > div { flex: 1; }
+  .aviso-descarga-pdf .cerrar-aviso {
+    background: transparent; color: inherit; border: none; padding: 0 .2rem;
+    font-size: 1.2rem; line-height: 1; font-weight: 700; cursor: pointer;
   }
+  .aviso-descarga-pdf .cerrar-aviso:hover { background: transparent; opacity: .7; }
 </style>
 <script>
 (function () {
@@ -20,20 +23,41 @@
       .catch(function () { return "No se pudo generar el PDF (" + r.status + ")."; });
   }
 
-  function mostrarError(link, mensaje) {
-    var aviso = link.nextElementSibling;
-    if (!aviso || !aviso.classList.contains("error-descarga-pdf")) {
-      aviso = document.createElement("span");
-      aviso.className = "error-descarga-pdf";
-      aviso.setAttribute("role", "alert");
-      link.insertAdjacentElement("afterend", aviso);
-    }
-    aviso.textContent = mensaje;
+  function cerrarAviso() {
+    var aviso = document.getElementById("aviso-descarga-pdf");
+    if (aviso) { aviso.remove(); }
   }
 
-  function limpiarError(link) {
-    var aviso = link.nextElementSibling;
-    if (aviso && aviso.classList.contains("error-descarga-pdf")) { aviso.remove(); }
+  // Mismo panel de error que el resto de la app, arriba del contenido: la
+  // tabla no cambia de tamaño. Solo hay uno a la vez.
+  function mostrarAviso(link, mensaje) {
+    cerrarAviso();
+    var aviso = document.createElement("div");
+    aviso.id = "aviso-descarga-pdf";
+    aviso.className = "panel error aviso-descarga-pdf";
+    aviso.setAttribute("role", "alert");
+
+    var cuerpo = document.createElement("div");
+    var titulo = document.createElement("strong");
+    var comprobante = link.getAttribute("data-comprobante");
+    titulo.textContent = comprobante
+      ? "No se pudo descargar el PDF de " + comprobante + "."
+      : "No se pudo descargar el PDF.";
+    cuerpo.appendChild(titulo);
+    cuerpo.appendChild(document.createTextNode(" " + mensaje));
+
+    var cerrar = document.createElement("button");
+    cerrar.type = "button";
+    cerrar.className = "cerrar-aviso";
+    cerrar.setAttribute("aria-label", "Cerrar aviso");
+    cerrar.textContent = "×";
+    cerrar.addEventListener("click", cerrarAviso);
+
+    aviso.appendChild(cuerpo);
+    aviso.appendChild(cerrar);
+    var main = document.querySelector("main") || document.body;
+    main.insertBefore(aviso, main.firstChild);
+    aviso.scrollIntoView({ block: "nearest" });
   }
 
   document.addEventListener("click", function (ev) {
@@ -42,12 +66,12 @@
     ev.preventDefault();
     if (link.getAttribute("aria-busy") === "true") { return; }
     link.setAttribute("aria-busy", "true");
-    limpiarError(link);
+    cerrarAviso();
 
     fetch(link.href, { cache: "no-store" })
       .then(function (r) { return r.ok ? null : mensajeDeError(r); })
       .then(function (mensaje) {
-        if (mensaje !== null) { mostrarError(link, mensaje); return; }
+        if (mensaje !== null) { mostrarAviso(link, mensaje); return; }
         // El PDF ya está generado y en cache: la descarga real es inmediata.
         // Un link temporal sin data-descarga-pdf no vuelve a pasar por acá.
         var real = document.createElement("a");
@@ -58,7 +82,7 @@
         real.remove();
       })
       .catch(function () {
-        mostrarError(link, "No se pudo contactar a la app para generar el PDF.");
+        mostrarAviso(link, "No se pudo contactar a la app para generar el PDF.");
       })
       .finally(function () { link.removeAttribute("aria-busy"); });
   });

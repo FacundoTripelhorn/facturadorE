@@ -9,7 +9,8 @@
     (vence {{ f["cae_fch_vto"] | fecha }})
     <p class="acciones-pdf">
       <button type="button" id="ver-pdf">Ver PDF</button>
-      <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download data-descarga-pdf>Descargar PDF</a>
+      <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download data-descarga-pdf
+         data-comprobante="{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}">Descargar PDF</a>
     </p>
   </div>
 </div>
