@@ -87,10 +87,10 @@ def invoice_pdf(invoice_id: str, service: ServiceDep):
             f"(estado actual: {inv['status']})"
         )
     items = repo.get_invoice_items(service.conn, invoice_id)
-    # FAC-52/53: render solo desde snapshot; cache local opcional bajo
-    # pdf_dir (descartable; regenera si falta). ValueError cubre snapshot
-    # incompleto, versión desconocida y PdfLayoutError (FAC-88: no entra
-    # en una página A4).
+    # Render solo desde snapshot; cache local opcional bajo pdf_dir
+    # (descartable; regenera si falta). ValueError cubre snapshot
+    # incompleto, versión desconocida y PdfLayoutError (no entra en una
+    # página A4).
     try:
         pdf = get_or_render_invoice_pdf(
             inv, items, service.config.paths.pdf_dir

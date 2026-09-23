@@ -166,8 +166,8 @@ En homologación el punto de venta es libre (usar p.ej. `1`), pero la numeració
 - **API:** FastAPI + Pydantic (validación de dominio) + SQLite. Un solo proceso, sin colas ni workers: el volumen es ~1 factura/semana.
 - **Cliente ARCA:** implementación propia (`ArcaClient`) con `httpx` y XML SOAP armado con templates (los requests de WSFEX son pocos y estables; no generar clientes desde el WSDL). Alternativa aceptable si se traba: `zeep` como cliente SOAP dinámico.
 - **Firma CMS (WSAA):** librería `cryptography` → `pkcs7.PKCS7SignatureBuilder` (firma nativa, sin subprocesos de openssl).
-- **PDF:** `fpdf2` (Python puro, sin browser ni subprocesos; FAC-88 reemplaza a
-  Playwright Chromium de FAC-82, que a su vez reemplazó a WeasyPrint) + `qrcode`
+- **PDF:** `fpdf2` (Python puro, sin browser ni subprocesos; reemplaza a
+  Playwright Chromium, que a su vez reemplazó a WeasyPrint) + `qrcode`
   para el QR RG 4892. El layout v1 se dibuja en código (`facturador/pdf/render.py`)
   con Liberation Sans embebida (SIL OFL, UTF-8). Una sola página A4: si el
   contenido no entra, `PdfLayoutError` (409) en lugar de recortar.

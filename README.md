@@ -28,7 +28,7 @@ Qué incluye:
 
 - **Docker Desktop** (runtime recomendado), o bien **Python ≥ 3.12** +
   [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
-  nada más que `uv sync`: se genera con fpdf2 en Python puro (FAC-88).
+  nada más que `uv sync`: se genera con fpdf2 en Python puro.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.

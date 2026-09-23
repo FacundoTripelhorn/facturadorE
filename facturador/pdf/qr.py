@@ -54,7 +54,7 @@ def qr_url(payload: dict) -> str:
 
 
 def qr_png(url: str) -> bytes:
-    """PNG del QR, para incrustar en el PDF (FAC-88: fpdf2)."""
+    """PNG del QR, para incrustar en el PDF."""
     image = qrcode.make(url, box_size=6, border=2)
     buffer = io.BytesIO()
     image.save(buffer)  # PilImage emite PNG por defecto

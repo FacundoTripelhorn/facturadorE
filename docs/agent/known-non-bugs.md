@@ -155,15 +155,15 @@ Open `/setup` (or follow the redirect from `/`) and finish the pending step.
 **Symptom:** `GET /invoices/{id}/pdf` returns **409** saying the invoice does
 not fit on one A4 page. Authorize succeeded and the CAE is valid.
 
-**Expected (FAC-88).** The PDF is drawn with fpdf2 (pure Python, no browser)
+**Expected.** The PDF is drawn with fpdf2 (pure Python, no browser)
 and v1 is deliberately **single-page**: when items, descriptions or
 observaciones are too long, `PdfLayoutError` is raised instead of clipping or
 splitting the comprobante. Volume is ~1 short invoice/week, so multi-page was
-scoped out (see FAC-6 for page numbering).
+scoped out.
 
 **Do not** treat this as a broken CAE/snapshot, and do not reintroduce
-Playwright/Chromium or WeasyPrint to "fix" it: FAC-69 → FAC-82 → FAC-88 moved
-the engine from WeasyPrint to Chromium to fpdf2 on purpose. Multi-page
+Playwright/Chromium or WeasyPrint to "fix" it: the engine moved from
+WeasyPrint to Chromium to fpdf2 on purpose. Multi-page
 support, if ever needed, is a new scoped change to the v1 renderer.
 
 ---

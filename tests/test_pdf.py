@@ -2,9 +2,9 @@
 
 Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
 endpoint (200/409/404), cache local descartable en data/pdfs (FAC-53),
-datos hostiles impresos literales, snapshot inmutable (FAC-10 / FAC-52),
-despacho por ``pdf_render_version`` y el motor fpdf2 de una sola página
-(FAC-88). El contenido se verifica extrayendo el texto del PDF real.
+datos hostiles impresos literales, snapshot inmutable, despacho por
+``pdf_render_version`` y el motor fpdf2 de una sola página. El contenido
+se verifica extrayendo el texto del PDF real.
 """
 
 import base64
@@ -141,7 +141,7 @@ def test_pdf_de_draft_es_conflicto(api, arca):
 
 
 def test_pdf_que_no_entra_en_una_pagina_es_409_accionable(api, arca):
-    """FAC-88: sin multipágina; un comprobante demasiado largo falla en claro."""
+    """Sin multipágina: un comprobante demasiado largo falla en claro."""
     factura = _factura_autorizada(api)
     with api.conn:
         api.conn.execute(
@@ -406,7 +406,7 @@ def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
 
 
 def test_pdf_usa_solo_snapshot_sin_lookups_externos(api, arca):
-    """FAC-52: render_invoice_pdf(inv, items) sin kwargs de params/emisor."""
+    """render_invoice_pdf(inv, items) sin kwargs de params/emisor."""
     factura = _factura_autorizada(api)
     # Envenenar el cache: si el render lo leyera, el HTML saldría mutado.
     repo.replace_params(
@@ -729,7 +729,7 @@ def test_cache_write_fallido_no_deja_pdf_parcial(
 def test_renders_concurrentes_del_mismo_comprobante_renderizan_una_vez(
     api, arca, test_config, monkeypatch
 ):
-    """FAC-88: dos pedidos en frío a la vez (iframe + Descargar) → 1 render."""
+    """Dos pedidos en frío a la vez del mismo comprobante → 1 render."""
     import threading
 
     factura = _factura_autorizada(api)
@@ -771,7 +771,7 @@ def test_renders_concurrentes_del_mismo_comprobante_renderizan_una_vez(
 def test_render_fallido_libera_el_lock_y_reintenta(
     api, arca, test_config, monkeypatch
 ):
-    """FAC-88: si el render falla, el próximo pedido vuelve a intentar."""
+    """Si el render falla, el próximo pedido vuelve a intentar."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     assert inv is not None

@@ -36,7 +36,7 @@ of exploring the repo blindly.
 ## Project shape
 
 - **Stack:** Python 3.12, single-process FastAPI (JSON API + Jinja/HTMX frontend),
-  SQLite datastore, fpdf2 PDFs (pure Python, no browser; FAC-88).
+  SQLite datastore, fpdf2 PDFs (pure Python, no browser).
 - **Domain:** Argentine export invoices ("Factura E") via ARCA WSAA/WSFEX SOAP.
 - **Environments:** one app, launcher-selected **Homologación** / **Producción**,
   isolated hidden profiles, one immutable environment per backend process
@@ -164,5 +164,5 @@ Tool-specific notes belong in `docs/agent/` when they exist. Until then:
 
 - **Cursor Cloud:** dependency refresh may be automated by the environment
   (`uv sync` on boot). PDF tests need nothing beyond `uv sync` (fpdf2 is pure
-  Python; FAC-88). ARCA homologación endpoints are network-reachable from the
+  Python). ARCA homologación endpoints are network-reachable from the
   VM, but a self-signed cert is still rejected by WSAA.

@@ -1,7 +1,7 @@
 """Generación del PDF del comprobante con QR RG 4892 (fase 5).
 
-FAC-53: despacho versionado + cache local descartable bajo ``pdf_dir``.
-FAC-88: motor fpdf2 (Python puro, sin browser); una sola página A4.
+Despacho versionado + cache local descartable bajo ``pdf_dir``.
+Motor fpdf2 (Python puro, sin browser); una sola página A4.
 """
 
 from .registry import known_pdf_render_versions

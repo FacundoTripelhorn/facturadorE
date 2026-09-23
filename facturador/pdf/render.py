@@ -4,23 +4,20 @@ El layout replica el comprobante real de Comprobantes en Línea analizado en
 design.md §0.1: reglas horizontales mínimas (sin marco exterior), divisor
 central solo en la cabecera, tabla de ítems con recuadro únicamente en el
 encabezado y bloque de totales/CAE anclado al pie. Todos los valores
-impresos salen del snapshot inmutable de la factura e ítems (FAC-10 /
-FAC-52): emisor, CUIT fiscal, receptor, descripciones de params y
-``pdf_render_version``. No se relee emisores, clients, settings ni
-arca_params.
+impresos salen del snapshot inmutable de la factura e ítems: emisor,
+CUIT fiscal, receptor, descripciones de params y ``pdf_render_version``.
+No se relee emisores, clients, settings ni arca_params.
 
 Los textos libres (razón social, domicilio, descripciones, del emisor y
 del cliente) son hostiles (checklist §2.1.1 punto 4). fpdf2 los dibuja
 como texto literal: nunca usar ``markdown=True`` ni los modos HTML de
 fpdf2 con datos del usuario.
 
-FAC-53: el despacho elige el renderer por ``pdf_render_version``. Los PDF
+El despacho elige el renderer por ``pdf_render_version``. Los PDF
 generados son cache local opcional bajo ``ProfilePaths.pdf_dir``; se pueden
 borrar sin perder el registro fiscal (la DB es la fuente de verdad).
 
-FAC-88: el motor pasa de Chromium headless (Playwright, FAC-82) a fpdf2,
-Python puro, sin browser ni subprocesos. Es un cambio de motor dentro de
-v1 (mismo layout), igual que FAC-82: no hay bump de versión. El
+El motor es fpdf2: Python puro, sin browser ni subprocesos. El
 comprobante ocupa una sola página A4; si el contenido no entra se levanta
 ``PdfLayoutError`` en lugar de recortar o partir el comprobante.
 """
@@ -46,7 +43,7 @@ _FONTS_DIR = Path(__file__).parent / "fonts"
 
 
 class PdfLayoutError(ValueError):
-    """El comprobante no entra en una página A4 (FAC-88: sin multipágina)."""
+    """El comprobante no entra en una página A4 (no hay soporte multipágina)."""
 
 
 # --- formato de valores (paridad con el comprobante real) ----------------
@@ -65,7 +62,7 @@ def _num(valor: str | Decimal, decimales: int) -> str:
 
 def _moneda(code: str) -> str:
     # DOL → USD para el lector; el código ARCA viaja solo en el XML.
-    # Alias atado a PDF_RENDER_VERSION / renderer v1 (FAC-52/53): cambiarlo
+    # Alias atado a PDF_RENDER_VERSION / renderer v1: cambiarlo
     # exige bump de versión + renderer nuevo, no releer settings.
     return MONEDA_DISPLAY.get(code, code)
 
@@ -102,7 +99,7 @@ def _require_cuit_emisor(inv: sqlite3.Row) -> int:
 
 
 def _umed_label(item: sqlite3.Row) -> str:
-    """Etiqueta de U. Medida del ítem (FAC-52); fallback al código."""
+    """Etiqueta de U. Medida del ítem (snapshot); fallback al código."""
     keys = item.keys()
     if "pro_umed_ds" in keys and item["pro_umed_ds"]:
         return str(item["pro_umed_ds"])
@@ -507,7 +504,7 @@ def _pdf_render_version(inv: sqlite3.Row) -> int:
 
 
 def render_invoice_pdf(inv: sqlite3.Row, items: list[sqlite3.Row]) -> bytes:
-    """PDF del comprobante: despacha por ``pdf_render_version`` (FAC-53)."""
+    """PDF del comprobante: despacha por ``pdf_render_version``."""
     version = _pdf_render_version(inv)
     return get_pdf_renderer(version)(inv, items)
 
@@ -530,7 +527,7 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
         raise
 
 
-# Locks en proceso por ruta de cache (FAC-88). Single-process (AGENTS.md):
+# Locks en proceso por ruta de cache. Single-process (AGENTS.md):
 # un ``threading.Lock`` alcanza; las rutas sync corren en el threadpool.
 _render_locks: dict[Path, threading.Lock] = {}
 _render_locks_guard = threading.Lock()
@@ -559,9 +556,9 @@ def get_or_render_invoice_pdf(
     path = invoice_pdf_cache_path(pdf_dir, inv)
     if path.is_file():
         return path.read_bytes()
-    # FAC-88: un solo render por comprobante. Si el iframe del modal y
-    # "Descargar" piden el mismo PDF en frío a la vez, el segundo espera
-    # al primero y sirve el cache en lugar de renderizar de nuevo.
+    # Un solo render por comprobante: si dos pedidos llegan a la vez con el
+    # cache vacío, el segundo espera al primero y sirve el cache en lugar
+    # de renderizar de nuevo.
     with _render_lock_for(path):
         if path.is_file():
             return path.read_bytes()
