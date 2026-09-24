@@ -1,5 +1,5 @@
 """Settings de dominio: viven en la DB. El emisor es una entidad (tabla
-emisores) LOCAL al perfil (ADR 0001 / FAC-26): la DB entera es de un solo
+emisores) LOCAL al perfil (ADR 0001): la DB entera es de un solo
 ambiente y la selección activa es una única clave, sin sufijo de ambiente."""
 
 import dataclasses
@@ -76,7 +76,7 @@ def test_guardar_sin_id_crea_un_emisor_nuevo(conn):
 
 
 def test_la_seleccion_activa_es_una_unica_clave_del_perfil(conn):
-    """FAC-26: active_emisor_id sin sufijo de ambiente — elegir el emisor
+    """Active_emisor_id sin sufijo de ambiente — elegir el emisor
     operativo no necesita saber el ambiente, el perfil YA lo es. No queda
     ninguna clave active_emisor_id_<ambiente>."""
     save_settings(conn, Settings(emisor=Emisor(razon_social="ÚNICO")))
@@ -145,7 +145,7 @@ def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
 
 
 def test_puntos_venta_lista_vacia_queda_sin_pv(conn):
-    """FAC-35: ``[]`` significa sin PV (point_of_sale_required), no default 1."""
+    """``[]`` significa sin PV (point_of_sale_required), no default 1."""
     save_settings(conn, Settings())
     emisor_id = repo.list_emisores(conn)[0]["id"]
     set_active_emisor(conn, emisor_id)

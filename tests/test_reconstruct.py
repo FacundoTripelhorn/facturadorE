@@ -1,4 +1,4 @@
-"""FAC-65: rebuild / catch-up from ARCA + seed identity validation."""
+"""Rebuild / catch-up from ARCA + seed identity validation."""
 
 from __future__ import annotations
 
@@ -220,7 +220,8 @@ def test_transient_error_aborts_after_prepare(profile_wsfex):
             retries=2,
             retry_sleep_s=0,
         )
-    # Clear ya corrió; sin inserts → registro vacío (FAC-48 bloquearía).
+    # Clear ya corrió; sin inserts → registro vacío (el guard de registro
+    # desactualizado bloquearía).
     assert conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 0
 
 
@@ -252,7 +253,7 @@ def test_partial_batch_then_rerun_succeeds(profile_wsfex):
             retry_sleep_s=0,
             batch_size=2,
         )
-    # Lote 1 (nros 1–2) quedó; FAC-48 vería local_max=2 < arca_last=4.
+    # Lote 1 (nros 1–2) quedó; el guard vería local_max=2 < arca_last=4.
     assert (
         conn.execute(
             "SELECT COUNT(*) FROM invoices WHERE status='authorized'"
@@ -595,7 +596,7 @@ def test_launcher_restore_refuses_displaced_orphan_backend(
 
 
 def test_api_catch_up_unblocks_issuance(api, arca):
-    """FAC-48 remediation: catch-up then authorize succeeds."""
+    """Stale-register remediation: catch-up then authorize succeeds."""
     from tests.test_api import _crear_cliente, _crear_draft
 
     _crear_cliente(api)

@@ -1,8 +1,8 @@
-"""Launcher: resolución de comando/perfil y supervisión de proceso (FAC-28).
+"""Launcher: resolución de comando/perfil y supervisión de proceso.
 
-También cubre el chooser de ambiente (FAC-29), el lock anti-duplicado
-(FAC-30), el cambio de ambiente por reinicio (FAC-32), la confirmación
-de primer uso de Producción (FAC-40) y la ventana nativa pywebview (FAC-83).
+También cubre el chooser de ambiente, el lock anti-duplicado, el cambio de
+ambiente por reinicio, la confirmación
+de primer uso de Producción y la ventana nativa pywebview.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def test_facturador_app_data_relativo_rechazado(monkeypatch):
         resolve_app_data_root()
 
 
-# --- FAC-29: chooser de ambiente --------------------------------------------
+# --- chooser de ambiente ---------------------------------------------------
 
 
 _FORBIDDEN_CHOOSER_TERMS = (
@@ -420,7 +420,7 @@ def test_main_startup_error_con_env_no_reintenta():
 def test_supervisor_falla_si_el_backend_muere_antes_de_ready(tmp_path):
     """Par incompleto (solo cert) aborta el boot: LauncherError visible.
 
-    FAC-35 permite arrancar sin el par; un archivo a medias sigue siendo
+    El onboarding permite arrancar sin el par; un archivo a medias sigue siendo
     error fatal de Config (y el supervisor lo reporta).
     """
     opened: list[str] = []
@@ -617,7 +617,7 @@ def test_smoke_browser_no_abre_si_open_browser_false(tmp_path, test_cert_and_key
         supervisor.stop()
 
 
-# --- FAC-83: ventana nativa (pywebview) / fallback / --no-browser ------------
+# --- ventana nativa (pywebview) / fallback / --no-browser ------------
 
 
 def test_app_window_title_incluye_producto_y_ambiente():
@@ -961,7 +961,7 @@ def test_main_no_browser_no_abre_ui():
 
 
 def test_main_cierre_ventana_nativa_apaga_backend():
-    """FAC-83: cerrar la ventana nativa detiene el backend supervisado."""
+    """Cerrar la ventana nativa detiene el backend supervisado."""
     import subprocess
 
     from facturador.launcher import UiEndReason, UiOpenResult
@@ -1132,7 +1132,7 @@ def test_main_ctrl_c_en_reuse_no_apaga_backend_ajeno():
     assert "stop" not in events
 
 
-# --- FAC-30: lock de perfil / anti-duplicado ---------------------------------
+# --- lock de perfil / anti-duplicado ---------------------------------
 
 
 def test_profile_lock_acquire_release_y_metadata(tmp_path):
@@ -1574,7 +1574,7 @@ def test_backend_huerfano_sano_falla_claro_sin_segundo_proceso(
         server.server_close()
 
 
-# --- FAC-32: cambio de ambiente por reinicio ---------------------------------
+# --- cambio de ambiente por reinicio ---------------------------------
 
 
 def test_change_environment_request_write_read_clear(tmp_path):
@@ -1709,7 +1709,7 @@ def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
 def test_handle_change_a_prod_cancel_ack_mantiene_backend(
     tmp_path, monkeypatch
 ):
-    """FAC-40: cancelar ack de Producción no apaga la sesión actual."""
+    """Cancelar ack de Producción no apaga la sesión actual."""
     from facturador.launcher.__main__ import _handle_change_environment_request
     from facturador.launcher.switch import (
         read_change_environment_request,
@@ -1815,7 +1815,8 @@ def test_handle_change_mismo_ambiente_no_reinicia(tmp_path):
 
 
 def test_main_switch_stop_antes_de_arrancar_destino_y_fallo_vuelve_chooser():
-    """Flujo FAC-32: stop del actual → start del nuevo; fallo vuelve al chooser."""
+    """Cambio de ambiente: stop del actual → start del nuevo; fallo vuelve
+    al chooser."""
     import subprocess
 
     from facturador.launcher.__main__ import main
@@ -1975,7 +1976,7 @@ def test_no_hot_switch_en_api_de_pedido(tmp_path, test_cert_and_key, monkeypatch
     assert req.from_environment is ArcaEnvironment.HOMO
 
 
-# --- confirmación de primer uso de Producción (FAC-40) ---
+# --- confirmación de primer uso de Producción ---
 
 
 def test_production_ack_solo_en_perfil_prod(tmp_path):

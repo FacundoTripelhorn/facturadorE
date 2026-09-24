@@ -31,7 +31,7 @@ en el launcher (perfil aislado, sin segunda instalación). Contrato:
 En **"Administrador de Relaciones de Clave Fiscal"**, asociar el certificado
 (computador fiscal) al servicio **"Facturación Electrónica de Exportación"**.
 
-Para la constatación in-app (FAC-84), asociar también el servicio
+Para la constatación in-app, asociar también el servicio
 **"Constatación de Comprobantes"** / WSCDC al mismo certificado. Sin ese
 vínculo el menú «Constatación de CAE» no puede obtener TA (`service=wscdc`).
 
@@ -118,12 +118,12 @@ emitido, casi siempre falta la asociación al servicio de exportación (paso 2).
 Sin `FACTURADOR_APP_DATA` apuntando al layout Docker, el script busca el
 perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
 
-> **TLS (FAC-81):** el WSFEX de producción (`servicios1.afip.gov.ar`) usa DH
+> **TLS:** el WSFEX de producción (`servicios1.afip.gov.ar`) usa DH
 > de 1024 bits. Con Python 3.12 / OpenSSL 3 eso dispara
 > `DH_KEY_TOO_SMALL` si el cliente no acomoda el SECLEVEL. FacturadorE lo
 > hace solo en el cliente WSFEX de Producción (verificación del certificado
 > sigue activa). Homologación y WSAA no necesitan el acomodo. Si ves ese
-> error en prod, confirmá que estás en un build con FAC-81; no desactives
+> error en prod, confirmá que estás en un build con la acomodación de DH débil; no desactives
 > `verify`.
 
 ## 6. Primera factura real
@@ -165,9 +165,9 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
   `uv run python -m facturador.backup --env prod`; Docker:
   `uv run python -m facturador.backup --root ~/facturador/profiles/prod`.
   Escribe `backups/seed.age` (overwrite). Upload S3 y rebuild del registro:
-  FAC-45 / FAC-65.
+  el upload a S3 y el rebuild desde ARCA.
 - **Una sola máquina emite.** Cada máquina tiene su propio cert e identidad
-  `age` (FAC-64). Tras bootstrap, el registro se sincroniza desde ARCA — no
+  `age`. Tras bootstrap, el registro se sincroniza desde ARCA — no
   se copia la DB por S3. Nunca emitir desde dos copias en paralelo.
 - **La clave privada es la firma fiscal.** Permisos `400`, nunca en el repo ni
   en el seed. Si se sospecha filtración, revocar el certificado en

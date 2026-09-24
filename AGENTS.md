@@ -29,7 +29,7 @@ of exploring the repo blindly.
     and verification are explicit without duplicating this file.
 11. For **ARCA / WSAA / WSFEX protocol questions** (endpoints, TA, ErrCodes,
     `Fecha_pago`, gap vs error), load the portable skill
-    [`skills/arca-kb/`](skills/arca-kb/) (FAC-66). It is citation-backed and
+    [`skills/arca-kb/`](skills/arca-kb/). It is citation-backed and
     vendor-neutral; see [`skills/README.md`](skills/README.md). Product
     architecture remains in [`docs/design.md`](docs/design.md).
 
@@ -43,7 +43,7 @@ of exploring the repo blindly.
   ([ADR 0001](docs/adr/0001-perfiles-de-ambiente-aislados.md)).
 - **Layout:** one service package under `facturador/`; tests in `tests/`; scripts in
   `scripts/`; schema baseline in `facturador/schema.sql`, applied via
-  `facturador/migrations/` on connect (FAC-43).
+  `facturador/migrations/` on connect.
 - **Dev entrypoint:** `uv run python -m facturador.launcher` (chooser; binds
   `127.0.0.1:8399`; port override via `FACTURADOR_PORT` / `--port`). Backend
   alone: `uv run python -m facturador` with an explicit `ARCA_ENV`.
@@ -87,12 +87,12 @@ the backend — no hot switching. See setup docs and [`README.md`](README.md).
   [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
 - **App config:** emisor fields, punto de venta, and S3 backup settings live in
   the **profile SQLite** and are edited via `/configuracion` — they travel
-  inside the encrypted **seed** (FAC-44), not in `.env`. Emisor environment is
+  inside the encrypted **seed**, not in `.env`. Emisor environment is
   not user-selectable (profile-local; `ambiente` is a seal).
 - **Backups (seed):** `facturador.backup --env homo|prod` writes
   `backups/seed.age` (config + manifest, age-encrypted to `recipients.txt`).
   ARCA is authoritative for the register; DB/PDFs are not in the bundle.
-  S3 upload is FAC-45; rebuild-from-ARCA is FAC-65.
+  The seed is uploaded to S3; the register is rebuilt from ARCA on restore.
 - **Certificates:** `secrets/cert.crt` and `secrets/cert.key` under the active
   profile (mode 400/600). Private keys have **no passphrase** (product
   decision). All gitignored. Paths resolve via `ProfilePaths`
@@ -134,7 +134,7 @@ Do not regress these without an explicit design change in `docs/design.md`:
 
 Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
 
-- Incomplete profile setup blocks invoice/ARCA until `ready` (FAC-35): HTML
+- Incomplete profile setup blocks invoice/ARCA until `ready`: HTML
   routes redirect to `/setup`; JSON APIs return **503** with `setup_state`.
   `GET /health` and `GET /setup` stay up.
 - Missing or untrusted ARCA credentials cause 5xx on ARCA-backed endpoints
@@ -144,6 +144,15 @@ Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
   fails (`WsaaError` is not swallowed on the home handler).
 - Contract tests against real homologación (`scripts/get_ta.py`,
   `scripts/check_wsfex.py`) are intentionally local-only; CI does not upload certs.
+
+## Writing code, comments and docs
+
+- **No issue-tracker IDs in the repo.** Do not put Linear keys (or links to
+  issues) in code, comments, docstrings, tests, templates or docs. They go
+  stale, cause merge conflicts, and make agents preserve history instead of
+  current behavior. Describe what the code does and why; the issue link
+  belongs in the PR description and commit message only.
+  `tests/test_no_issue_refs.py` enforces this.
 
 ## Expected agent response format
 

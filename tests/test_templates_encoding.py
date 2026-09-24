@@ -1,6 +1,6 @@
-"""Guardia de codificación de templates (FAC-74).
+"""Guardia de codificación de templates.
 
-FAC-73 reescribió dos templates con doble codificación UTF-8 (mojibake):
+Un cambio anterior reescribió dos templates con doble codificación UTF-8 (mojibake):
 bytes UTF-8 leídos como Latin-1/cp1252 y reguardados como UTF-8, dejando
 `Configuración` → `ConfiguraciÃ³n`, `está` → `estÃ¡`, etc. El texto sigue
 siendo UTF-8 válido, así que un decode no alcanza para detectarlo; hay que
@@ -45,6 +45,6 @@ def test_template_sin_mojibake(template: Path):
     encontrados = [m for m in _MOJIBAKE_MARKERS if m in text]
     assert not encontrados, (
         f"{template.relative_to(_TEMPLATES_ROOT.parent)} contiene marcadores de "
-        f"mojibake {encontrados}: UTF-8 doble-codificado (ver FAC-74). "
+        f"mojibake {encontrados}: UTF-8 doble-codificado "
         "Reguardá el archivo como UTF-8 limpio."
     )

@@ -52,7 +52,7 @@ flowchart TB
   subgraph external["External (outbound HTTPS only)"]
     WSAA["ARCA WSAA<br/>LoginCms"]
     WSFEX["ARCA WSFEXv1<br/>FEXAuthorize, params, …"]
-    WSCDC["ARCA WSCDC<br/>ComprobanteConstatar (FAC-84)"]
+    WSCDC["ARCA WSCDC<br/>ComprobanteConstatar"]
     S3["S3 backup<br/>(CLI, off critical path)"]
   end
 
@@ -382,7 +382,7 @@ flowchart TB
 - In-process hot switching of `ARCA_ENV`, certificates, or database
 - Permissive CORS / `Access-Control-Allow-Origin: *`
 - Accepting non-loopback `Host` or cross-origin `Origin`/`Referer` on
-  state-changing requests (see `facturador/api/localhost_policy.py`, FAC-41)
+  state-changing requests (see `facturador/api/localhost_policy.py`)
 
 **Allowed loopback forms** (ports = listen ∪ optional Docker public port):
 
@@ -400,7 +400,7 @@ flowchart TB
 Unexpected `Host` → 400. Unexpected `Origin`/`Referer` on POST/PUT/PATCH/DELETE → 403.
 Missing Origin/Referer on unsafe methods remains allowed for non-browser
 clients (API / launcher health). Browser form POSTs under `/ui/` additionally
-require a CSRF double-submit token (FAC-42 / FAC-62, `facturador/api/csrf.py`):
+require a CSRF double-submit token (`facturador/api/csrf.py`):
 cookie `facturador_csrf` + form field `csrf_token` (or `X-CSRF-Token` header).
 Missing/invalid CSRF → 403 HTML under `/ui/` (reload guidance); JSON elsewhere.
 Token material is never logged or echoed.

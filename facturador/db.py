@@ -1,4 +1,4 @@
-"""Conexión SQLite (design.md §2.2, FAC-43).
+"""Conexión SQLite (design.md §2.2).
 
 El esquema se aplica vía migraciones versionadas (``facturador.migrations``),
 no con ``CREATE TABLE IF NOT EXISTS`` en cada conexión. Toda conexión de la

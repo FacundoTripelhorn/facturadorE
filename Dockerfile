@@ -28,9 +28,9 @@ RUN chmod +x /entrypoint.sh
 # de compose y el HEALTHCHECK asumen 8399 adentro. El puerto del lado del
 # host sí es configurable, vía FACTURADOR_PORT en el shell del host; compose
 # lo propaga como FACTURADOR_PUBLIC_PORT para la allowlist Host/Origin
-# (FAC-41) cuando el mapping no es 8399:8399.
+# cuando el mapping no es 8399:8399.
 # XDG_DATA_HOME fija dónde resuelve la app las raíces de perfil (ADR 0001 /
-# FAC-25) para que el entrypoint y la app coincidan sin depender del $HOME
+# ProfilePaths) para que el entrypoint y la app coincidan sin depender del $HOME
 # del usuario del contenedor.
 ENV FACTURADOR_HOME=/facturador \
     FACTURADOR_IN_DOCKER=1 \

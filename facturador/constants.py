@@ -37,7 +37,7 @@ class InvoiceStatus(enum.StrEnum):
 
 
 class InvoiceSource(enum.StrEnum):
-    """Procedencia del comprobante local (FAC-48 / FAC-3).
+    """Procedencia del comprobante local.
 
     Solo ``wsfex`` cuenta para el chequeo de registro frente a ARCA y para
     el camino de emisión. ``imported`` es solo lectura histórica y no debe
@@ -60,7 +60,7 @@ WSFEX_URLS = {
     "prod": "https://servicios1.afip.gov.ar/wsfexv1/service.asmx",
 }
 
-# WSCDC — Constatación de Comprobantes (FAC-84). Misma regla atómica
+# WSCDC — Constatación de Comprobantes. Misma regla atómica
 # cert↔URL por ambiente que WSFEX. Namespace/SOAPAction oficiales:
 # http://servicios1.afip.gob.ar/wscdc/
 WSCDC_URLS = {
@@ -94,11 +94,11 @@ MONEDA_DOL = "DOL"
 # hacia ARCA siempre viaja el código de la tabla (DOL, PES, ...).
 MONEDA_DISPLAY = {"DOL": "USD", "PES": "ARS"}
 
-# QR RG 4892 / WSCDC receptor (FAC-84): Factura E usa CUIT país (tipo 80).
+# QR RG 4892 / WSCDC receptor: Factura E usa CUIT país (tipo 80).
 QR_BASE_URL = "https://www.afip.gob.ar/fe/qr/"
 TIPO_DOC_CUIT = 80  # tabla de tipos de documento de ARCA
 
-# Versión del contrato de render PDF (FAC-52/53). Cada factura nueva
+# Versión del contrato de render PDF. Cada factura nueva
 # guarda este valor; ``facturador.pdf.registry`` despacha el renderer
 # registrado. Los alias de presentación (p.ej. MONEDA_DISPLAY) quedan
 # atados a esta versión: cambiarlos exige bump + renderer nuevo.

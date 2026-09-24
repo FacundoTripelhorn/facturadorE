@@ -1,4 +1,4 @@
-"""FAC-41 — política Host/Origin localhost (DNS rebinding / cross-origin)."""
+"""Política Host/Origin localhost (DNS rebinding / cross-origin)."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def test_get_no_valida_origin():
 
 
 def test_post_sin_origin_ni_referer_permitido():
-    # Clientes no-browser (API, health checks); CSRF de forms es FAC-42.
+    # Clientes no-browser (API, health checks); los forms los cubre CSRF.
     assert check_origin_headers("POST", None, None, DEFAULT_PORT) is None
 
 

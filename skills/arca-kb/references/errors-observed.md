@@ -6,7 +6,7 @@ and authorize recovery. Expand only with new evidence.
 ## Source key
 
 - **O** = Official manual / WSDL semantics (resolvable links in [sources.md](sources.md))
-- **Obs** = Project homologación / FAC-65 contract / in-repo fake mirroring Obs
+- **Obs** = Project homologación / rebuild contract / in-repo fake mirroring Obs
 - **C** = Community (AfipSDK etc.) — contrast before applying to WSFEX
 - **Pending** = Behavior believed real / modeled in product; **wire ErrCode not yet
   captured** in a redacted homologación dump or listed in the pinned manual
@@ -16,7 +16,7 @@ and authorize recovery. Expand only with new evidence.
 | ErrCode | Typical message | Practical meaning | Source | Action |
 |---------|-----------------|-------------------|--------|--------|
 | `0` | OK | Success | O / Obs | Proceed |
-| `1521` | No existen datos para el comprobante | Product/fake model of “Cmp not on ARCA’s ledger” for `(Cbte_tipo, Punto_vta, Cbte_nro)` | **Pending** — FAC-65 product allow-list (`CMP_NOT_FOUND_CODES`) + `tests/arca_fake.py` + synthetic capture. **No redacted live homologación dump in this skill.** **Contrast O:** manual v3.1.1 §2.2.4 lists **`1020` Comprobante inexistente**. | For FacturadorE rebuild code: treat **1521** as the current gap signal. Do **not** claim live ARCA confirmation. If live returns **1020** (or another not-found), extend the allow-list — never invent gaps from unknown codes. |
+| `1521` | No existen datos para el comprobante | Product/fake model of “Cmp not on ARCA’s ledger” for `(Cbte_tipo, Punto_vta, Cbte_nro)` | **Pending** — rebuild product allow-list (`CMP_NOT_FOUND_CODES`) + `tests/arca_fake.py` + synthetic capture. **No redacted live homologación dump in this skill.** **Contrast O:** manual v3.1.1 §2.2.4 lists **`1020` Comprobante inexistente**. | For FacturadorE rebuild code: treat **1521** as the current gap signal. Do **not** claim live ARCA confirmation. If live returns **1020** (or another not-found), extend the allow-list — never invent gaps from unknown codes. |
 | `1020` | Comprobante inexistente | Manual’s documented “missing Cmp” on consult | **O** WSFEX v3.1.1 §2.2.4 | Prefer citing this as Official not-found. Add to product allow-list only after wire confirmation (or keep dual-list once observed). |
 | `1462` | Nro de comprobante ya utilizado | Number already registered under a **different** authorize `Id` (same Id → reproceso success, not this error) | **Pending** — product + `tests/arca_fake.py` model this code/msg; **not** listed in WSFEX manual v3.1.1 error tables searched 2026-07-28. Behavioral distinction (reuse Id vs collide on number) is **O**/Obs via `Reproceso` + sequential `Cbte_nro`. | Reconcile via `FEXGetCMP` / `FEXGetLast_CMP`; do not invent a new series. When live ARCA returns this (or a different code for the same situation), capture a redacted dump and promote the row to **Obs**. |
 | `600` | No se corresponden token con firma / ValidacionDeToken… | Auth token/sign mismatch or stale TA for this call | O / Obs / C | Refresh TA from cache correctly; ensure Token+Sign pair from same TA; check env mix. |
@@ -26,7 +26,7 @@ and authorize recovery. Expand only with new evidence.
 
 ### Note: Official `1020` vs product/fake `1521` (GetCMP missing)
 
-Pinned **Official** manual (v3.1.1 §2.2.4) lists **`1020` Comprobante inexistente** under GetCMP errors. This project’s FAC-65 rebuild contract and in-process fake use **`1521`** with message *No existen datos para el comprobante* (`docs/wsfex-gap-vs-error.md`). That doc’s “live probe” is an **operator expectation**, not a checked-in redacted response — so **`1521` stays Pending** in this skill.
+Pinned **Official** manual (v3.1.1 §2.2.4) lists **`1020` Comprobante inexistente** under GetCMP errors. This project’s rebuild contract and in-process fake use **`1521`** with message *No existen datos para el comprobante* (`docs/wsfex-gap-vs-error.md`). That doc’s “live probe” is an **operator expectation**, not a checked-in redacted response — so **`1521` stays Pending** in this skill.
 
 Until a redacted live dump is attached:
 
@@ -34,7 +34,7 @@ Until a redacted live dump is attached:
 - For FacturadorE code paths, note the allow-list is currently `{1521}` and may need `1020` (or another code) once wire-confirmed.
 - Never treat an unknown `ErrCode` as a gap.
 
-### FAC-65 rule (gap vs failure)
+### Rebuild rule (gap vs failure)
 
 On `FEXGetCMP` only:
 
@@ -66,6 +66,6 @@ AfipSDK “errores frecuentes” lists WSFEv1 codes such as **`10016`** (“núm
 
 ## References
 
-- FAC-65 doc in repo: `docs/wsfex-gap-vs-error.md`
+- Rebuild doc in repo: `docs/wsfex-gap-vs-error.md`
 - Product mapping: `facturador/arca/wsfex.py` (`CMP_NOT_FOUND_CODES`, `CmpNotFoundError`)
 - Citations: [sources.md](sources.md)

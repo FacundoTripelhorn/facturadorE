@@ -1,4 +1,4 @@
-"""Perfiles de ambiente aislados (ADR 0001, FAC-23).
+"""Perfiles de ambiente aislados (ADR 0001).
 
 Cada ambiente fiscal (homologación / producción) mapea a un perfil interno con
 su propia raíz en el app-data del sistema operativo. ``EnvironmentProfile``
@@ -7,7 +7,7 @@ runtime del perfil desde una única raíz.
 
 Todo archivo de runtime del backend (DB, certificados, PDFs, TA cache,
 params cache, logs, staging de backups, onboarding, lock del launcher) se
-resuelve por acá (FAC-25 / FAC-30); ningún módulo construye paths por ambiente
+resuelve por acá; ningún módulo construye paths por ambiente
 por su cuenta.
 """
 
@@ -56,7 +56,7 @@ def resolve_app_data_root() -> Path:
     """Raíz de app-data del SO donde viven los perfiles ocultos.
 
     ``FACTURADOR_APP_DATA`` (si está definida) gana sobre el default del SO:
-    la usa el launcher (FAC-28) para aislar el perfil del backend hijo en
+    la usa el launcher para aislar el perfil del backend hijo en
     tests y arranques controlados, sin exponer la ruta en la UI.
     """
     override = os.environ.get("FACTURADOR_APP_DATA")
@@ -148,7 +148,7 @@ class ProfilePaths:
 
     @property
     def wscdc_ta_cache(self) -> Path:
-        """Cache del TA de WSAA para ``wscdc`` (constatación, FAC-84).
+        """Cache del TA de WSAA para ``wscdc`` (constatación).
 
         WSAA emite un TA por servicio: no se reutiliza el de ``wsfex``.
         """
@@ -173,12 +173,12 @@ class ProfilePaths:
 
     @property
     def launcher_lock(self) -> Path:
-        """Lock anti-duplicado del launcher sobre este perfil (FAC-30)."""
+        """Lock anti-duplicado del launcher sobre este perfil."""
         return self.data_dir / LAUNCHER_LOCK_FILENAME
 
     @property
     def production_ack(self) -> Path:
-        """Confirmación de primer uso de Producción (FAC-40).
+        """Confirmación de primer uso de Producción.
 
         Solo tiene sentido bajo el perfil ``prod``; Homologación no lo escribe.
         """

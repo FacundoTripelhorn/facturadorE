@@ -1,4 +1,4 @@
-# `arca-kb` validation (FAC-66)
+# `arca-kb` validation
 
 Portable checks — no vendor-specific build UI required.
 
@@ -42,7 +42,7 @@ Judge whether metadata alone should load the skill:
 
 **Must match:**
 
-- Yes — Official manual v3.1.1 / WSDL `ClsFEXGetCMPR` + Observed FAC-63
+- Yes — Official manual v3.1.1 / WSDL `ClsFEXGetCMPR` + Observed FEXGetCMP fidelity matrix
 - May differ from `Fecha_cbte`
 - See `captures/fexgetcmp-success-redacted.xml`
 
@@ -53,7 +53,7 @@ Equivalent validation without maintaining forked skills:
 | Environment | What was run |
 |-------------|--------------|
 | **A — `agentskills` CLI (skills-ref)** | `validate` + `read-properties` + `to-prompt` on `skills/arca-kb` (Agent Skills spec; vendor-neutral) |
-| **B — Cursor Cloud agent (this FAC-66 run)** | Same tree under `skills/arca-kb`; §3 prompts answered from skill + captures and matched to FAC-65 / FAC-63 sources |
+| **B — Cursor Cloud agent (initial validation run)** | Same tree under `skills/arca-kb`; §3 prompts answered from skill + captures and matched to the rebuild and FEXGetCMP fidelity sources |
 
 Both consume the **same** directory. Do not create Claude-only or Cursor-only variants.
 
@@ -75,7 +75,7 @@ Fill when validating a revision:
 | agentskills validate | **Passed** (`Valid skill: skills/arca-kb`) | 2026-07-27 |
 | Trigger table (§2) | **Passed** (description keywords cover ARCA/WSFEX/WSAA/1521/Fecha_pago; excludes generic UI/lint prompts) | 2026-07-27 |
 | Technical Q §3 (1521) | **Updated** — 1521 = Pending/product allow-list; Official 1020; other codes/transport = abort | 2026-07-28 |
-| Technical Q §3 (Fecha_pago) | **Passed** — round-trips per manual v3.1.1 + FAC-63; see `captures/fexgetcmp-success-redacted.xml` | 2026-07-27 |
+| Technical Q §3 (Fecha_pago) | **Passed** — round-trips per manual v3.1.1 + FEXGetCMP fidelity matrix; see `captures/fexgetcmp-success-redacted.xml` | 2026-07-27 |
 | Portability A+B | **Passed** — CLI env A + Cursor Cloud env B, single tree | 2026-07-27 |
 | Secrets scan | **Passed** — only `REDACTED_TOKEN`/`REDACTED_SIGN`; fake CUIT `20000000001`; no PEM | 2026-07-27 |
 | Review follow-up (1462 evidence + Official URLs) | **Passed** — 1462 labeled **Pending** wire; Official PDF/WSDL URLs added; 1020 vs 1521 contrast documented | 2026-07-28 |

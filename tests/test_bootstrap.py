@@ -1,4 +1,4 @@
-"""Arranque contra un perfil de ambiente explícito e inmutable (FAC-24).
+"""Arranque contra un perfil de ambiente explícito e inmutable.
 
 Acceptance criteria del issue: un proceso = un ambiente inmutable; los
 servicios no pueden reemplazarlo; la config de ARCA deriva solo del perfil
@@ -68,7 +68,7 @@ def test_config_y_perfil_de_ambientes_distintos_rechazados(tmp_path):
 
 
 def test_config_con_paths_de_otro_perfil_rechazada(tmp_path):
-    """FAC-25: mismo ambiente no alcanza — los paths de la Config tienen que
+    """Mismo ambiente no alcanza — los paths de la Config tienen que
     salir de la raíz del perfil inyectado, no de cualquier otra."""
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h")
     otro = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "h2")

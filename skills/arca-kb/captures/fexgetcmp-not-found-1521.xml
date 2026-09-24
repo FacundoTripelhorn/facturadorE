@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Purpose: Synthetic FEXGetCMP shape for product/fake ErrCode 1521 (FAC-65 allow-list).
+  Purpose: Synthetic FEXGetCMP shape for product/fake ErrCode 1521 (rebuild gap allow-list).
   Source label: Pending — mirrors tests/arca_fake.py / CMP_NOT_FOUND_CODES; NOT a live homologación dump.
   Official contrast: WSFEX manual v3.1.1 §2.2.4 documents GetCMP missing as ErrCode 1020.
   Redaction: §2.1.1 checklist — no Token/Sign/CMS; fake CUIT only.

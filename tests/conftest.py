@@ -60,7 +60,7 @@ def test_cert_and_key() -> tuple[bytes, bytes]:
 
 @pytest.fixture
 def test_profile(tmp_path) -> EnvironmentProfile:
-    """Perfil homo aislado en tmp (FAC-24: create_app exige uno explícito)."""
+    """Perfil homo aislado en tmp (create_app exige uno explícito)."""
     return EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "profile")
 
 
@@ -76,7 +76,7 @@ def install_test_cert_pair(
 
 @pytest.fixture
 def test_config(test_profile, test_cert_and_key) -> Config:
-    """Config con TODOS los paths saliendo del perfil de test (FAC-25)."""
+    """Config con TODOS los paths saliendo del perfil de test."""
     cert_pem, key_pem = test_cert_and_key
     install_test_cert_pair(test_profile.paths, cert_pem, key_pem)
     return Config(env=ArcaEnvironment.HOMO, paths=test_profile.paths)
@@ -110,14 +110,14 @@ def api(test_config, test_profile, arca):
         wsfex=wsfex,
         wscdc=wscdc,
     )
-    # Host válido (FAC-41): TestClient default "testserver" sería rechazado.
+    # Host válido: TestClient default "testserver" sería rechazado.
     client = TestClient(app, base_url=loopback_base_url())
     client.conn = conn  # para asserts directos sobre la DB
     return client
 
 
 def ensure_csrf_cookie(client: TestClient) -> str:
-    """Garantiza cookie CSRF (FAC-42) y devuelve el token para forms/tests."""
+    """Garantiza cookie CSRF y devuelve el token para forms/tests."""
     token = client.cookies.get(CSRF_COOKIE_NAME)
     if not token:
         client.get("/health")
@@ -143,7 +143,7 @@ EMISOR_PRUEBA = {
 
 def seed_settings(conn, ambiente: str = "homo") -> None:
     """Settings de dominio con el emisor completo y activo (sin él no se
-    emite). La selección activa es local al perfil (FAC-26). ``ambiente``
+    emite). La selección activa es local al perfil. ``ambiente``
     debe coincidir con el perfil del backend bajo prueba."""
     from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 

@@ -1,7 +1,7 @@
 """Fase 5 — PDF + QR RG 4892.
 
 Cubre: contenido del payload del QR contra la spec RG 4892, contrato del
-endpoint (200/409/404), cache local descartable en data/pdfs (FAC-53),
+endpoint (200/409/404), cache local descartable en data/pdfs,
 datos hostiles impresos literales, snapshot inmutable, despacho por
 ``pdf_render_version`` y el motor fpdf2 de una sola página. El contenido
 se verifica extrayendo el texto del PDF real.
@@ -128,7 +128,7 @@ def test_pdf_de_factura_autorizada(api, arca, test_config):
     assert r.content.startswith(b"%PDF-")
     filename = "factura-E-19-00001-00000001-homo.pdf"
     assert filename in r.headers["content-disposition"]
-    # Cache local en pdfs/ del perfil (FAC-25/53), idéntica a la respuesta.
+    # Cache local en pdfs/ del perfil, idéntica a la respuesta.
     assert (test_config.paths.pdf_dir / filename).read_bytes() == r.content
 
 
@@ -213,7 +213,7 @@ def test_pdf_inexistente_es_404(api):
 def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
     api, arca, monkeypatch
 ):
-    """FAC-10: editar el mismo emisor tras autorizar no muda el PDF."""
+    """Editar el mismo emisor tras autorizar no muda el PDF."""
     factura = _factura_autorizada(api)
     emisor_id = repo.get_invoice(api.conn, factura["id"])["emisor_id"]
     repo.update_emisor(
@@ -289,7 +289,7 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
 
 
 def test_editar_emisor_tras_draft_no_cambia_el_snapshot(api, arca):
-    """FAC-10: el borrador revisado es el que se autorizará."""
+    """El borrador revisado es el que se autorizará."""
     api.post("/clients", json=CLIENTE)
     draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
     assert draft["emisor_razon_social"] == "MI EMPRESA S.R.L."
@@ -327,7 +327,7 @@ def test_editar_emisor_tras_draft_no_cambia_el_snapshot(api, arca):
 
 
 def test_nueva_factura_registra_snapshot_de_render_completo(api, arca):
-    """FAC-52: descripciones de params + pdf_render_version al crear."""
+    """Descripciones de params + pdf_render_version al crear."""
     api.post("/clients", json=CLIENTE)
     draft = api.post("/invoices", json={"imp_total": "10.00"}).json()
 
@@ -347,7 +347,7 @@ def test_nueva_factura_registra_snapshot_de_render_completo(api, arca):
 def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
     api, arca, monkeypatch
 ):
-    """FAC-52: regenerar el PDF no depende de filas vivas ni del cache."""
+    """Regenerar el PDF no depende de filas vivas ni del cache."""
     factura = _factura_autorizada(api)
     client_id = factura["client_id"]
 
@@ -453,7 +453,7 @@ def test_pdf_usa_solo_snapshot_sin_lookups_externos(api, arca):
 
 
 def test_pdf_contiene_los_datos_del_comprobante(api, arca):
-    # Los datos del emisor y las descripciones salen del snapshot (FAC-10/52).
+    # Los datos del emisor y las descripciones salen del snapshot.
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
@@ -554,7 +554,7 @@ def test_datos_hostiles_del_emisor_se_imprimen_literales(api, arca):
 
 
 def test_baseline_incluye_snapshot_de_render(tmp_path):
-    """FAC-52: columnas de render en el baseline — sin migración de upgrade."""
+    """Columnas de render en el baseline — sin migración de upgrade."""
     from facturador import db
     from facturador.migrations import latest_version
 
@@ -578,18 +578,18 @@ def test_baseline_incluye_snapshot_de_render(tmp_path):
         conn.close()
 
 
-# --- FAC-53: despacho versionado + cache descartable ---
+# --- despacho versionado + cache descartable ---
 
 
 def test_renderer_v1_esta_registrado():
-    """FAC-53: el layout actual es la versión 1 del registry."""
+    """El layout actual es la versión 1 del registry."""
     assert PDF_RENDER_VERSION == 1
     assert known_pdf_render_versions() == [1]
     assert 1 in PDF_RENDERERS
 
 
 def test_version_desconocida_falla_en_claro(api, arca):
-    """FAC-53: no se cae al template más nuevo en silencio."""
+    """No se cae al template más nuevo en silencio."""
     factura = _factura_autorizada(api)
     with api.conn:
         api.conn.execute(
@@ -609,7 +609,7 @@ def test_version_desconocida_falla_en_claro(api, arca):
 
 
 def test_cache_ausente_regenera_desde_db(api, arca, test_config, monkeypatch):
-    """FAC-53: sin archivo en pdfs/, se regenera desde el snapshot."""
+    """Sin archivo en pdfs/, se regenera desde el snapshot."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     assert inv is not None
@@ -631,7 +631,7 @@ def test_cache_ausente_regenera_desde_db(api, arca, test_config, monkeypatch):
 
 
 def test_cache_hit_no_vuelve_a_renderizar(api, arca, test_config, monkeypatch):
-    """FAC-53: si el cache existe, se sirve sin re-render."""
+    """Si el cache existe, se sirve sin re-render."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     assert inv is not None
@@ -651,7 +651,7 @@ def test_cache_hit_no_vuelve_a_renderizar(api, arca, test_config, monkeypatch):
 def test_borrar_cache_no_pierde_registro_fiscal(
     api, arca, test_config, monkeypatch
 ):
-    """FAC-53: borrar pdfs/ no toca CAE ni fila en SQLite; se regenera."""
+    """Borrar pdfs/ no toca CAE ni fila en SQLite; se regenera."""
     factura = _factura_autorizada(api)
     invoice_id = factura["id"]
     cae = factura["cae"]
@@ -689,7 +689,7 @@ def test_borrar_cache_no_pierde_registro_fiscal(
 
 
 def test_cache_write_es_atomico(api, arca, test_config, monkeypatch):
-    """FAC-53 review: el cache se publica con os.replace, no write in-place."""
+    """El cache se publica con os.replace, no write in-place."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
     assert inv is not None
@@ -817,7 +817,7 @@ def test_render_fallido_libera_el_lock_y_reintenta(
 
 
 def test_cache_key_incluye_cbte_tipo(tmp_path, monkeypatch):
-    """FAC-53 review: numeración ARCA es por (PV, cbte_tipo); no colisionar."""
+    """Numeración ARCA es por (PV, cbte_tipo); no colisionar."""
     import sqlite3
     from typing import cast
 

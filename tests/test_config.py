@@ -1,6 +1,6 @@
-"""Config de arranque: ambiente explícito inyectado (FAC-24), derivación
+"""Config de arranque: ambiente explícito inyectado, derivación
 atómica de URLs por ambiente (checklist §2.1.1 punto 1), paths de runtime
-saliendo SOLO del perfil (FAC-25) y resolución única del home de bootstrap
+saliendo SOLO del perfil y resolución única del home de bootstrap
 (sin fallback al CWD)."""
 
 import os
@@ -74,7 +74,7 @@ def test_no_existe_forma_de_mezclar_ambiente_y_certificado(tmp_path):
     assert config.__dataclass_fields__.keys() == {"env", "paths"}
 
 
-# --- paths de runtime a través del perfil (FAC-25) ---
+# --- paths de runtime a través del perfil ---
 
 
 def test_todos_los_paths_de_runtime_salen_del_perfil(tmp_path):
@@ -114,7 +114,7 @@ def test_env_invalido_rechazado(monkeypatch, tmp_path):
 
 
 def test_env_ausente_rechazado_sin_default_silencioso(monkeypatch, tmp_path):
-    """FAC-24: sin ARCA_ENV no hay ambiente 'homo' implícito — el backend
+    """Sin ARCA_ENV no hay ambiente 'homo' implícito — el backend
     arranca contra exactamente un ambiente explícito o no arranca."""
     monkeypatch.setenv("FACTURADOR_HOME", str(tmp_path))
     # ensure_home respeta un .env existente: este no trae ARCA_ENV a propósito.
@@ -134,7 +134,7 @@ def test_primer_arranque_sin_eleccion_explicita_falla(monkeypatch, tmp_path):
 
 
 def test_arranque_sin_certificados_queda_en_setup(tmp_path):
-    """FAC-35: sin par cert/key el backend arranca; el setup pide certificado."""
+    """Sin par cert/key el backend arranca; el setup pide certificado."""
     from facturador import db
     from facturador.setup import SetupState, reconcile_setup_state
 
@@ -185,7 +185,7 @@ def test_facturador_home_del_entorno_gana_al_default(monkeypatch, tmp_path):
 
 
 def test_primer_arranque_crea_solo_el_env_bootstrap(monkeypatch, tmp_path):
-    """El home ya no aloja archivos de runtime (FAC-25): el primer arranque
+    """El home ya no aloja archivos de runtime: el primer arranque
     solo deja el .env de bootstrap; secrets/data/backups viven en el perfil."""
     home = tmp_path / "facturador"
     monkeypatch.setenv("FACTURADOR_HOME", str(home))
@@ -194,7 +194,7 @@ def test_primer_arranque_crea_solo_el_env_bootstrap(monkeypatch, tmp_path):
     assert not (home / "secrets").exists()
     assert not (home / "data").exists()
     assert not (home / "backups").exists()
-    # El esqueleto documenta el flag pero NO activa un ambiente (FAC-24).
+    # El esqueleto documenta el flag pero NO activa un ambiente.
     bootstrap = (home / ".env").read_text(encoding="utf-8")
     assert "#ARCA_ENV=homo" in bootstrap
     assert not any(

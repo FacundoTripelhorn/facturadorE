@@ -1,4 +1,4 @@
-"""FAC-36: validación y persistencia atómica del par certificado/clave ARCA."""
+"""Validación y persistencia atómica del par certificado/clave ARCA."""
 
 from __future__ import annotations
 
@@ -334,7 +334,7 @@ def test_store_usa_temps_unicos_por_llamada(
 def test_stores_concurrentes_dejan_par_consistente(profile: EnvironmentProfile):
     """Lock + temps únicos: el par vivo nunca queda cert A + key B.
 
-    FAC-39: todos los pares comparten el mismo CUIT (renovación permitida).
+    Todos los pares comparten el mismo CUIT (renovación permitida).
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -487,7 +487,7 @@ def test_reader_espera_par_completo_bajo_lock(
 
 
 def test_store_rechaza_certificado_con_otro_cuit(profile: EnvironmentProfile):
-    """FAC-39: renovar con otro CUIT no muta el perfil."""
+    """Renovar con otro CUIT no muta el perfil."""
     good_cert, good_key, _ = _build_pair(cuit=VALID_CUIT)
     store_certificate_pair(profile, good_cert, good_key)
     before_cert = profile.paths.cert.read_bytes()
@@ -502,7 +502,7 @@ def test_store_rechaza_certificado_con_otro_cuit(profile: EnvironmentProfile):
 
 
 def test_store_permite_renovar_mismo_cuit(profile: EnvironmentProfile):
-    """FAC-39: rotación de par con el mismo CUIT está permitida."""
+    """Rotación de par con el mismo CUIT está permitida."""
     old_cert, old_key, _ = _build_pair(cuit=VALID_CUIT)
     store_certificate_pair(profile, old_cert, old_key)
     new_cert, new_key, _ = _build_pair(cuit=VALID_CUIT)
@@ -513,7 +513,7 @@ def test_store_permite_renovar_mismo_cuit(profile: EnvironmentProfile):
 
 
 def test_store_rechaza_cuit_distinto_del_sello(profile: EnvironmentProfile):
-    """FAC-39: el sello en settings también bloquea otro CUIT (sin cert vivo)."""
+    """El sello en settings también bloquea otro CUIT (sin cert vivo)."""
     new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
     with pytest.raises(CertificateError, match="sellado al CUIT"):
         store_certificate_pair(

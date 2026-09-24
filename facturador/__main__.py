@@ -26,7 +26,7 @@ def _setup_logging(config: Config) -> None:
 
     La redacción de credenciales (token/sign del TA, CMS firmado) es
     responsabilidad de cada módulo al loguear (checklist §2.1.1 punto 9);
-    acá solo se decide el destino: el logs/ del perfil (FAC-25).
+    acá solo se decide el destino: el logs/ del perfil.
     """
     config.paths.logs_dir.mkdir(parents=True, exist_ok=True)
     file_handler = logging.handlers.RotatingFileHandler(
@@ -43,7 +43,7 @@ def _setup_logging(config: Config) -> None:
 
 
 def main() -> None:
-    # ADR 0001 / FAC-24: el ambiente se resuelve UNA vez acá y viaja
+    # ADR 0001: el ambiente se resuelve UNA vez acá y viaja
     # inyectado; ningún otro módulo vuelve a leer ARCA_ENV.
     profile = resolve_boot_profile()
     config = load_config(profile)

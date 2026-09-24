@@ -1,4 +1,4 @@
-"""Seed backup status + manual trigger (FAC-47). Feeds FAC-49 diagnostics."""
+"""Seed backup status + manual trigger. Feeds the diagnostics view."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/backup", tags=["backup"])
 
 @router.get("/seed", response_model=SeedBackupStateOut)
 def get_seed_backup_state(service: ServiceDep) -> SeedBackupStateOut:
-    """Queryable last-success / pending / failed state (FAC-47 → FAC-49)."""
+    """Queryable last-success / pending / failed state."""
     state = service.get_seed_backup_state()
     return SeedBackupStateOut(**seed_backup_state_as_dict(state))
 

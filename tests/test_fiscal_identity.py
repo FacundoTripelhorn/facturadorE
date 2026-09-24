@@ -1,4 +1,4 @@
-"""FAC-39: un CUIT fiscal por perfil (sello, snapshot, rechazo de mismatch)."""
+"""Un CUIT fiscal por perfil (sello, snapshot, rechazo de mismatch)."""
 
 from __future__ import annotations
 
@@ -295,7 +295,7 @@ def test_baseline_incluye_cuit_emisor(tmp_path: Path):
 
 
 def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
-    """FAC-10: snapshot en el baseline — sin migración de upgrade (no hay DBs)."""
+    """Snapshot en el baseline — sin migración de upgrade (no hay DBs)."""
     conn = db.connect(tmp_path / "fresh.db")
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}

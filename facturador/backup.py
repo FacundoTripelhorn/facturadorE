@@ -1,17 +1,18 @@
-"""Backup cifrado del seed de UN perfil (FAC-44, design.md §2.5, ADR 0001).
+"""Backup cifrado del seed de UN perfil (design.md §2.5, ADR 0001).
 
 ARCA es el ledger autoritativo. Este módulo respalda solo el **seed** de
 configuración que ARCA no puede reproducir (emisores, CUIT fiscal, ambiente,
 PV/tipos, cliente default / UI, versión de esquema + manifiesto). La DB
 local, PDFs, certificados e identidades ``age`` **no** viajan en el bundle;
-el registro se reconstruye desde ARCA (FAC-65).
+el registro se reconstruye desde ARCA.
 
-Pasos (FAC-44):
+Pasos:
 
 1. Armar el seed JSON desde la DB del perfil (sin filas de comprobantes).
 2. Adjuntar manifiesto (schema version, device-id, timestamp, checksum).
 3. Cifrar con ``age`` a **todas** las claves de ``backups/recipients.txt``.
-4. Sobrescribir ``backups/seed.age`` (nombre fijo). Upload S3: FAC-45.
+4. Sobrescribir ``backups/seed.age`` (nombre fijo). El upload a S3 lo hace
+   seed_backup_sync.
 
 Uso:  uv run python -m facturador.backup --env homo|prod
       uv run python -m facturador.backup --root <raíz-del-perfil>
@@ -93,7 +94,7 @@ def backup_s3_settings(snapshot: bytes | None) -> tuple[str, str]:
     """Bucket/prefijo de S3 desde la tabla settings del snapshot de la DB.
 
     Legacy helper (restore / tests). El seed nuevo lee settings vía
-    ``assemble_seed``; el upload lo hace FAC-45.
+    ``assemble_seed``; el upload lo hace seed_backup_sync.
     """
     if snapshot is None:
         return "", BACKUP_PREFIX_DEFAULT
@@ -128,8 +129,8 @@ def snapshot_db(db_path: Path) -> bytes:
 def build_tar(paths: ProfilePaths, db_snapshot: bytes | None) -> bytes:
     """Tarball gz en memoria de secrets/ + data/ del perfil (DB = snapshot).
 
-    Legacy: el backup normal (FAC-44) ya no empaqueta DB ni secrets.
-    Conservado para restore.py / tests hasta el rebuild FAC-65.
+    Legacy: el backup normal ya no empaqueta DB ni secrets.
+    Conservado para restore.py / tests (el restore actual reconstruye desde ARCA).
     """
 
     def _skip(name: str, path: Path) -> bool:
@@ -163,7 +164,7 @@ def build_tar(paths: ProfilePaths, db_snapshot: bytes | None) -> bytes:
 def encrypt_age(plaintext: bytes, out_path: Path) -> None:
     """``age -p``: pide la passphrase en la terminal, jamás por argv/env.
 
-    Legacy (archives con passphrase). El seed FAC-44 usa recipients.
+    Legacy (archives con passphrase). El seed actual usa recipients.
     """
     if shutil.which("age") is None:
         raise BackupError(
@@ -177,7 +178,7 @@ def encrypt_age(plaintext: bytes, out_path: Path) -> None:
 
 
 def upload_s3(archive: Path, bucket: str, prefix: str) -> str:
-    """Legacy upload por nombre timestamped. FAC-45 reemplaza esto."""
+    """Legacy upload por nombre timestamped. Reemplazado por el upload del seed."""
     if shutil.which("aws") is None:
         raise BackupError("BACKUP_S3_BUCKET definido pero no hay `aws` CLI en PATH.")
     dest = f"s3://{bucket}/{prefix.strip('/')}/{archive.name}"
@@ -186,7 +187,7 @@ def upload_s3(archive: Path, bucket: str, prefix: str) -> str:
 
 
 def _environment_from_db(conn: sqlite3.Connection) -> str:
-    """Sello de ambiente del perfil (FAC-26): emisor activo o primer emisor."""
+    """Sello de ambiente del perfil: emisor activo o primer emisor."""
     from .settings import get_active_emisor_id, load_emisor
 
     active_id = get_active_emisor_id(conn)
@@ -245,13 +246,13 @@ def main(argv: list[str] | None = None) -> int:
         prefix = seed["ui"]["backup_s3_prefix"]
         logical = seed_object_key(prefix, cuit, environment)
         print(f"Seed cifrado: {archive} ({archive.stat().st_size} bytes)")
-        print(f"Clave lógica (S3, FAC-45): {logical}")
+        print(f"Clave lógica (S3): {logical}")
         print(
-            "Upload a S3: pendiente de FAC-45 "
+            "Upload a S3: lo hace la app al cambiar la configuración "
             f"(recipients locales: {recipients_path(paths)})."
         )
         # Evitar que un seed.age viejo con otro nombre confunda: el único
-        # artefacto FAC-44 es backups/seed.age.
+        # artefacto es backups/seed.age.
         assert archive == seed_archive_path(paths)
         return 0
     except (

@@ -37,7 +37,7 @@ running in Docker. Design rationale: [`docs/design.md`](../design.md) §2.5.
 when the user opens the wrong URL, or documentation — not widening the bind.
 
 Opening the app via a non-loopback hostname (or a DNS-rebinding hostname that
-resolves to 127.0.0.1) yields **400 Host no permitido** (FAC-41). That is
+resolves to 127.0.0.1) yields **400 Host no permitido**. That is
 intentional middleware, not a routing bug.
 
 ---
@@ -60,7 +60,7 @@ which publishes **only** `127.0.0.1:${FACTURADOR_PORT:-8399}:8399` — never
 
 `FACTURADOR_IN_DOCKER` is set only in the `Dockerfile`; the host bind address
 is not configurable by design (`facturador/__main__.py`). Compose injects
-`FACTURADOR_PUBLIC_PORT` from the host-side `FACTURADOR_PORT` so the FAC-41
+`FACTURADOR_PUBLIC_PORT` from the host-side `FACTURADOR_PORT` so the Host/Origin
 Host/Origin allowlist accepts browser requests on a custom published port
 while the container keeps listening on 8399.
 
@@ -74,17 +74,17 @@ while the container keeps listening on 8399.
 
 ---
 
-## Production WSFEX: weak DH / OpenSSL 3 (FAC-81)
+## Production WSFEX: weak DH / OpenSSL 3
 
 **Symptom:** In **Producción**, `/health/arca`, `/params/…`, or client forms that
 refresh ARCA tables fail with
 `[SSL: DH_KEY_TOO_SMALL] dh key too small`. Homologación works.
 
-**Expected (pre-FAC-81):** AFIP’s prod WSFEX host (`servicios1.afip.gov.ar`)
+**Expected (before the weak-DH accommodation):** AFIP’s prod WSFEX host (`servicios1.afip.gov.ar`)
 still offers DHE with a 1024-bit DH temp key; OpenSSL 3’s default SECLEVEL
 rejects it. WSAA prod and both homo endpoints negotiate ECDH and are fine.
 
-**Product accommodation (FAC-81):** only the **prod** `WsfexClient` httpx
+**Product accommodation:** only the **prod** `WsfexClient` httpx
 client uses an `SSLContext` from `ssl.create_default_context()` with
 SECLEVEL=1 (Python’s default cipher policy preserved; not OpenSSL’s broader
 `DEFAULT` set). Certificate verification stays on. Homologación and WSAA
@@ -99,7 +99,7 @@ machine-wide `openssl.cnf` SECLEVEL change.
 check failures) once the profile is ``ready``. `GET /` may return 500 when a
 default client exists and WSAA cannot obtain a TA. If setup is incomplete,
 browser hits to `/` redirect to `/setup`; JSON invoice/ARCA routes return
-**503** with `setup_state` (FAC-35) — that is the onboarding guard, not a
+**503** with `setup_state` — that is the onboarding guard, not a
 credential bug.
 
 **Expected** in environments without a registered homologación certificate
@@ -131,7 +131,7 @@ in WSASS, authorize service `wsfex`.
 
 ---
 
-## Incomplete profile setup blocks until ready (FAC-35)
+## Incomplete profile setup blocks until ready
 
 **Symptom:** `POST /invoices`, `/params/…`, or `GET /health/arca` return
 **503** with `setup_state` (and `setup_url: /setup`) such as
@@ -141,9 +141,9 @@ in WSASS, authorize service `wsfex`.
 **Expected.** Each profile stores setup progress in `data/onboarding.json`.
 Until the state is `ready` (valid cert pair + active complete emisor with at
 least one point of sale), the guard blocks invoice and ARCA operations.
-HTML entry points send the user to the onboarding UI (FAC-37/38); APIs keep
+HTML entry points send the user to the onboarding UI; APIs keep
 JSON 503 for clients. `GET /health` and `GET /setup` stay available;
-`/configuracion` remains open so emisor/PV can be completed (FAC-38).
+`/configuracion` remains open so emisor/PV can be completed.
 
 **Do not** treat this as a broken health check or a missing exception handler.
 Open `/setup` (or follow the redirect from `/`) and finish the pending step.
@@ -267,15 +267,15 @@ Authoritative domain section: [`docs/design.md`](../design.md) §1.1.
 
 ---
 
-## Emisor snapshot lives in the baseline (FAC-10) — no upgrade migration
+## Emisor snapshot lives in the baseline — no upgrade migration
 
-**Symptom / review ask:** “Should FAC-10 add a v2 migration / `ALTER TABLE`
+**Symptom / review ask:** “Should the issuer snapshot add a v2 migration / `ALTER TABLE`
 for the new `emisor_*` snapshot columns?”
 
 **Expected: no.** Those columns were added to the **baseline** (`schema.sql`,
 migración v1) on purpose. There are no deployed profile DBs that need an
 upgrade path for this change. Reviewers should **not** request a v2 migration
-solely for FAC-10 issuer snapshot fields.
+solely for the issuer snapshot fields.
 
 New drafts persist `emisor_id` plus immutable issuer fields; PDF rendering
 reads that snapshot, never the live `emisores` row.
@@ -285,16 +285,16 @@ or “fix” historical PDFs by reloading the current emisor.
 
 ---
 
-## Multi-emisor: schema ready, selection UI pending (FAC-8)
+## Multi-emisor: schema ready, selection UI pending
 
 **Symptom:** The `emisores` table can hold multiple rows in the same profile
 DB, but without an explicit `active_emisor_id` there is no operative emisor.
 `/configuracion` does not offer a full alta/lista UX yet. Environment is not a
 user-editable field on the emisor form (it is a profile seal).
 
-**Expected.** Emisores are **local to the profile** (FAC-26 / FAC-27). Runtime
+**Expected.** Emisores are **local to the profile**. Runtime
 uses `active_emisor_id` (`facturador/settings.py`). Invoicing uses
-`Emisor.punto_venta` (first entry in `puntos_venta`). FAC-8 (richer multi-emisor
+`Emisor.punto_venta` (first entry in `puntos_venta`). Richer multi-emisor
 UI / PV selection) is still open.
 
 **Do not:**
@@ -303,9 +303,9 @@ UI / PV selection) is still open.
 - Delete “duplicate” emisor rows as a bug fix unless the task explicitly covers
   data migration.
 - Move emisor fields back into the flat `settings` key/value table.
-- Assume `/configuracion` already implements full alta de emisores — that is FAC-8.
+- Assume `/configuracion` already implements full alta de emisores — that is still pending.
 
-**Fix (when scoped):** implement FAC-8 (alta/lista/selección de emisor y PV).
+**Fix (when scoped):** implement alta/lista/selección de emisor y PV.
 Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 
 ---
@@ -316,11 +316,11 @@ Until then, see [`repo-map.md`](repo-map.md) § Emisor entity / multi-emisor.
 |-------------|--------------|--------|
 | Cannot reach app from another PC | Localhost-only bind | Expected; do not widen bind |
 | `0.0.0.0` in `docker ps` / container logs | Docker internal listen | Expected; check host publish is `127.0.0.1` |
-| `DH_KEY_TOO_SMALL` on prod WSFEX / params | AFIP 1024-bit DH + OpenSSL 3 | Expected host behavior; FAC-81 acomoda solo prod WSFEX (verify on) |
+| `DH_KEY_TOO_SMALL` on prod WSFEX / params | AFIP 1024-bit DH + OpenSSL 3 | Expected host behavior; only prod WSFEX is accommodated (verify on) |
 | 5xx on authorize / cotización | No real homologación cert | Setup credentials or use tests |
 | `cms.cert.untrusted` | Self-signed test cert | WSASS cert or `arca_fake` tests |
 | Emisor not in `.env` | Config in profile SQLite | Use `/configuracion` or DB seed |
 | Looking for WSFEv1 code | Wrong service for Factura E | Use WSFEX (`FEX*` methods) |
-| Extra `emisores` rows / no active | FAC-8 UI incomplete | Expected; set `active_emisor_id` |
+| Extra `emisores` rows / no active | Multi-emisor UI incomplete | Expected; set `active_emisor_id` |
 | Env did not change in-process | Restart-based switch | Expected; use launcher / Cambiar ambiente |
 | Shared `~/facturador/data` for both envs | Old shared-home model | Use per-profile roots via `ProfilePaths` |

@@ -1,7 +1,7 @@
-"""Registry de renderers PDF versionados (FAC-53).
+"""Registry de renderers PDF versionados.
 
-Cada factura guarda ``pdf_render_version`` en su snapshot inmutable
-(FAC-52). El despacho elige el renderer registrado para esa versión;
+Cada factura guarda ``pdf_render_version`` en su snapshot inmutable. El
+despacho elige el renderer registrado para esa versión;
 una versión desconocida falla en claro (nunca cae al template más
 nuevo).
 """

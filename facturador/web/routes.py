@@ -90,10 +90,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _ambiente_en_contexto(request: Request) -> dict[str, object]:
-    """Identidad de ambiente visible en toda la UI (ADR 0001 / FAC-31).
+    """Identidad de ambiente visible en toda la UI (ADR 0001).
 
     Solo lenguaje de negocio (Homologación / Producción) y el código corto;
-    nunca paths de perfil, certificados ni secretos. FAC-32: ``launcher``
+    nunca paths de perfil, certificados ni secretos. Cambio de ambiente: ``launcher``
     indica si el proceso está supervisado y puede pedir cambio por reinicio.
     """
     profile = request.app.state.profile
@@ -105,7 +105,7 @@ def _ambiente_en_contexto(request: Request) -> dict[str, object]:
 
 
 def _csrf_en_contexto(request: Request) -> dict[str, object]:
-    """Token CSRF para campos ocultos de formularios (FAC-42)."""
+    """Token CSRF para campos ocultos de formularios."""
     return {"csrf_token": csrf_token_for_request(request)}
 
 
@@ -160,7 +160,7 @@ def _recovery_from_ui_path(path: str) -> str:
 async def csrf_rejected_handler(
     request: Request, exc: Exception
 ) -> HTMLResponse | JSONResponse:
-    """FAC-62: HTML con guía de recuperación en ``/ui/``; JSON genérico fuera.
+    """HTML con guía de recuperación en ``/ui/``; JSON genérico fuera.
 
     El mensaje es fijo: nunca ecoa cookie ni el valor enviado en el form.
     La firma acepta ``Exception`` por el contrato de Starlette
@@ -455,7 +455,7 @@ def catch_up_ui(
     service: ServiceDep,
     invoice_id: str = Form(""),
 ):
-    """FAC-65: remediación del guard FAC-48 — catch-up desde ARCA."""
+    """Remediación del guard de registro desactualizado — catch-up desde ARCA."""
     try:
         report = service.catch_up_from_arca()
     except ServiceError as exc:
@@ -497,7 +497,7 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Constatación de CAE (WSCDC, FAC-84) — menú propio, botón explícito
+# Constatación de CAE (WSCDC) — menú propio, botón explícito
 # ---------------------------------------------------------------------------
 
 
@@ -586,7 +586,7 @@ def ui_constatar(
 ):
     """Botón Constatar: única vía que llama a WSCDC (nunca post-authorize).
 
-    Dos modos (FAC-84, grill #4): con ``invoice_id`` constata un comprobante
+    Dos modos (grill #4): con ``invoice_id`` constata un comprobante
     del registro local; sin ``invoice_id``, los campos manuales describen un
     comprobante externo (no emitido por la app).
     """
@@ -767,7 +767,7 @@ def _pagina_clientes(
         # el template muestra el mensaje y el CRUD offline sigue usable
         # cuando el cache ya está sembrado. OSError cubre cert ausente
         # (FileNotFoundError al leer el PEM); CertificateError el par
-        # inválido si el refresh pasa por validación FAC-36.
+        # inválido si el refresh pasa por la validación del par cert/key.
         error = error or str(exc)
     return templates.TemplateResponse(
         request,
@@ -828,7 +828,7 @@ def guardar_cliente(
 
 
 # ---------------------------------------------------------------------------
-# Setup / onboarding (FAC-37)
+# Setup / onboarding
 # ---------------------------------------------------------------------------
 
 
@@ -897,7 +897,7 @@ def _pagina_setup(
 
 @router.get("/setup", response_class=HTMLResponse)
 def setup_pagina(request: Request, service: ServiceDep, aviso: str = ""):
-    """Onboarding por perfil: certificado, emisor y punto de venta (FAC-37/38)."""
+    """Onboarding por perfil: certificado, emisor y punto de venta."""
     avisos = {
         "instalado": "instalado",
         "emisor": "emisor",
@@ -914,7 +914,7 @@ async def instalar_certificado_setup(
     certificado: UploadFile = File(...),  # noqa: B008
     clave: UploadFile = File(...),  # noqa: B008
 ):
-    """Valida y persiste el par cert/key del perfil (FAC-36 vía UI)."""
+    """Valida y persiste el par cert/key del perfil (vía UI)."""
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
 
@@ -980,7 +980,7 @@ async def guardar_emisor_setup(
     condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
     puntos_venta: str = Form("1"),
 ):
-    """Alta/edición del primer emisor durante onboarding (FAC-38)."""
+    """Alta/edición del primer emisor durante onboarding."""
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.EMISOR_REQUIRED:
@@ -1095,7 +1095,7 @@ async def guardar_emisor_setup(
 
     new_state = reconcile_setup_state(profile, service.conn)
     if new_state is SetupState.READY and state is not SetupState.READY:
-        # FAC-47: fin de onboarding (/setup is setup-guard exempt).
+        # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "emisor"
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
@@ -1107,7 +1107,7 @@ async def guardar_punto_venta_setup(
     service: ServiceDep,
     puntos_venta: str = Form(""),
 ):
-    """Habilita puntos de venta del emisor activo durante onboarding (FAC-38)."""
+    """Habilita puntos de venta del emisor activo durante onboarding."""
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.POINT_OF_SALE_REQUIRED:
@@ -1175,7 +1175,7 @@ async def guardar_punto_venta_setup(
 
     new_state = reconcile_setup_state(profile, service.conn)
     if new_state is SetupState.READY and state is not SetupState.READY:
-        # FAC-47: fin de onboarding (/setup is setup-guard exempt).
+        # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "punto_venta"
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
@@ -1339,7 +1339,7 @@ def guardar_backup(
 
 
 # ---------------------------------------------------------------------------
-# Cambio de ambiente por reinicio (FAC-32 / ADR 0001)
+# Cambio de ambiente por reinicio (ADR 0001)
 # ---------------------------------------------------------------------------
 
 

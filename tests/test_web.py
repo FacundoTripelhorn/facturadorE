@@ -132,7 +132,7 @@ def test_generar_redirige_a_revision_sin_tocar_arca(api, arca):
     assert "1500.00" in r.text
     assert "Confirmar y autorizar" in r.text
     assert "Descartar borrador" in r.text
-    # Página read-only: ningún campo editable de factura; solo CSRF (FAC-42).
+    # Página read-only: ningún campo editable de factura; solo CSRF.
     assert 'name="imp_total"' not in r.text
     assert 'name="csrf_token"' in r.text
     assert r.text.count("<input") == r.text.count('name="csrf_token"')
@@ -158,7 +158,7 @@ def test_confirmar_autoriza_y_muestra_detalle(api, arca):
     assert r.status_code == 303
     assert r.headers["location"] == f"/facturas/{invoice_id}"
     assert arca.calls["FEXAuthorize"] == 1
-    # FAC-84: authorize nunca dispara WSCDC por su cuenta.
+    # Authorize nunca dispara WSCDC por su cuenta.
     assert arca.calls["ComprobanteConstatar"] == 0
 
     detalle = api.get(f"/facturas/{invoice_id}")
@@ -222,7 +222,7 @@ def test_listado_descarga_el_pdf_directo(api, arca):
 
 
 def test_constatacion_menu_y_boton_constatar(api, arca):
-    """FAC-84: menú propio + Constatar explícito (happy path con fake)."""
+    """Menú propio + Constatar explícito (happy path con fake)."""
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
     _autorizar(api, invoice_id)
@@ -326,7 +326,7 @@ def test_constatacion_html_outage_es_503_operador(
     assert "WSCDC" in outage.text
 
 
-# --- constatación manual: comprobante externo (grill FAC-84 #4b) ---
+# --- constatación manual: comprobante externo  ---
 
 _MANUAL_FORM = {
     "punto_venta": "7",
@@ -452,7 +452,7 @@ def test_constatacion_manual_acepta_importes_limite(api, arca):
 
 
 def test_constatacion_manual_sella_cuit_fiscal(api, arca):
-    """FAC-39 (Codex P2): la constatación manual puede ser la PRIMERA
+    """La constatación manual puede ser la PRIMERA
     operación fiscal del perfil — debe sellar el CUIT (igual que emitir)."""
     assert get_sealed_fiscal_cuit(api.conn) is None
 
@@ -799,8 +799,8 @@ def _sin_settings(api):
 
 
 def test_primer_arranque_bloquea_emision_hasta_ready(api, arca):
-    """FAC-35: sin emisor el perfil no está ready.
-    UI redirige a /setup; APIs JSON → 503. Configuración sigue abierta (FAC-38)."""
+    """Sin emisor el perfil no está ready.
+    UI redirige a /setup; APIs JSON → 503. Configuración sigue abierta."""
     _sin_settings(api)
 
     home = api.get("/", follow_redirects=False)
@@ -948,7 +948,7 @@ def test_edicion_de_emisor_rechaza_ambiente_obsoleto(api, arca):
 
 
 def test_no_se_puede_activar_emisor_inactivo_de_otro_perfil(api, arca):
-    """FAC-27: un emisor legacy de otro ambiente puede seguir listado, pero
+    """Un emisor legacy de otro ambiente puede seguir listado, pero
     no debe poder activarse ni mostrar el botón en la UI."""
     api.post(
         "/ui/emisores",
@@ -985,7 +985,7 @@ def test_no_se_puede_activar_emisor_inactivo_de_otro_perfil(api, arca):
 
 
 def test_emisor_activo_de_otro_perfil_bloquea_los_settings(api, arca):
-    """FAC-26: con el emisor activo sellado con OTRO ambiente (DB ajena
+    """Con el emisor activo sellado con OTRO ambiente (DB ajena
     restaurada en el perfil equivocado), las páginas que cargan settings
     quedan bloqueadas con el diagnóstico de restore, igual que las
     facturas ajenas."""
@@ -1009,7 +1009,7 @@ def test_seleccion_punto_venta_al_emitir(api, arca):
     assert factura["punto_venta"] == 3
 
 
-# --- identidad de ambiente persistente (FAC-31 / ADR 0001) ---
+# --- identidad de ambiente persistente (ADR 0001) ---
 
 _PAGINAS_NORMALES = (
     "/",
@@ -1076,7 +1076,7 @@ def test_paginas_muestran_identidad_de_ambiente(
 def test_produccion_muestra_avisos_de_seguridad_fiscal(
     tmp_path, test_cert_and_key, arca
 ):
-    """FAC-40: copy de validez fiscal en setup/emisión; homo no lo muestra."""
+    """Copy de validez fiscal en setup/emisión; homo no lo muestra."""
     prod, _ = _api_para_ambiente(
         ArcaEnvironment.PROD, tmp_path / "prod", test_cert_and_key, arca
     )
@@ -1131,7 +1131,7 @@ def test_health_identifica_ambiente_sin_filtrar_secretos(
     assert "cert.key" not in dumped
 
 
-# --- setup certificado (FAC-37) ---
+# --- setup certificado ---
 
 
 def _client_sin_certificados(
@@ -1201,7 +1201,7 @@ def test_setup_instala_certificado_y_muestra_metadata(
 def test_setup_emisor_onboarding_llega_a_ready(
     tmp_path, test_cert_and_key, arca
 ):
-    """FAC-38: crear emisor en /setup activa y completa el perfil."""
+    """Crear emisor en /setup activa y completa el perfil."""
     client, profile = _client_sin_certificados(tmp_path, arca, seed=False)
     cert_pem, key_pem = test_cert_and_key
     client.post(
@@ -1264,7 +1264,7 @@ def test_setup_emisor_invalido_no_crea_duplicados(tmp_path, test_cert_and_key, a
 def test_setup_retoma_emisor_sin_duplicar_tras_reinicio(
     tmp_path, test_cert_and_key, arca
 ):
-    """FAC-38: reinicio con emisor incompleto retoma el mismo registro."""
+    """Reinicio con emisor incompleto retoma el mismo registro."""
     from facturador import repo
     from facturador.settings import Emisor, Settings, save_settings
 
@@ -1323,7 +1323,7 @@ def test_setup_retoma_emisor_sin_duplicar_tras_reinicio(
 
 
 def test_setup_punto_venta_onboarding(tmp_path, test_cert_and_key, arca):
-    """FAC-38: emisor completo sin PV exige paso de punto de venta."""
+    """Emisor completo sin PV exige paso de punto de venta."""
     from facturador import repo
     from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 
@@ -1536,7 +1536,7 @@ def test_setup_retoma_paso_tras_reinicio(tmp_path, test_cert_and_key, arca):
     assert "Certificado instalado" in client2.get("/setup").text
 
 
-# --- cambio de ambiente por reinicio (FAC-32 / ADR 0001) ---
+# --- cambio de ambiente por reinicio (ADR 0001) ---
 
 
 def test_cambiar_ambiente_solo_con_launcher(monkeypatch, api):

@@ -1,4 +1,4 @@
-"""Diálogo de primer uso de Producción en el launcher (FAC-40).
+"""Diálogo de primer uso de Producción en el launcher.
 
 La persistencia del ack vive en ``facturador.production_ack`` (también la
 usa el backend/Docker). Acá solo está el flujo interactivo del launcher.
@@ -68,7 +68,7 @@ def ensure_production_acknowledged(
         return True
 
     # Bajo pytest, sin callback inyectado, no abrir diálogos ni tocar el
-    # perfil real del usuario. Los tests de FAC-40 pasan ``confirm=``.
+    # perfil real del usuario. Los tests pasan ``confirm=``.
     if confirm is None and os.environ.get("PYTEST_CURRENT_TEST"):
         return True
 

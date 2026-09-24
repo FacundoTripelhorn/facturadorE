@@ -1,4 +1,4 @@
-"""TLS helpers for ARCA httpx clients (FAC-81).
+"""TLS helpers for ARCA httpx clients.
 
 AFIP production WSFEX (``servicios1.afip.gov.ar``) still offers DHE with a
 1024-bit DH temp key. OpenSSL 3's default SECLEVEL rejects that
@@ -21,7 +21,7 @@ from ..constants import ArcaEnvironment
 logger = logging.getLogger(__name__)
 
 # OpenSSL cipher-list marker: lower security level without swapping the
-# cipher suite set. Keep in sync with docs/design.md §2.1.1 punto 5 (FAC-81).
+# cipher suite set. Keep in sync with docs/design.md §2.1.1 punto 5.
 _SECLEVEL_1 = "@SECLEVEL=1"
 
 
@@ -56,14 +56,14 @@ def arca_servicios1_verify(
 ) -> ssl.SSLContext | bool:
     """httpx ``verify`` for ARCA hosts on ``servicios1`` (prod weak DH).
 
-    Used by WSFEX and WSCDC (FAC-84). Homologación keeps defaults.
+    Used by WSFEX and WSCDC. Homologación keeps defaults.
     Never returns ``False``.
     """
     if env != ArcaEnvironment.PROD:
         return True
     ctx = _prod_wsfex_ssl_context()
     logger.info(
-        "ARCA %s TLS: SECLEVEL=1 (AFIP prod weak-DH workaround, FAC-81)",
+        "ARCA %s TLS: SECLEVEL=1 (AFIP prod weak-DH workaround)",
         label,
     )
     return ctx

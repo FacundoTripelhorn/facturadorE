@@ -47,7 +47,7 @@ def list_arca_invoices(
         description="Si se indica, consulta solo ese número vía FEXGetCMP",
     ),
 ):
-    """Peek de solo lectura del registro ARCA (FAC-68).
+    """Peek de solo lectura del registro ARCA.
 
     No escribe en la DB local. Usa ``FEXGetLast_CMP`` + ``FEXGetCMP``.
     ``offset`` cuenta desde el comprobante más reciente.

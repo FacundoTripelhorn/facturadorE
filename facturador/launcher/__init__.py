@@ -1,8 +1,7 @@
 """Launcher de FacturadorE: chooser, supervisión y lock de perfil.
 
-FAC-28 supervisor · FAC-29 chooser · FAC-30 lock anti-duplicado ·
-FAC-32 cambio de ambiente por reinicio · FAC-40 confirmación de Producción ·
-FAC-83 ventana nativa (pywebview).
+Supervisor · chooser · lock anti-duplicado · cambio de ambiente por reinicio ·
+confirmación de Producción · ventana nativa (pywebview).
 """
 
 from .chooser import (

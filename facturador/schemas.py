@@ -69,7 +69,7 @@ class BackupSettingsIn(BaseModel):
 
 
 class SeedBackupStateOut(BaseModel):
-    """Estado queryable del seed backup (FAC-47 → FAC-49)."""
+    """Estado queryable del seed backup."""
 
     status: str
     last_success_at: str | None = None
@@ -181,13 +181,13 @@ class InvoiceOut(BaseModel):
     cae_fch_vto: str | None
     last_error: str | None
     cuit_emisor: str | None = None
-    # Snapshot del emisor al crear el borrador (FAC-10); no se relee emisores.
+    # Snapshot del emisor al crear el borrador; no se relee emisores.
     emisor_razon_social: str = ""
     emisor_domicilio: str = ""
     emisor_condicion_iva: str = ""
     emisor_iibb: str = ""
     emisor_inicio_actividades: str = ""
-    # Contrato de render PDF (FAC-52); no se relee arca_params al regenerar.
+    # Contrato de render PDF; no se relee arca_params al regenerar.
     pdf_render_version: int = 1
     environment: str
     created_at: str
@@ -196,7 +196,7 @@ class InvoiceOut(BaseModel):
 
 
 class ArcaInvoiceItemOut(BaseModel):
-    """Ítem tal como lo devuelve FEXGetCMP (FAC-68 peek)."""
+    """Ítem tal como lo devuelve FEXGetCMP (peek del registro ARCA)."""
 
     pro_codigo: str = ""
     pro_ds: str = ""

@@ -1,4 +1,4 @@
-"""Aislamiento entre perfiles Homologación / Producción (FAC-33 / ADR 0001).
+"""Aislamiento entre perfiles Homologación / Producción (ADR 0001).
 
 Suite de integración: dos perfiles temporales bajo un app-data aislado,
 apps reales con ARCA simulado, y asserts de que datos y artefactos de
@@ -280,7 +280,7 @@ def test_artefactos_de_runtime_solo_bajo_el_perfil_seleccionado(isolated_pair):
     assert monedas_prod == {"PRD"}
 
     # Marcadores de aislamiento en onboarding.json DESPUÉS de rutas HTTP que
-    # reconcilian el setup (FAC-35 reescribe el archivo al tocar /params).
+    # reconcilian el setup (el onboarding reescribe el archivo al tocar /params).
     homo.profile.paths.onboarding.write_text(
         '{"setup":"homo-only"}', encoding="utf-8"
     )

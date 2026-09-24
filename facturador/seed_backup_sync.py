@@ -1,14 +1,14 @@
-"""Trigger encrypted seed backup on profile config changes (FAC-47).
+"""Trigger encrypted seed backup on profile config changes.
 
-The seed (FAC-44) is pure configuration — it does not change on emission.
+The seed is pure configuration — it does not change on emission.
 This module:
 
 * marks a pending backup when config changes (emisor, PV, default client /
   UI, recipients, onboarding → ready);
 * coalesces multiple edits in one session into a single upload (debounce);
-* creates the local ``seed.age`` and uploads via the S3 adapter (FAC-45);
+* creates the local ``seed.age`` and uploads via the S3 adapter;
 * never blocks or rolls back the config change on backup failure;
-* persists queryable state (ok / pending / failed + timestamps) for FAC-49;
+* persists queryable state (ok / pending / failed + timestamps) for diagnostics;
 * retries on next process launch and on an explicit ``backup_now`` call.
 
 Authorization / voucher emission must not call into this module.
@@ -66,7 +66,7 @@ DEFAULT_DEBOUNCE_S = 1.0
 
 
 class SeedBackupStatus(StrEnum):
-    """Queryable backup status for diagnostics (FAC-49)."""
+    """Queryable backup status for diagnostics."""
 
     IDLE = "idle"  # never attempted, nothing pending
     PENDING = "pending"  # config changed; upload not yet succeeded
@@ -219,7 +219,7 @@ def run_seed_backup(
     adapter = S3SeedAdapter(location, store)
     ciphertext = archive.read_bytes()
     uri = adapter.put_seed(ciphertext)
-    # Keep recipients.txt in S3 aligned with the local list (FAC-45).
+    # Keep recipients.txt in S3 aligned with the local list.
     recipients = recipients_path(paths)
     if recipients.is_file():
         adapter.put_recipients(recipients.read_text(encoding="utf-8"))
@@ -297,7 +297,7 @@ class SeedBackupCoordinator:
         return self.backup_now()
 
     def replace_recipients(self, text: str) -> SeedBackupState:
-        """Write local ``recipients.txt`` and trigger a backup (FAC-47)."""
+        """Write local ``recipients.txt`` and trigger a backup."""
         write_recipients_file(self._paths, text)
         return self.notify_config_changed("recipients")
 
@@ -385,7 +385,7 @@ class SeedBackupCoordinator:
 
 
 def seed_backup_state_as_dict(state: SeedBackupState) -> dict[str, Any]:
-    """JSON-friendly shape for API / FAC-49 diagnostics."""
+    """JSON-friendly shape for API / diagnostics."""
     return {
         "status": state.status.value,
         "last_success_at": state.last_success_at,

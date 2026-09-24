@@ -1,4 +1,4 @@
-"""Migraciones de esquema SQLite versionadas (FAC-43).
+"""Migraciones de esquema SQLite versionadas.
 
 El ciclo de vida es:
 
@@ -12,8 +12,8 @@ La baseline (versión 1) es el esquema de perfiles aislados vigente. Toda
 DB vive bajo un perfil; no hay camino de compatibilidad para esquemas
 anteriores a este mecanismo.
 
-FAC-10 (snapshot de emisor), FAC-52 (snapshot de render: descripciones
-de params + ``pdf_render_version``) y FAC-65 (``registry_gaps``) amplían
+El snapshot de emisor, el snapshot de render (descripciones de params +
+``pdf_render_version``) y ``registry_gaps`` amplían
 el baseline a propósito: no hay DBs desplegadas que migrar, así que NO
 corresponde una migración v2 solo por esas tablas/columnas.
 """

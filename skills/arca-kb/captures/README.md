@@ -3,7 +3,7 @@
 XML **shapes** for agents. Values are placeholders. These are **not** live
 secrets and must stay that way.
 
-## Redaction checklist (design.md §2.1.1 + FAC-66)
+## Redaction checklist (design.md §2.1.1)
 
 Before adding or editing a capture, verify **all** of:
 
@@ -24,8 +24,8 @@ mirror for agent-facing examples.
 
 | File | What it shows |
 |------|----------------|
-| `fexgetcmp-not-found-1521.xml` | Synthetic FAC-65 product/fake gap shape (`1521`) — **not** a redacted live dump |
-| `fexgetcmp-success-redacted.xml` | Successful GetCMP including `Fecha_pago` + Items (FAC-63 shape) |
+| `fexgetcmp-not-found-1521.xml` | Synthetic rebuild product/fake gap shape (`1521`) — **not** a redacted live dump |
+| `fexgetcmp-success-redacted.xml` | Successful GetCMP including `Fecha_pago` + Items (fidelity-matrix shape) |
 | `fexauthorize-success-redacted.xml` | Authorize result with `Reproceso` |
 | `wsaa-already-authenticated-fault.xml` | WSAA fault when TA already valid |
 

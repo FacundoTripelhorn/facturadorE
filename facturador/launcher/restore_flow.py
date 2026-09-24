@@ -1,4 +1,4 @@
-"""Launcher hook for FAC-65 full rebuild (backend must be stopped)."""
+"""Launcher hook for the full rebuild from ARCA (backend must be stopped)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _backend_session_healthy(
 ) -> bool:
     """True si ``holder`` sirve ``/health`` OK en el ambiente esperado.
 
-    Misma semántica que ``ProcessSupervisor._holder_session_healthy`` (FAC-30):
+    Misma semántica que ``ProcessSupervisor._holder_session_healthy``:
     flock libre + metadata displazada + health OK ⇒ backend huérfano vivo.
     """
     if holder.environment != expected.value:

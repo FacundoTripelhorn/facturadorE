@@ -1,4 +1,4 @@
-"""FAC-44: seed cifrado (config + manifiesto) sin DB/secretos/comprobantes."""
+"""Seed cifrado (config + manifiesto) sin DB/secretos/comprobantes."""
 
 from __future__ import annotations
 
@@ -260,8 +260,8 @@ def test_cli_backup_escribe_seed_age(perfil_listo, tmp_path, capsys):
     assert "Seed cifrado:" in out
     assert seed_archive_path(paths).is_file()
     assert f"pfx/{TEST_CUIT}/homo/seed.age" in out
-    # No sube a S3 en FAC-44.
-    assert "FAC-45" in out
+    # El CLI no sube a S3: lo hace la app al cambiar la configuración.
+    assert "Upload a S3:" in out
 
 
 def test_cli_backup_falla_sin_recipients(perfil_listo, capsys):

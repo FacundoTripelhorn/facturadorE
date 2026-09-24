@@ -1,6 +1,6 @@
 """Acceso a datos de emisores.
 
-La entidad es el emisor, LOCAL al perfil (FAC-26): la DB entera es de un
+La entidad es el emisor, LOCAL al perfil: la DB entera es de un
 solo ambiente, así que acá no se filtra por ambiente. Cada emisor tiene sus
 puntos de venta habilitados (JSON) y un perfil puede tener varios emisores.
 La columna ``ambiente`` queda como sello del perfil al crear (lo estampa el
@@ -40,7 +40,7 @@ def get_emisor(conn: sqlite3.Connection, emisor_id: str) -> sqlite3.Row | None:
 
 
 def list_emisores(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    # Sin parámetro de ambiente (FAC-26): todos los emisores de la DB son
+    # Sin parámetro de ambiente: todos los emisores de la DB son
     # del perfil.
     return conn.execute(
         "SELECT * FROM emisores ORDER BY created_at, id"

@@ -138,7 +138,7 @@ Para desarrollo o scripts sin el chooser:
 La app es dueña de su configuración: casi todo se edita desde la página
 **Configuración** de la UI y se guarda en la DB del ambiente activo (datos del
 emisor que van al PDF, punto de venta, bucket S3 de backups), así viaja
-dentro del seed cifrado (FAC-44).
+dentro del seed cifrado.
 
 El ambiente lo elige el **launcher nativo** (Homologación / Producción) o, en
 Docker, `ARCA_ENV` en `<FACTURADOR_HOME>/.env` al arrancar el contenedor.
@@ -209,7 +209,7 @@ públicas listadas en `backups/recipients.txt` del perfil (una por máquina).
 No incluye DB, certificados, claves privadas ni datos por comprobante.
 
 ```bash
-# Una clave pública age por línea (comentar con #). Ver FAC-64 para el
+# Una clave pública age por línea (comentar con #). Ver el runbook de provisioning por máquina para el
 # aprovisionamiento por máquina.
 echo "age1..." >> "$(perfil)/backups/recipients.txt"
 
@@ -221,11 +221,11 @@ uv run python -m facturador.backup --root ~/facturador/profiles/homo
 ```
 
 El CLI escribe `backups/seed.age` (nombre fijo, overwrite). La clave lógica
-en el bucket del usuario es `{prefix}/{cuit}/{env}/seed.age` (upload: FAC-45;
+en el bucket del usuario es `{prefix}/{cuit}/{env}/seed.age` (upload automático;
 versioning del bucket como red de seguridad). El registro de comprobantes se
-reconstruye desde ARCA (FAC-65), no desde S3.
+reconstruye desde ARCA, no desde S3.
 
-Nunca emitir desde dos máquinas en paralelo: el chequeo FAC-48 bloquea si el
+Nunca emitir desde dos máquinas en paralelo: el chequeo de registro desactualizado bloquea si el
 registro local quedó detrás de ARCA.
 
 ## Desarrollo
@@ -251,10 +251,10 @@ facturador/
   service.py    # lógica de dominio: numeración, idempotencia, estados
   config.py     # arranque: ambiente inyectado, certificados del perfil
   settings.py   # configuración de dominio (vive en la DB, se edita en la UI)
-  backup.py     # CLI del seed cifrado (FAC-44); seed_backup.py arma/cifra
-  s3_seed.py    # adapter S3 del seed (FAC-45: seed.age + recipients.txt)
-  restore.py    # seed import + rebuild desde ARCA (FAC-65)
-  reconstruct.py # loop FEXGetCMP full/catch-up (FAC-65)
+  backup.py     # CLI del seed cifrado; seed_backup.py arma/cifra
+  s3_seed.py    # adapter S3 del seed (seed.age + recipients.txt)
+  restore.py    # seed import + rebuild desde ARCA
+  reconstruct.py # loop FEXGetCMP full/catch-up
   seed_import.py # identidad cert→env→CUIT→schema→integrity
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
