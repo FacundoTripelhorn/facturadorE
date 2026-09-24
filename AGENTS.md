@@ -147,11 +147,14 @@ Full detail: [`docs/agent/known-non-bugs.md`](docs/agent/known-non-bugs.md).
 
 ## Writing code, comments and docs
 
-- **No issue-tracker IDs in the repo.** Do not put Linear keys (or links to
-  issues) in code, comments, docstrings, tests, templates or docs. They go
+- **No references to this project's issue tracker in the repo.** Do not put
+  Linear keys, links to Linear issues, or links to this repo's GitHub issues
+  or PRs in code, comments, docstrings, tests, templates or docs. They go
   stale, cause merge conflicts, and make agents preserve history instead of
   current behavior. Describe what the code does and why; the issue link
-  belongs in the PR description and commit message only.
+  belongs in the PR description and commit message only. Citing a
+  third-party project's issue as an external source (e.g. in
+  `skills/arca-kb/references/sources.md`) is fine.
   `tests/test_no_issue_refs.py` enforces this.
 
 ## Expected agent response format
