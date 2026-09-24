@@ -586,7 +586,7 @@ def ui_constatar(
 ):
     """Botón Constatar: única vía que llama a WSCDC (nunca post-authorize).
 
-    Dos modos (grill #4): con ``invoice_id`` constata un comprobante
+    Dos modos: con ``invoice_id`` constata un comprobante
     del registro local; sin ``invoice_id``, los campos manuales describen un
     comprobante externo (no emitido por la app).
     """

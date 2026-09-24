@@ -64,8 +64,8 @@ def resolve_profile_paths(
     """Paths del perfil elegido EXPLÍCITO: --env (app-data del SO) o --root.
 
     Nunca un directorio implícito (CWD, home compartido): backup/restore
-    sobre un perfil equivocado son silenciosamente destructivos (review del
-    PR #8); el guard de secrets/ en main() corta el resto de los casos.
+    sobre un perfil equivocado son silenciosamente destructivos; el guard de
+    secrets/ en main() corta el resto de los casos.
 
     ``create=True`` (restore): la máquina secundaria puede no tener el
     perfil todavía.

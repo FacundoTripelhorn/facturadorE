@@ -610,7 +610,7 @@ class InvoiceService:
         cae: str,
         doc_nro_receptor: str,
     ) -> ConstatacionResult:
-        """Constatación WSCDC de un comprobante externo (grill #4b).
+        """Constatación WSCDC de un comprobante externo.
 
         Para Facturas E NO emitidas por la app (p.ej. Comprobantes en Línea
         u otro punto de venta): el operador tipea los mismos campos del

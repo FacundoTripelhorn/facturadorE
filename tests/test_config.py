@@ -124,9 +124,8 @@ def test_env_ausente_rechazado_sin_default_silencioso(monkeypatch, tmp_path):
 
 
 def test_primer_arranque_sin_eleccion_explicita_falla(monkeypatch, tmp_path):
-    """Review de Codex en PR #34: en un home FRESCO el bootstrap auto-creado
-    no debe activar homo en silencio — el primer arranque falla hasta que
-    alguien elige ambiente."""
+    """En un home FRESCO el bootstrap auto-creado no debe activar homo en
+    silencio: el primer arranque falla hasta que alguien elige ambiente."""
     monkeypatch.setenv("FACTURADOR_HOME", str(tmp_path / "fresco"))
 
     with pytest.raises(ConfigError, match="ARCA_ENV no está definido"):

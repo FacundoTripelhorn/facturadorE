@@ -30,6 +30,9 @@ _ISSUE_REFS = (
     # https, con o sin www, ruta relativa (/owner/repo/issues/N) o la forma
     # corta owner/repo#N.
     re.compile(re.escape(_REPO) + r"(?:/(?:issues|pull)/|#)\d+", re.IGNORECASE),
+    # Número suelto de PR, issue o pregunta de grill: la palabra seguida de
+    # numeral y número, con o sin espacio.
+    re.compile(r"\b(?:PR|MR|pull request|issue|grill)s?\s?#\d+", re.IGNORECASE),
 )
 _SKIP = {"uv.lock"}
 
@@ -90,6 +93,10 @@ def test_el_repo_no_menciona_ids_de_issues():
         "ver [/" + _REPO + "/issues/9](/" + _REPO + "/issues/9)",
         "cerrado en " + _REPO + "#12",
         "https://linear.app/ftripelhorn/" + "review/algo-9c35881d7580",
+        "review del PR" + " #8",
+        "ver pull request" + " #34",
+        "(grill" + " #4b)",
+        "Issue" + "#3",
     ],
 )
 def test_detecta_referencias_al_tracker_propio(linea):
@@ -103,6 +110,8 @@ def test_detecta_referencias_al_tracker_propio(linea):
         "https://github.com/" + _REPO + "/blob/master/README.md",
         "git clone https://github.com/" + _REPO + ".git",
         "FACTURA-1 no es una clave de issue",
+        "CMS/PKCS#7",
+        "el clock skew es la causa #1 de errores",
     ],
 )
 def test_permite_fuentes_externas(linea):

@@ -199,7 +199,7 @@ Estrategia: **no depender de `pyafipws`** (codebase legacy, GPL v3) pero usarla 
    (nunca auto tras `FEXAuthorize` / `FEXGetCMP`). Request con CUIT emisor,
    CAE, fecha, tipo 19, PV, nro, importe en moneda original, receptor tipo
    **80** + `cuit_pais_cliente` (CUIT país, no el tax ID extranjero). El
-   selector cubre dos modos (grill #4): comprobante del registro local
+   selector cubre dos modos: comprobante del registro local
    (prefill desde el snapshot) u **«Otro comprobante (externo)…»**, donde el
    operador tipea los mismos campos del portal para una Factura E no emitida
    por la app (p.ej. Comprobantes en Línea u otro PV; el CUIT emisor sale del
