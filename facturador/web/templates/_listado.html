@@ -20,7 +20,7 @@
         {% else %}—{% endif %}
       </td>
       <td class="oculta-movil">{{ f["cliente"] }}</td>
-      <td class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] }}</td>
+      <td class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</td>
       <td>
         <span class="estado {{ f['status'] }}" {% if f["last_error"] %}title="{{ f['last_error'] }}"{% endif %}>
           {{ STATUS_LABELS[f["status"]] }}

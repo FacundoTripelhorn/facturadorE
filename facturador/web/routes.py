@@ -20,7 +20,6 @@ import datetime as dt
 import json
 import re
 import sqlite3
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -80,6 +79,7 @@ from ..settings import (
     get_active_emisor_id,
 )
 from ..setup import SetupState, reconcile_setup_state
+from .numeros import formato_importe, parse_importe
 
 router = APIRouter(
     include_in_schema=False,
@@ -210,6 +210,8 @@ templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 # Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.
 templates.env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
+# Importes en formato argentino (1.500,00); la API y ARCA siguen con punto.
+templates.env.filters["importe"] = formato_importe
 templates.env.filters["fecha"] = (
     lambda aaaammdd: f"{aaaammdd[6:]}/{aaaammdd[4:6]}/{aaaammdd[:4]}"
 )
@@ -331,8 +333,16 @@ def generar_borrador(
                 status_code=422,
             )
     try:
+        monto = parse_importe(imp_total)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request, "home.html",
+            _contexto_form(service, error=f"Datos inválidos: monto {exc}"),
+            status_code=422,
+        )
+    try:
         payload = InvoiceCreate(
-            imp_total=Decimal(imp_total),
+            imp_total=monto,
             punto_venta=pv,
             client_id=client_id or None,
             descripcion=descripcion or None,
@@ -340,12 +350,6 @@ def generar_borrador(
             obs=obs,
         )
         draft = service.create_invoice(payload)
-    except InvalidOperation:
-        error = f"Datos inválidos: monto {imp_total!r} no es un número"
-        return templates.TemplateResponse(
-            request, "home.html", _contexto_form(service, error=error),
-            status_code=422,
-        )
     except ValidationError as exc:
         return templates.TemplateResponse(
             request, "home.html",
@@ -695,9 +699,12 @@ def _constatar_manual(
     try:
         pv = int(punto_venta)
         nro = int(cbte_nro)
-        total = Decimal(imp_total.replace(",", "."))
-    except (ValueError, InvalidOperation):
+    except ValueError:
         return fail("Punto de venta, número e importe deben ser numéricos.")
+    try:
+        total = parse_importe(imp_total)
+    except ValueError as exc:
+        return fail(f"Importe: {exc}")
     fecha_raw = fecha_cbte.strip()
     if "-" in fecha_raw:  # <input type=date> ISO → AAAAMMDD del portal/WS
         try:

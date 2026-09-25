@@ -8,7 +8,7 @@
   <div><dt>Fecha de emisión</dt><dd class="num">{{ f["fecha_cbte"] | fecha }}</dd></div>
   <div><dt>Fecha de pago</dt><dd class="num">{{ f["fecha_pago"] | fecha }}</dd></div>
   <div><dt>Moneda / cotización</dt>
-       <dd class="num">{{ f["moneda_id"] | moneda }} — {{ f["moneda_ctz"] }}</dd></div>
+       <dd class="num">{{ f["moneda_id"] | moneda }} — {{ f["moneda_ctz"] | importe }}</dd></div>
   <div><dt>Forma de pago</dt><dd>{{ f["forma_pago"] }}</dd></div>
   {% if f["obs"] %}<div><dt>Observaciones</dt><dd>{{ f["obs"] }}</dd></div>{% endif %}
 </div>
@@ -17,10 +17,10 @@
              <th class="num">Precio unit.</th><th class="num">Importe</th></tr></thead>
   <tbody>
     {% for i in items %}
-    <tr><td>{{ i["pro_ds"] }}</td><td class="num">{{ i["pro_qty"] }}</td>
-        <td class="num">{{ i["pro_precio_uni"] }}</td>
-        <td class="num">{{ i["pro_total_item"] }}</td></tr>
+    <tr><td>{{ i["pro_ds"] }}</td><td class="num">{{ i["pro_qty"] | importe }}</td>
+        <td class="num">{{ i["pro_precio_uni"] | importe }}</td>
+        <td class="num">{{ i["pro_total_item"] | importe }}</td></tr>
     {% endfor %}
   </tbody>
 </table>
-<p class="total-revisar num">Total: {{ f["moneda_id"] | moneda }} {{ f["imp_total"] }}</p>
+<p class="total-revisar num">Total: {{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</p>

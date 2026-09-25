@@ -237,7 +237,7 @@ def test_cotizacion_de_arca_fuera_de_formato_es_422(api_con_cliente, arca):
 
 
 FACTURA_FORM = {
-    "imp_total": "1500.00",
+    "imp_total": "1500,00",
     "fecha_pago": "2026-07-05",
     "descripcion": "Servicios de desarrollo de software",
     "obs": "",
@@ -248,10 +248,14 @@ FACTURA_FORM = {
 @pytest.mark.parametrize(
     ("valor", "mensaje"),
     [
-        ("1e1000000000", "El importe total excede el formato de ARCA"),
-        ("NaN", "El importe total debe ser un número finito"),
         ("0", "El importe total debe ser mayor a cero"),
-        ("100.001", "hasta 13 enteros y 2 decimales"),
+        ("100,001", "hasta 13 enteros y 2 decimales"),
+        ("12.345.678.901.234,00", "hasta 13 enteros y 2 decimales"),
+        # El form acepta solo coma decimal: ni exponentes ni NaN llegan a
+        # Decimal.
+        ("1e1000000000", "no es un importe válido"),
+        ("NaN", "no es un importe válido"),
+        ("1500.50", "usá coma para los decimales"),
     ],
 )
 def test_form_muestra_el_error_como_los_demas(api_con_cliente, valor, mensaje):

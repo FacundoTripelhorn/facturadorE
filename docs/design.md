@@ -53,6 +53,8 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
 
+**Importes en la UI:** formato argentino, coma decimal y punto de miles (`1.500,50`), tanto al tipear como al mostrar (`facturador/web/numeros.py`). Un punto como separador decimal (`1500.50`) se rechaza con un mensaje en vez de interpretarse: leer mal el separador multiplica el importe. La API JSON, la DB y ARCA siguen con punto decimal; el PDF usa coma decimal sin separador de miles, como el comprobante real.
+
 **Layout impreso del comprobante real** (replicado en `facturador/pdf/render.py`, renderer v1 con fpdf2; posiciones verificadas contra el PDF de Comprobantes en Línea):
 
 - **Cabecera** partida al medio por la caja `E / COD. 19`. Izquierda: razón social en grande y los rótulos `Razón Social:`, `Domicilio Comercial:`, `Condición frente al IVA:`. Derecha: `FACTURA DE EXPORTACIÓN`, `Compr. Nro:` (con "r", número completo `PPPPP-NNNNNNNN`), `Fecha de Emisión:`, `CUIT:`, `Ingresos Brutos:` (texto literal de la condición, p.ej. "Exento" — nunca el CUIT como reemplazo), `Fecha de Inicio de Actividades:` (DD/MM/AAAA) y la leyenda `IVA EXENTO OPERACIÓN DE EXPORTACIÓN` cerrando la columna. La leyenda NO es una banda centrada después de los ítems.
