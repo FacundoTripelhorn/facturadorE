@@ -28,6 +28,16 @@ from ..constants import (
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
 )
+from .amounts import (
+    IMP_TOTAL,
+    MONEDA_CTZ,
+    PRO_BONIFICACION,
+    PRO_PRECIO_UNI,
+    PRO_QTY,
+    PRO_TOTAL_ITEM,
+    FormatoImporte,
+    validar_importe,
+)
 from .events import record_events
 from .tls import wsfex_verify
 from .wsaa import WsaaClient, cuit_from_certificate
@@ -164,13 +174,24 @@ class Invoice:
     obs: str = ""
 
     def validate(self) -> None:
+        """Chequeos previos al envío: formato de cada importe (límites de
+        ARCA) y que Imp_total sea la suma de los ítems. Lanza ValueError."""
+        if not self.items:
+            raise ValueError("La factura necesita al menos un ítem")
+        # Formatos primero: con valores fuera de rango, la aritmética de los
+        # totales podría desbordar el contexto decimal.
+        _dec(self.moneda_ctz, MONEDA_CTZ)
+        _dec(self.imp_total, IMP_TOTAL, permite_cero=True)
+        for item in self.items:
+            _dec(item.pro_qty, PRO_QTY)
+            _dec(item.pro_precio_uni, PRO_PRECIO_UNI, permite_cero=True)
+            _dec(item.pro_bonificacion, PRO_BONIFICACION, permite_cero=True)
+            _dec(item.pro_total_item, PRO_TOTAL_ITEM, permite_cero=True)
         total_items = sum(i.pro_total_item for i in self.items)
         if total_items != self.imp_total:
             raise ValueError(
                 f"Imp_total {self.imp_total} != suma de items {total_items}"
             )
-        if not self.items:
-            raise ValueError("La factura necesita al menos un ítem")
 
 
 @dataclass(frozen=True)
@@ -187,8 +208,13 @@ class AuthResult:
     events: list[tuple[str, str]] = field(default_factory=list)
 
 
-def _dec(value: Decimal) -> str:
-    return format(value, "f")
+def _dec(
+    value: Decimal, formato: FormatoImporte, *, permite_cero: bool = False
+) -> str:
+    """Importe → texto para ARCA. Valida el formato antes de serializar, así
+    nada fuera de los límites del manual llega al XML (ni un exponente
+    enorme llega a ``format``). ``permite_cero`` sigue a ARCA por campo."""
+    return format(validar_importe(value, formato, permite_cero=permite_cero), "f")
 
 
 def _add_child(parent: ET.Element, tag: str, value) -> None:
@@ -218,8 +244,8 @@ def build_cmp_element(invoice: Invoice) -> ET.Element:
     add("Domicilio_cliente", invoice.domicilio_cliente)
     add("Id_impositivo", invoice.id_impositivo)
     add("Moneda_Id", invoice.moneda_id)
-    add("Moneda_ctz", _dec(invoice.moneda_ctz))
-    add("Imp_total", _dec(invoice.imp_total))
+    add("Moneda_ctz", _dec(invoice.moneda_ctz, MONEDA_CTZ))
+    add("Imp_total", _dec(invoice.imp_total, IMP_TOTAL, permite_cero=True))
     if invoice.obs:
         add("Obs", invoice.obs)
     add("Forma_pago", invoice.forma_pago)
@@ -230,11 +256,23 @@ def build_cmp_element(invoice: Invoice) -> ET.Element:
         item_el = ET.SubElement(items_el, f"{{{FEX_NS}}}Item")
         _add_child(item_el, "Pro_codigo", item.pro_codigo)
         _add_child(item_el, "Pro_ds", item.pro_ds)
-        _add_child(item_el, "Pro_qty", _dec(item.pro_qty))
+        _add_child(item_el, "Pro_qty", _dec(item.pro_qty, PRO_QTY))
         _add_child(item_el, "Pro_umed", item.pro_umed)
-        _add_child(item_el, "Pro_precio_uni", _dec(item.pro_precio_uni))
-        _add_child(item_el, "Pro_bonificacion", _dec(item.pro_bonificacion))
-        _add_child(item_el, "Pro_total_item", _dec(item.pro_total_item))
+        _add_child(
+            item_el,
+            "Pro_precio_uni",
+            _dec(item.pro_precio_uni, PRO_PRECIO_UNI, permite_cero=True),
+        )
+        _add_child(
+            item_el,
+            "Pro_bonificacion",
+            _dec(item.pro_bonificacion, PRO_BONIFICACION, permite_cero=True),
+        )
+        _add_child(
+            item_el,
+            "Pro_total_item",
+            _dec(item.pro_total_item, PRO_TOTAL_ITEM, permite_cero=True),
+        )
     add("Fecha_pago", invoice.fecha_pago)
     return cmp_el
 

@@ -298,6 +298,14 @@ def home(request: Request, service: ServiceDep, aviso: str = ""):
     )
 
 
+def _detalles_validacion(exc: ValidationError) -> str:
+    """Mensajes de Pydantic para el form, sin el prefijo "Value error, " que
+    Pydantic agrega a los errores de nuestros validadores."""
+    return "; ".join(
+        str(e["msg"]).removeprefix("Value error, ") for e in exc.errors()
+    )
+
+
 @router.post("/ui/facturas")
 def generar_borrador(
     request: Request,
@@ -339,10 +347,11 @@ def generar_borrador(
             status_code=422,
         )
     except ValidationError as exc:
-        detalles = "; ".join(e["msg"] for e in exc.errors())
         return templates.TemplateResponse(
             request, "home.html",
-            _contexto_form(service, error=f"Datos inválidos: {detalles}"),
+            _contexto_form(
+                service, error=f"Datos inválidos: {_detalles_validacion(exc)}"
+            ),
             status_code=422,
         )
     except ServiceError as exc:

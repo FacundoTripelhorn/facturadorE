@@ -8,6 +8,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .arca.amounts import (
+    IMP_TOTAL,
+    MONEDA_CTZ,
+    PRO_PRECIO_UNI,
+    PRO_QTY,
+    validar_importe,
+)
 from .constants import MONEDA_DOL, UMED_UNIDADES
 from .settings import BACKUP_PREFIX_DEFAULT, CONDICION_IVA_DEFAULT
 
@@ -101,26 +108,39 @@ class ClientOut(ClientIn):
     updated_at: str
 
 
+# Los importes aceptan NaN/Infinity en el parseo para que el rechazo salga
+# del validador, con mensaje en castellano, y no del genérico de Pydantic.
 class ItemIn(BaseModel):
     pro_ds: str = Field(min_length=1)
-    pro_precio_uni: Decimal = Field(gt=0)
+    pro_precio_uni: Decimal = Field(allow_inf_nan=True)
     pro_codigo: str = "0001"
-    pro_qty: Decimal = Field(default=Decimal(1), gt=0)
+    pro_qty: Decimal = Field(default=Decimal(1), allow_inf_nan=True)
     pro_umed: int = UMED_UNIDADES
+
+    @field_validator("pro_precio_uni")
+    @classmethod
+    def _precio(cls, valor: Decimal) -> Decimal:
+        return validar_importe(valor, PRO_PRECIO_UNI)
+
+    @field_validator("pro_qty")
+    @classmethod
+    def _cantidad(cls, valor: Decimal) -> Decimal:
+        return validar_importe(valor, PRO_QTY)
 
 
 class InvoiceCreate(BaseModel):
     """Caso feliz semanal (§0.1): monto + fecha de pago + descripción.
     Todo lo demás sale del cliente (default si no se indica client_id)."""
 
-    imp_total: Decimal = Field(gt=0)
+    imp_total: Decimal = Field(allow_inf_nan=True)
     punto_venta: int | None = None   # obligatorio si el emisor tiene varios PV
     client_id: str | None = None
     descripcion: str | None = None      # default: descripcion_default del cliente
     fecha_cbte: str | None = None       # default: hoy (día del cobro)
     fecha_pago: str | None = None       # default: fecha_cbte, siempre editable
     moneda_id: str | None = None        # default: moneda_default del cliente
-    moneda_ctz: Decimal | None = None   # default: cotización ARCA del día
+    # default: cotización ARCA del día
+    moneda_ctz: Decimal | None = Field(default=None, allow_inf_nan=True)
     obs: str = ""
     items: list[ItemIn] | None = None   # default: 1 ítem qty=1, precio=imp_total
 
@@ -130,6 +150,18 @@ class InvoiceCreate(BaseModel):
         if value is None:
             return None
         return _validar_fecha(value, info.field_name)
+
+    @field_validator("imp_total")
+    @classmethod
+    def _importe(cls, valor: Decimal) -> Decimal:
+        return validar_importe(valor, IMP_TOTAL)
+
+    @field_validator("moneda_ctz")
+    @classmethod
+    def _cotizacion(cls, valor: Decimal | None) -> Decimal | None:
+        if valor is None:
+            return None
+        return validar_importe(valor, MONEDA_CTZ)
 
     @field_validator("punto_venta")
     @classmethod
