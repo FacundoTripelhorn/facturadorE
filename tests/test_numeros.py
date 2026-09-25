@@ -67,3 +67,10 @@ def test_formato_deja_pasar_lo_que_no_es_un_numero(valor):
 def test_parse_y_formato_son_inversos():
     for texto in ("1.500,00", "0,01", "9.999.999.999.999,99", "12,5"):
         assert formato_importe(parse_importe(texto)) == texto
+
+
+@pytest.mark.parametrize("valor", ["1E+1000000000", "1E-1000000000", "1E+31"])
+def test_formato_no_expande_exponentes_enormes(valor):
+    """Una fila vieja o editada a mano con un exponente enorme se muestra tal
+    cual: formatearla armaría un string gigante al abrir el listado."""
+    assert formato_importe(valor) == valor

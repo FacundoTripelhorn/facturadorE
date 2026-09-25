@@ -13,6 +13,9 @@ from decimal import Decimal, InvalidOperation
 # de negativos queda para la validación de importes, con su mensaje).
 _SIN_MILES = re.compile(r"-?\d+(,\d+)?")
 _CON_MILES = re.compile(r"-?\d{1,3}(\.\d{3})+(,\d+)?")
+# Más dígitos que esto (enteros o decimales) no es un importe: se muestra
+# tal cual, sin formatear.
+_MAX_DIGITOS = 30
 # 1500.50: punto como separador decimal, el formato que ya no se acepta.
 _PUNTO_DECIMAL = re.compile(r"-?\d+\.\d+")
 
@@ -49,6 +52,13 @@ def formato_importe(valor: object) -> str:
     except InvalidOperation:
         return str(valor)
     if not numero.is_finite():
+        return str(valor)
+    # Cota antes de formatear: un exponente enorme (fila vieja o editada a
+    # mano) haría que format(..., "f") arme un string gigante. Los importes
+    # válidos tienen a lo sumo 13 enteros y 6 decimales.
+    tup = numero.as_tuple()
+    assert isinstance(tup.exponent, int)
+    if tup.exponent < -_MAX_DIGITOS or len(tup.digits) + tup.exponent > _MAX_DIGITOS:
         return str(valor)
     signo = "-" if numero < 0 else ""
     texto = format(numero.copy_abs(), "f")

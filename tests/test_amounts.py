@@ -5,6 +5,7 @@ valores patológicos (NaN, Infinity, exponentes enormes) se rechazan con 422
 y mensaje en castellano, sin que ``format`` llegue a materializarlos.
 """
 
+import json
 from decimal import Decimal
 
 import pytest
@@ -335,3 +336,38 @@ def test_dec_valida_antes_de_formatear():
     assert _dec(Decimal("100.000"), IMP_TOTAL) == "100.00"
     with pytest.raises(ValueError):
         _dec(Decimal("1e1000000000"), IMP_TOTAL)
+
+
+def test_reintento_con_request_viejo_fuera_de_formato_no_queda_trabado(
+    api_con_cliente, arca
+):
+    """Un raw_request guardado por una versión anterior (p.ej. total con 3
+    decimales) no se reenvía: 409 y la factura queda "a reconciliar", no en
+    submitting ni con un 500."""
+    api = api_con_cliente
+    invoice_id = api.post("/invoices", json={"imp_total": "100.00"}).json()["id"]
+    arca.authorize_mode = "timeout"  # pre-envío: ARCA no lo registra
+    r = api.post(f"/invoices/{invoice_id}/authorize?force_desync=true")
+    assert r.json()["status"] == "unknown"
+    enviados = arca.calls["FEXAuthorize"]
+
+    inv = repo.get_invoice(api.conn, invoice_id)
+    raw = json.loads(inv["raw_request"])
+    raw["imp_total"] = "100.001"
+    for item in raw["items"]:
+        item["pro_precio_uni"] = "100.001"
+    with api.conn:
+        api.conn.execute(
+            "UPDATE invoices SET raw_request = ? WHERE id = ?",
+            (json.dumps(raw), invoice_id),
+        )
+
+    arca.authorize_mode = "ok"
+    r = api.post(f"/invoices/{invoice_id}/authorize")
+
+    assert r.status_code == 409
+    assert "no cumple el formato de ARCA" in _detalle(r)
+    assert arca.calls["FEXAuthorize"] == enviados  # no se reenvió
+    inv = repo.get_invoice(api.conn, invoice_id)
+    assert inv["status"] == "unknown"
+    assert "no cumple el formato de ARCA" in inv["last_error"]

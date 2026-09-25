@@ -914,6 +914,23 @@ class InvoiceService:
         # Regla 5: reproceso con el MISMO arca_id y datos idénticos, tomados
         # del request persistido (no de la fila, por si algo mutó).
         wsfex_invoice = raw_to_wsfex_invoice(json.loads(inv["raw_request"]))
+        try:
+            wsfex_invoice.validate()
+        except ValueError as exc:
+            # Request guardado por una versión anterior, fuera del formato de
+            # ARCA: no se reenvía. Queda "a reconciliar" (no trabada en
+            # submitting); un nuevo intento vuelve a consultar ARCA primero.
+            mensaje = (
+                f"El request guardado no cumple el formato de ARCA ({exc}); "
+                "no se reenvía. Revisar el comprobante manualmente."
+            )
+            repo.update_invoice(
+                self.conn,
+                inv["id"],
+                status=InvoiceStatus.UNKNOWN,
+                last_error=mensaje,
+            )
+            raise ConflictError(mensaje) from None
         return self._send(inv["id"], wsfex_invoice)
 
     def delete_draft(self, invoice_id: str) -> None:
