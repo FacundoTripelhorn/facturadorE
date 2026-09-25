@@ -7,7 +7,8 @@ Cuit} con el TA provisto por WsaaClient.
 Manejo de respuestas (§1.5):
   - FEXErr con ErrCode != 0 => error de negocio, se levanta WsfexError.
   - FEXEvents => warnings de ARCA (mantenimientos, cambios normativos):
-    se loguean SIEMPRE y se acumulan, nunca se tratan como error.
+    se loguean SIEMPRE, nunca se tratan como error, y la última respuesta
+    queda en el perfil para el aviso global de la UI (``events.py``).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from ..constants import (
     TIPO_EXPO_SERVICIOS,
     UMED_UNIDADES,
 )
+from .events import record_events
 from .tls import wsfex_verify
 from .wsaa import WsaaClient, cuit_from_certificate
 
@@ -240,7 +242,14 @@ def build_cmp_element(invoice: Invoice) -> ET.Element:
 def parse_auth_result(result: ET.Element) -> AuthResult:
     cae = _findtext_local(result, "Cae")
     if not cae:
-        raise WsfexError("?", "FEXAuthorize sin CAE en la respuesta")
+        # Rechazo sin FEXErr: el motivo viene en Resultado/Motivos_Obs y
+        # tiene que llegar al usuario, no perderse en un error genérico.
+        resultado = _findtext_local(result, "Resultado") or "?"
+        obs = _findtext_local(result, "Motivos_Obs")
+        detalle = f" Observaciones de ARCA: {obs}" if obs else ""
+        raise WsfexError(
+            resultado, f"FEXAuthorize sin CAE (Resultado {resultado}).{detalle}"
+        )
     return AuthResult(
         cae=cae,
         cae_fch_vto=_findtext_local(result, "Fch_venc_Cae") or "",
@@ -429,6 +438,7 @@ class WsfexClient:
             raise WsfexError("?", f"Respuesta sin {method}Result")
 
         self._collect_events(result, method)
+        record_events(self.config.paths.arca_events, self.last_events)
         self._raise_on_error(result)
         return result
 

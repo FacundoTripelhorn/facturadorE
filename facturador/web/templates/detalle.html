@@ -2,11 +2,17 @@
 {% block content %}
 
 {% if f["status"] == AUTHORIZED %}
-<div class="panel ok">
+{# Con observaciones el CAE es igual de válido: amarillo, no rojo. #}
+<div class="panel {{ 'aviso' if motivos_obs else 'ok' }}">
   <div>
-    <span class="cae-grande num">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} autorizada</span><br>
+    <span class="cae-grande num">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} autorizada{% if motivos_obs %} con observaciones{% endif %}</span><br>
     CAE <span class="num">{{ f["cae"] }}</span>
     (vence {{ f["cae_fch_vto"] | fecha }})
+    {% if motivos_obs %}
+    <p class="obs-arca"><strong>Observaciones de ARCA:</strong> {{ motivos_obs }}<br>
+      El CAE es válido; revisá la observación por si hay que corregir algo en
+      el próximo comprobante.</p>
+    {% endif %}
     <p class="acciones-pdf">
       <button type="button" id="ver-pdf">Ver PDF</button>
       <a href="/invoices/{{ f['id'] }}/pdf?descargar=1" download data-descarga-pdf
