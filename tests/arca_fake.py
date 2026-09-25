@@ -70,7 +70,8 @@ class FakeArca:
         self.last_id = 0
         self.last_cmp: dict[tuple[int, int], int] = {}
         self.issued: dict[tuple[int, int, int], dict] = {}
-        self.authorize_mode = "ok"  # ok | reject | timeout | timeout_but_issued
+        # ok | reject | reject_obs | timeout | timeout_but_issued
+        self.authorize_mode = "ok"
         self.get_cmp_mode = "ok"  # ok | timeout | error
         # Ok | reject | mismatch | error
         self.constatar_mode = "ok"
@@ -79,6 +80,10 @@ class FakeArca:
         self.reject_code = "1068"
         self.reject_msg = "Campo Id_impositivo invalido"
         self.ctz = "1145.5690"
+        # FEXEvents que el fake agrega a TODA respuesta WSFEX: [(code, msg)].
+        self.events: list[tuple[str, str]] = []
+        # Motivos_Obs de FEXAuthorize (CAE otorgado con observaciones).
+        self.authorize_obs: str | None = None
         self.calls: Counter[str] = Counter()
         self.last_authorize_cliente: str | None = None
         self.last_constatar_req: dict[str, str] | None = None
@@ -92,7 +97,20 @@ class FakeArca:
             return httpx.Response(
                 500, text=f"método no soportado por el fake: {method}"
             )
-        return fn(body)
+        response = fn(body)
+        if self.events and method.startswith("FEX"):
+            response = self._con_eventos(method, response)
+        return response
+
+    def _con_eventos(self, method: str, response: httpx.Response) -> httpx.Response:
+        eventos = "".join(
+            f"<FEXEvents><EventCode>{code}</EventCode>"
+            f"<EventMsg>{msg}</EventMsg></FEXEvents>"
+            for code, msg in self.events
+        )
+        cierre = f"</{method}Result>"
+        text = response.text.replace(cierre, eventos + cierre, 1)
+        return httpx.Response(response.status_code, text=text)
 
     # --- métodos simulados ---
 
@@ -155,6 +173,18 @@ class FakeArca:
                     f"<ErrMsg>{self.reject_msg}</ErrMsg></FEXErr>",
                 ),
             )
+        if self.authorize_mode == "reject_obs":
+            # Rechazo sin FEXErr: sin CAE, Resultado R y el motivo en Obs.
+            return httpx.Response(
+                200,
+                text=soap_response(
+                    "FEXAuthorize",
+                    f"<FEXResultAuth><Id>{arca_id}</Id><Resultado>R</Resultado>"
+                    f"<Motivos_Obs>{self.authorize_obs or ''}</Motivos_Obs>"
+                    "</FEXResultAuth>"
+                    "<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>",
+                ),
+            )
         if self.authorize_mode in ("timeout", "timeout_but_issued"):
             if self.authorize_mode == "timeout_but_issued":
                 self._register(key, arca_id, imp_total)
@@ -187,7 +217,13 @@ class FakeArca:
                 f"<Cae>{emitido['cae']}</Cae><Fch_venc_Cae>20260713</Fch_venc_Cae>"
                 f"<Fecha_cbte>20260703</Fecha_cbte><Cbte_tipo>{tipo}</Cbte_tipo>"
                 f"<Punto_vta>{pv}</Punto_vta><Reproceso>{reproceso}</Reproceso>"
-                "</FEXResultAuth>"
+                "<Resultado>A</Resultado>"
+                + (
+                    f"<Motivos_Obs>{self.authorize_obs}</Motivos_Obs>"
+                    if self.authorize_obs
+                    else ""
+                )
+                + "</FEXResultAuth>"
                 "<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>",
             ),
         )

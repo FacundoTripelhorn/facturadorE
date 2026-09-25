@@ -39,6 +39,7 @@ from ..api.csrf import (
     enforce_csrf,
 )
 from ..api.deps import ServiceDep
+from ..arca.events import load_events
 from ..arca.wsfex import WsfexError
 from ..certs import (
     CertificateError,
@@ -109,9 +110,22 @@ def _csrf_en_contexto(request: Request) -> dict[str, object]:
     return {"csrf_token": csrf_token_for_request(request)}
 
 
+def _avisos_arca_en_contexto(request: Request) -> dict[str, object]:
+    """Último aviso de ARCA (``FEXEvents``) para el banner de toda la UI."""
+    profile = getattr(request.app.state, "profile", None)
+    if profile is None:
+        return {"avisos_arca": [], "avisos_arca_visto": None}
+    avisos = load_events(profile.paths.arca_events)
+    return {"avisos_arca": avisos.events, "avisos_arca_visto": avisos.seen_at}
+
+
 templates = Jinja2Templates(
     directory=TEMPLATES_DIR,
-    context_processors=[_ambiente_en_contexto, _csrf_en_contexto],
+    context_processors=[
+        _ambiente_en_contexto,
+        _csrf_en_contexto,
+        _avisos_arca_en_contexto,
+    ],
 )
 
 
@@ -419,8 +433,22 @@ def detalle(request: Request, service: ServiceDep, invoice_id: str):
         {
             "f": inv,
             "items": repo.get_invoice_items(service.conn, inv["id"]),
+            "motivos_obs": _motivos_obs(inv),
         },
     )
+
+
+def _motivos_obs(inv: sqlite3.Row) -> str | None:
+    """Observaciones que ARCA devolvió al autorizar (CAE válido igual)."""
+    if inv["status"] != InvoiceStatus.AUTHORIZED or not inv["raw_response"]:
+        return None
+    try:
+        raw = json.loads(inv["raw_response"])
+    except (TypeError, ValueError):
+        return None
+    obs = raw.get("motivos_obs") if isinstance(raw, dict) else None
+    texto = str(obs).strip() if obs else ""
+    return texto or None
 
 
 @router.post("/ui/facturas/{invoice_id}/authorize")

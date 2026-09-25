@@ -189,6 +189,11 @@
 
   .panel.neutro { background: #f4f6fa; border-color: var(--borde); color: var(--tinta-suave); }
   .panel.neutro::before { content: "i"; background: var(--tinta-suave); color: #fff; }
+  .panel.aviso { background: var(--aviso-fondo); border-color: #fedf89; color: #7a2e0e; }
+  .panel.aviso::before { content: "!"; background: var(--aviso); color: #fff; }
+  .panel.info { background: #eff4ff; border-color: #c7d4f8; color: #1b2b5e; }
+  .panel.info::before { content: "i"; background: var(--acento); color: #fff; }
+  .panel .visto { font-size: .8rem; opacity: .8; }
 
   /* ---- paso de revisión (dos fases) ---- */
   .revisar { border-color: #c7d4f8; }
@@ -260,6 +265,14 @@
   </div>
 </header>
 <main>
+{% for aviso in avisos_arca %}
+<div class="panel info aviso-arca" role="status">
+  <div>
+    <strong>Aviso de ARCA (código {{ aviso.code }}):</strong> {{ aviso.msg }}
+    {% if avisos_arca_visto %}<span class="visto">— recibido el {{ avisos_arca_visto.astimezone().strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}
+  </div>
+</div>
+{% endfor %}
 {% block content %}{% endblock %}
 </main>
 </body>

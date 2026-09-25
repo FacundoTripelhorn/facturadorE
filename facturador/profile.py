@@ -25,6 +25,7 @@ CERT_FILENAME = "cert.crt"
 KEY_FILENAME = "cert.key"
 WSAA_TA_CACHE_FILENAME = "ta-wsfex.json"
 WSCDC_TA_CACHE_FILENAME = "ta-wscdc.json"
+ARCA_EVENTS_FILENAME = "arca-events.json"
 LOG_FILENAME = "facturador.log"
 ONBOARDING_FILENAME = "onboarding.json"
 LAUNCHER_LOCK_FILENAME = "launcher.lock"
@@ -153,6 +154,11 @@ class ProfilePaths:
         WSAA emite un TA por servicio: no se reutiliza el de ``wsfex``.
         """
         return self.data_dir / WSCDC_TA_CACHE_FILENAME
+
+    @property
+    def arca_events(self) -> Path:
+        """Último bloque ``FEXEvents`` que devolvió WSFEX (aviso global en la UI)."""
+        return self.data_dir / ARCA_EVENTS_FILENAME
 
     @property
     def arca_params_cache(self) -> Path:
