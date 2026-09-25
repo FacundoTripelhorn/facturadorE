@@ -208,11 +208,21 @@ manifiesto), cifrado con [age](https://age-encryption.org) a las claves
 públicas listadas en `backups/recipients.txt` del perfil (una por máquina).
 No incluye DB, certificados, claves privadas ni datos por comprobante.
 
+Aprovisionamiento por máquina: cada máquina que pueda restaurar el perfil
+tiene su propia identidad `age`, y el seed se cifra a las claves públicas de
+todas ellas.
+
 ```bash
-# Una clave pública age por línea (comentar con #). Ver el runbook de provisioning por máquina para el
-# aprovisionamiento por máquina.
+# 1. En CADA máquina, una sola vez: crear su identidad age. La clave privada
+#    queda solo en esa máquina (nunca en el repo, el perfil ni el seed).
+age-keygen -o ~/.age/key.txt      # imprime "Public key: age1..."
+age-keygen -y ~/.age/key.txt      # vuelve a mostrar la clave pública
+
+# 2. En el perfil que emite: una clave pública por línea, una por cada
+#    máquina del paso 1 (las líneas con # son comentarios).
 echo "age1..." >> "$(perfil)/backups/recipients.txt"
 
+# 3. Generar el seed cifrado local.
 # Launcher nativo: --env resuelve el perfil en el app-data del SO
 uv run python -m facturador.backup --env homo
 
@@ -227,6 +237,22 @@ pendiente), o a pedido con `POST /backup/seed`. Correr el CLI sobre un perfil
 sin cambios no actualiza el seed del bucket. La clave lógica en el bucket del
 usuario es `{prefix}/{cuit}/{env}/seed.age` (versioning del bucket como red de
 seguridad). El registro de comprobantes se reconstruye desde ARCA, no desde S3.
+
+Editar `recipients.txt` a mano no dispara un upload: después de sumar una
+máquina, correr `POST /backup/seed` para que el seed del bucket quede cifrado
+también a su clave.
+
+Para restaurar en otra máquina: completar el setup del perfil (certificado,
+emisor, PV), bajar el seed del bucket (p.ej.
+`aws s3 cp s3://<bucket>/<prefix>/<cuit>/<env>/seed.age .`), detener el
+backend y correr:
+
+```bash
+uv run python -m facturador.launcher --restore --env prod \
+    --identity ~/.age/key.txt --seed ./seed.age
+```
+
+Sin `--seed` usa `backups/seed.age` del perfil.
 
 Nunca emitir desde dos máquinas en paralelo: el chequeo de registro desactualizado bloquea si el
 registro local quedó detrás de ARCA.

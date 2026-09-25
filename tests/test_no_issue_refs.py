@@ -30,11 +30,39 @@ _ISSUE_REFS = (
     # https, con o sin www, ruta relativa (/owner/repo/issues/N) o la forma
     # corta owner/repo#N.
     re.compile(re.escape(_REPO) + r"(?:/(?:issues|pull)/|#)\d+", re.IGNORECASE),
-    # Número suelto de PR, issue o pregunta de grill: la palabra seguida de
-    # numeral y número, con o sin espacio.
-    re.compile(r"\b(?:PR|MR|pull request|issue|grill)s?\s?#\d+", re.IGNORECASE),
+)
+# Número suelto de PR, issue o pregunta de grill: la palabra seguida de
+# numeral y número, con o sin espacio. Sin repo explícito se asume que es de
+# este proyecto, salvo que sea el texto de un link a un issue de otro repo.
+_BARE_REF = re.compile(r"\b(?:PR|MR|pull request|issue|grill)s?\s?#\d+", re.IGNORECASE)
+_MD_LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
+_GITHUB_ISSUE_URL = re.compile(
+    r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/\d+", re.IGNORECASE
 )
 _SKIP = {"uv.lock"}
+
+
+def _sin_citas_externas(linea: str) -> str:
+    """Saca el texto de los links markdown a issues o PRs de otros repos.
+
+    ``[upstream issue #95](https://github.com/otro/repo/issues/95)`` es una
+    cita de una fuente externa: el número es del otro proyecto. Se deja la
+    URL (que ya no parece un número suelto) y se descarta el texto del link.
+    """
+
+    def _reemplazo(link: re.Match[str]) -> str:
+        url = _GITHUB_ISSUE_URL.search(link.group(2))
+        if url and url.group(1).lower() != _REPO.lower():
+            return link.group(2)
+        return link.group(0)
+
+    return _MD_LINK.sub(_reemplazo, linea)
+
+
+def _menciona_tracker_propio(linea: str) -> bool:
+    if any(p.search(linea) for p in _ISSUE_REFS):
+        return True
+    return _BARE_REF.search(_sin_citas_externas(linea)) is not None
 
 
 def _tracked_files() -> list[Path]:
@@ -73,7 +101,7 @@ def test_el_repo_no_menciona_ids_de_issues():
         if texto is None:
             continue
         for nro, linea in enumerate(texto.splitlines(), start=1):
-            if any(p.search(linea) for p in _ISSUE_REFS):
+            if _menciona_tracker_propio(linea):
                 rel = path.relative_to(_ROOT)
                 hallazgos.append(f"{rel}:{nro}: {linea.strip()[:100]}")
     assert not hallazgos, (
@@ -97,10 +125,16 @@ def test_el_repo_no_menciona_ids_de_issues():
         "ver pull request" + " #34",
         "(grill" + " #4b)",
         "Issue" + "#3",
+        # Link a este repo: el texto sigue contando.
+        "[PR" + " #8](https://github.com/" + _REPO + "/pull/8)",
+        # Número suelto en la misma línea que una cita externa.
+        "ver PR" + " #8 y [issue #95](https://github.com/AfipSDK/afip.php/issues/95)",
+        # Link a algo que no es un issue de otro repo.
+        "[issue" + " #3](https://example.com/notas)",
     ],
 )
 def test_detecta_referencias_al_tracker_propio(linea):
-    assert any(p.search(linea) for p in _ISSUE_REFS)
+    assert _menciona_tracker_propio(linea)
 
 
 @pytest.mark.parametrize(
@@ -112,10 +146,12 @@ def test_detecta_referencias_al_tracker_propio(linea):
         "FACTURA-1 no es una clave de issue",
         "CMS/PKCS#7",
         "el clock skew es la causa #1 de errores",
+        "[upstream issue #95](https://github.com/AfipSDK/afip.php/issues/95)",
+        "ver [PR #12](https://github.com/pyar/pyafipws/pull/12) del upstream",
     ],
 )
 def test_permite_fuentes_externas(linea):
-    assert not any(p.search(linea) for p in _ISSUE_REFS)
+    assert not _menciona_tracker_propio(linea)
 
 
 def test_revisa_cualquier_archivo_de_texto_y_saltea_binarios(tmp_path):

@@ -164,8 +164,11 @@ perfil nativo y no ve los `cert.*` que copiaste bajo `profiles/prod/`.
   `backups/recipients.txt` (sin DB, sin secretos, sin comprobantes). Nativo:
   `uv run python -m facturador.backup --env prod`; Docker:
   `uv run python -m facturador.backup --root ~/facturador/profiles/prod`.
-  Escribe `backups/seed.age` (overwrite). Upload S3 y rebuild del registro:
-  el upload a S3 y el rebuild desde ARCA.
+  Escribe `backups/seed.age` (overwrite) y no sube nada: el upload a S3 lo
+  hace la app al cambiar la configuración, o a pedido con `POST /backup/seed`.
+  El registro de comprobantes se reconstruye desde ARCA al restaurar
+  (`python -m facturador.launcher --restore`). Aprovisionamiento de las
+  identidades `age` por máquina: ver la sección Backups del README.
 - **Una sola máquina emite.** Cada máquina tiene su propio cert e identidad
   `age`. Tras bootstrap, el registro se sincroniza desde ARCA — no
   se copia la DB por S3. Nunca emitir desde dos copias en paralelo.
