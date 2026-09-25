@@ -249,6 +249,7 @@ which one operates; PV selection when more than one is enabled. See
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |
 | S3 seed adapter (`seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
+| Profile diagnostics page | `facturador/diagnostics.py`, `facturador/web/templates/diagnostico.html`, `tests/test_diagnostics.py` |
 | Seed backup trigger / retry state | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `tests/test_seed_backup_sync.py` |
 | Rebuild from ARCA / catch-up | `facturador/reconstruct.py`, `facturador/seed_import.py`, `facturador/restore.py`, `facturador/launcher/restore_flow.py`, `facturador/api/registry.py` |
 | Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |

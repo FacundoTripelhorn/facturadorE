@@ -285,6 +285,7 @@ facturador/
   restore.py    # seed import + rebuild desde ARCA
   reconstruct.py # loop FEXGetCMP full/catch-up
   seed_import.py # identidad cert→env→CUIT→schema→integrity
+  diagnostics.py # chequeos de la página Diagnóstico (¿se puede emitir?)
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)

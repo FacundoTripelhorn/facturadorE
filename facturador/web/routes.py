@@ -53,6 +53,7 @@ from ..constants import (
     TIPO_DOC_CUIT,
     InvoiceStatus,
 )
+from ..diagnostics import Nivel, diagnosticar_arca, diagnosticar_perfil, peor_nivel
 from ..fiscal_identity import FiscalIdentityError, get_sealed_fiscal_cuit
 from ..launcher.switch import (
     is_launcher_supervised,
@@ -205,6 +206,11 @@ STATUS_LABELS = {
     InvoiceStatus.UNKNOWN: "A reconciliar",
 }
 templates.env.globals["STATUS_LABELS"] = STATUS_LABELS
+templates.env.globals["NIVELES"] = {
+    Nivel.OK: "OK",
+    Nivel.AVISO: "Aviso",
+    Nivel.BLOQUEA: "Bloquea",
+}
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
@@ -1251,6 +1257,29 @@ def _pagina_configuracion(
             "aviso": aviso,
         },
         status_code=status_code,
+    )
+
+
+@router.get("/diagnostico", response_class=HTMLResponse)
+def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
+    """¿Se puede emitir con este perfil? Los chequeos locales corren siempre;
+    los de ARCA solo con ``?arca=1`` (botón), porque pueden tardar."""
+    profile = request.app.state.profile
+    # ARCA primero: cada respuesta actualiza los avisos guardados, que el
+    # chequeo local lee después.
+    remotos = (
+        diagnosticar_arca(profile, service.conn, service.wsfex) if arca else None
+    )
+    locales = diagnosticar_perfil(profile, service.conn)
+    return templates.TemplateResponse(
+        request,
+        "diagnostico.html",
+        {
+            "locales": locales,
+            "remotos": remotos,
+            "arca_verificado": arca,
+            "nivel": peor_nivel(locales + (remotos or [])),
+        },
     )
 
 
