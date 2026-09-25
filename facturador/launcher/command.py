@@ -1,4 +1,4 @@
-"""Resolución de comando y perfil para el supervisor del launcher (FAC-28).
+"""Resolución de comando y perfil para el supervisor del launcher.
 
 El launcher elige un ambiente de negocio (homo/prod), resuelve el perfil
 oculto correspondiente y arma el comando/entorno con el que arranca el

@@ -1,7 +1,7 @@
-"""Restore FAC-65: importar seed + reconstruir el registro desde ARCA.
+"""Restore: importar seed + reconstruir el registro desde ARCA.
 
 Reemplaza el restore legacy de tarball+DB. El bundle es solo el seed
-cifrado (FAC-44); la historia fiscal se reconsulta con FEXGetCMP.
+cifrado; la historia fiscal se reconsulta con FEXGetCMP.
 
 Uso (backend detenido; perfil ya ``ready``)::
 
@@ -179,7 +179,7 @@ def catch_up_register(
     abort_on_any_gap: bool = False,
     batch_size: int = 25,
 ) -> ReconstructReport:
-    """Catch-up FAC-48: append N_local+1..N_arca en lotes (conexión dedicada)."""
+    """Catch-up: append N_local+1..N_arca en lotes (conexión dedicada)."""
     conn = connect(profile.paths.db)
     try:
         assert_profile_ready(profile, conn)
@@ -206,7 +206,7 @@ def catch_up_register(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Restaurar perfil: seed FAC-44 + rebuild desde ARCA (FAC-65)."
+        description="Restaurar perfil: seed cifrado + rebuild desde ARCA."
     )
     parser.add_argument(
         "--env", help="ambiente del perfil destino (homo | prod)"

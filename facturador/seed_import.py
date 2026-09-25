@@ -1,4 +1,4 @@
-"""Importar un seed FAC-44 con validación de identidad (FAC-65).
+"""Importar un seed cifrado con validación de identidad.
 
 Orden fijo de rechazo (fail-fast, sin override)::
 
@@ -111,7 +111,7 @@ def parse_envelope(
 def assert_profile_ready(
     profile: EnvironmentProfile, conn: sqlite3.Connection
 ) -> SetupState:
-    """Exige setup ``ready`` antes de rebuild/catch-up (FAC-65)."""
+    """Exige setup ``ready`` antes de rebuild/catch-up."""
     state = reconcile_setup_state(profile, conn)
     if not is_ready(state):
         raise SeedIdentityError(

@@ -1,7 +1,7 @@
-"""Seed cifrado del perfil (FAC-44): solo config que ARCA no puede reproducir.
+"""Seed cifrado del perfil: solo config que ARCA no puede reproducir.
 
 ARCA es el ledger autoritativo. La DB local y los PDFs son copias de
-conveniencia regenerables (FAC-65 rebuild / FAC-53 cache). El backup que
+conveniencia regenerables (rebuild desde ARCA / cache de PDF). El backup que
 sale de la máquina es un seed casi estático de kilobytes: emisores, CUIT
 fiscal, ambiente, PV/tipos, cliente default / UI, versión de esquema, más
 un manifiesto de sanidad. Sin DB, sin secretos, sin PDFs, sin datos por
@@ -9,7 +9,7 @@ comprobante, sin ``last_CMP``.
 
 Cifrado: ``age`` a **todas** las claves públicas listadas en el
 ``recipients.txt`` del perfil (una por máquina). Layout lógico de objeto
-(S3, FAC-45): ``{prefix}/{cuit}/{env}/seed.age`` (overwrite) y
+(S3): ``{prefix}/{cuit}/{env}/seed.age`` (overwrite) y
 ``recipients.txt`` en claro al lado. Este módulo arma y cifra el seed;
 no sube a S3.
 """
@@ -66,12 +66,12 @@ class SeedBackupError(RuntimeError):
 
 
 def seed_object_key(prefix: str, cuit: str, env: str) -> str:
-    """Clave S3 fija del seed (overwrite). FAC-45 sube a este path."""
+    """Clave S3 fija del seed (overwrite). El upload va a este path."""
     return _object_key(prefix, cuit, env, SEED_FILENAME)
 
 
 def recipients_object_key(prefix: str, cuit: str, env: str) -> str:
-    """Clave S3 del listado de recipients (claro). FAC-45 lo sincroniza."""
+    """Clave S3 del listado de recipients (claro). El upload lo sincroniza."""
     return _object_key(prefix, cuit, env, RECIPIENTS_FILENAME)
 
 
@@ -89,14 +89,14 @@ def _object_key(prefix: str, cuit: str, env: str, filename: str) -> str:
 
 
 def recipients_path(paths: ProfilePaths) -> Path:
-    """``recipients.txt`` local del perfil (staging; S3 es FAC-45/FAC-64)."""
+    """``recipients.txt`` local del perfil (staging; S3 lo sincroniza el upload)."""
     return paths.backups_dir / RECIPIENTS_FILENAME
 
 
 def write_recipients_file(paths: ProfilePaths, text: str) -> Path:
     """Escribe ``recipients.txt`` local (overwrite atómico) y valida el cuerpo.
 
-    Disparo de backup: FAC-47 (``SeedBackupCoordinator.replace_recipients``).
+    Disparo de backup: (``SeedBackupCoordinator.replace_recipients``).
     """
     # Validar antes de tocar disco: parse_recipients exige claves age1…
     body = text if text.endswith("\n") or text == "" else text + "\n"
@@ -533,7 +533,7 @@ def create_encrypted_seed(
     """
     seed = assemble_seed(conn, environment=environment)
     # Setup incompleto: el seed solo tiene sentido con identidad fiscal +
-    # al menos un emisor activo (FAC-35 ready-ish). No inventar un seed a
+    # al menos un emisor activo (onboarding casi listo). No inventar un seed a
     # medias ni sugerir workarounds de CLI.
     if not seed.get("fiscal_cuit"):
         raise SeedBackupError(

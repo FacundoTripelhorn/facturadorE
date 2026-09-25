@@ -1,4 +1,4 @@
-"""S3 seed storage adapter (FAC-45) against an in-memory stub — no real bucket."""
+"""S3 seed storage adapter against an in-memory stub — no real bucket."""
 
 from __future__ import annotations
 

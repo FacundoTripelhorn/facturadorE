@@ -1,4 +1,4 @@
-"""Ack de primer uso de Producción en el backend (FAC-40)."""
+"""Ack de primer uso de Producción en el backend."""
 
 from __future__ import annotations
 

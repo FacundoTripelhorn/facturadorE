@@ -1,4 +1,4 @@
-"""Pedido de cambio de ambiente (FAC-32 / ADR 0001).
+"""Pedido de cambio de ambiente (ADR 0001).
 
 El backend no muta el ambiente en proceso: solo escribe un archivo de pedido
 en el perfil corriente. El launcher lo detecta, muestra el chooser y — si el
@@ -40,7 +40,7 @@ def change_environment_request_path(paths: ProfilePaths) -> Path:
 def is_launcher_supervised(
     environ: dict[str, str] | None = None,
 ) -> bool:
-    """True cuando el proceso fue arrancado por el launcher (FAC-28+)."""
+    """True cuando el proceso fue arrancado por el launcher."""
     env = os.environ if environ is None else environ
     return env.get(LAUNCHER_SUPERVISED_ENV) == LAUNCHER_SUPERVISED_VALUE
 

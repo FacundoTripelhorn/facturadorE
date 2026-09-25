@@ -1,4 +1,4 @@
-"""Perfiles de ambiente aislados (FAC-23)."""
+"""Perfiles de ambiente aislados."""
 
 from pathlib import Path, PureWindowsPath
 

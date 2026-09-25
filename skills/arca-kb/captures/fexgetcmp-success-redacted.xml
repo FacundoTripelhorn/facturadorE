@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Purpose: FEXGetCMP success shape for Factura E services (incl. Fecha_pago + Items).
-  Source label: Observed structure (FAC-63 fidelity / WSDL ClsFEXGetCMPR); values fake.
+  Source label: Observed structure (fidelity matrix / WSDL ClsFEXGetCMPR); values fake.
   Redaction: Token/Sign replaced; CUIT/CAE/cliente anonymized — §2.1.1 checklist.
 -->
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">

@@ -1,4 +1,4 @@
-"""Cliente WSCDC — Constatación de Comprobantes (FAC-84).
+"""Cliente WSCDC — Constatación de Comprobantes.
 
 Independiente de ``FEXGetCMP``: esa reconciliación prueba que ARCA registró
 *nuestro* authorize; WSCDC es la misma verificación del portal
@@ -111,7 +111,7 @@ class WscdcClient:
     ):
         self.config = config
         self.wsaa = wsaa or WsaaClient(config, service=SERVICE_WSCDC)
-        # Prod WSCDC vive en servicios1 (mismo weak-DH que WSFEX, FAC-81).
+        # Prod WSCDC vive en servicios1 (mismo weak-DH que WSFEX).
         self.http = http or httpx.Client(
             timeout=60.0, verify=arca_servicios1_verify(config.env, label="WSCDC")
         )

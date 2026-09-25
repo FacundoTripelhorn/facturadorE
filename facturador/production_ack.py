@@ -1,4 +1,4 @@
-"""Confirmación de primer uso de Producción (FAC-40).
+"""Confirmación de primer uso de Producción.
 
 El flag vive solo en el perfil ``prod`` (``data/production_ack.json``).
 Homologación nunca lo pide ni lo escribe.

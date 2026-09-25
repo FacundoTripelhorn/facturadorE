@@ -1,5 +1,5 @@
 """Backup/restore (design.md §2.5): snapshot consistente, contenido del
-tarball y extracción segura, ahora sobre la raíz de UN perfil (FAC-25).
+tarball y extracción segura, ahora sobre la raíz de UN perfil.
 El cifrado age y el upload S3 quedan afuera (son subprocesos de CLIs
 externas); acá se cubre todo lo que arma la app.
 """
@@ -66,8 +66,8 @@ def test_tar_lleva_estado_del_perfil_sin_db_viva_ni_logs(perfil):
     members = _members(build_tar(perfil, snapshot))
 
     archivos = {k for k, v in members.items() if v is not None}
-    # Sin .env: el bootstrap no es estado del perfil (FAC-25).
-    # Sin PDFs generados: cache descartable (FAC-53); la DB basta.
+    # Sin .env: el bootstrap no es estado del perfil.
+    # Sin PDFs generados: cache descartable; la DB basta.
     assert archivos == {
         "secrets/cert.key",
         "secrets/cert.crt",
@@ -87,7 +87,7 @@ def test_tar_sin_db_respalda_el_resto(perfil):
 
 
 def test_tar_excluye_pdfs_generados_aunque_existan(perfil):
-    """FAC-53: el backup normal no incluye el cache local de PDFs."""
+    """El backup normal no incluye el cache local de PDFs."""
     pdf = perfil.pdf_dir / "factura-E-19-00001-00000001-homo.pdf"
     assert pdf.is_file()
     members = _members(build_tar(perfil, snapshot_db(perfil.db)))
@@ -189,7 +189,7 @@ def test_db_vieja_sin_tabla_settings_deja_el_backup_solo_local(perfil):
 
 
 def test_backup_rechaza_una_raiz_sin_db(tmp_path, capsys):
-    """FAC-44: el seed necesita la DB del perfil; sin ella falla en claro."""
+    """El seed necesita la DB del perfil; sin ella falla en claro."""
     from facturador.backup import main
 
     assert main(["--root", str(tmp_path)]) == 1

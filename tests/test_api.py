@@ -121,7 +121,7 @@ def test_sin_cliente_default_ni_client_id_es_conflicto(api):
 
 
 def test_sin_datos_de_emisor_no_se_emite(api):
-    """Sin emisor completo el perfil no está ready (FAC-35): la guardia
+    """Sin emisor completo el perfil no está ready: la guardia
     bloquea la emisión antes del chequeo de dominio del service."""
     with api.conn:
         api.conn.execute("DELETE FROM emisores")
@@ -287,7 +287,7 @@ def test_submitting_reciente_bloquea_doble_submit(api, arca):
     assert "en curso" in r.json()["detail"]
 
 
-# --- chequeo de DB desactualizada (§2.5 / FAC-48) ---
+# --- chequeo de DB desactualizada (§2.5) ---
 
 
 def _insert_authorized(
@@ -330,7 +330,7 @@ def _insert_authorized(
 
 
 def test_registro_alineado_permite_emision(api, arca):
-    """FAC-48: last_cmp == max wsfex local → se puede emitir el siguiente."""
+    """Last_cmp == max wsfex local → se puede emitir el siguiente."""
     _crear_cliente(api)
     _insert_authorized(api, cbte_nro=3, source="wsfex", arca_id=103)
     arca.last_cmp[(1, 19)] = 3
@@ -343,7 +343,7 @@ def test_registro_alineado_permite_emision(api, arca):
 
 
 def test_db_desactualizada_bloquea_emision(api, arca):
-    """FAC-48: ARCA adelante del registro wsfex local → bloqueo pre-asignación."""
+    """ARCA adelante del registro wsfex local → bloqueo pre-asignación."""
     _crear_cliente(api)
     draft = _crear_draft(api)
     arca.last_cmp[(1, 19)] = 5  # ARCA conoce 5 comprobantes; DB local, 0
@@ -364,7 +364,7 @@ def test_db_desactualizada_bloquea_emision(api, arca):
 
 
 def test_local_adelante_de_arca_bloquea_sin_force(api, arca):
-    """FAC-48: local wsfex > FEXGetLast_CMP → inconsistencia no forzable."""
+    """Local wsfex > FEXGetLast_CMP → inconsistencia no forzable."""
     _crear_cliente(api)
     _insert_authorized(api, cbte_nro=7, source="wsfex", arca_id=107)
     arca.last_cmp[(1, 19)] = 3
@@ -379,7 +379,7 @@ def test_local_adelante_de_arca_bloquea_sin_force(api, arca):
 
 
 def test_importados_no_satisfacen_ni_contaminan_el_chequeo(api, arca):
-    """FAC-48: filas imported no alinean el registro ni provocan local-ahead."""
+    """Filas imported no alinean el registro ni provocan local-ahead."""
     _crear_cliente(api)
     _insert_authorized(api, cbte_nro=20, source="imported")
     # ARCA adelante del wsfex local (0): el importado no "satisface" el chequeo.
@@ -515,7 +515,7 @@ def test_listado_paginado(api, arca):
     assert len(api.get("/invoices?limit=2&offset=2").json()) == 1
 
 
-# --- peek registro ARCA (FAC-68) ---
+# --- peek registro ARCA ---
 
 
 def test_listado_arca_vacio_cuando_no_hay_comprobantes(api, arca):
@@ -592,7 +592,7 @@ def test_listado_arca_no_colisiona_con_get_por_id(api, arca):
     assert "last_cmp" in r.json()
 
 
-# --- vínculo factura ↔ perfil (ADR 0001 / FAC-26) ---
+# --- vínculo factura ↔ perfil (ADR 0001) ---
 
 
 def test_el_ambiente_de_la_factura_sale_del_perfil_no_del_request(api, arca):
@@ -631,7 +631,7 @@ def test_acceso_a_factura_de_otro_perfil_rechazado(api, arca):
 
 
 def test_emisor_activo_de_otro_perfil_rechazado(api, arca):
-    """FAC-26 + FAC-35: emisor sellado con otro ambiente no deja el setup
+    """Emisor sellado con otro ambiente no deja el setup
     en ``ready``; la guardia responde 503 antes de llegar al 409 de dominio."""
     _crear_cliente(api)
     with api.conn:

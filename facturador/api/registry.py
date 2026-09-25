@@ -1,4 +1,4 @@
-"""Catch-up del registro local desde ARCA (FAC-65 / FAC-48)."""
+"""Catch-up del registro local desde ARCA."""
 
 from __future__ import annotations
 

@@ -1,11 +1,11 @@
-"""Reconstrucción del registro local desde ARCA (FAC-65).
+"""Reconstrucción del registro local desde ARCA.
 
 ARCA es el ledger autoritativo. Este módulo re-consulta ``FEXGetLast_CMP`` +
 ``FEXGetCMP`` por cada (PV, tipo) y escribe el registro local en **lotes
 cortos**. Dos modos comparten el loop:
 
 * **full** — vacía el registro y recorre ``1..N`` (restore desde launcher).
-* **catch-up** — append ``N_local+1..N_arca`` (remediación FAC-48).
+* **catch-up** — append ``N_local+1..N_arca`` (remediación del registro desactualizado).
 
 Full rebuild **borra todo el registro local**, incluidos históricos
 ``source=imported``: ARCA es autoritativo; lo reinsertado es ``source=wsfex``.
@@ -18,7 +18,8 @@ Escrituras por lote (sin resume)::
    (reconsulta fresca a ARCA, no el valor planificado al inicio).
 
 Un fallo a mitad de camino deja lotes previos commitidos. Ese registro
-parcial tiene ``local_max < arca_last`` → el guard FAC-48 bloquea emisión
+parcial tiene ``local_max < arca_last`` → el guard de registro
+desactualizado bloquea emisión
 (fail-closed). Remedio: re-ejecutar el restore (full wipe + rebuild), no
 reanudar.
 
@@ -577,7 +578,7 @@ def reconstruct_register(
                 f"{target.punto_venta} tipo {target.cbte_tipo} "
                 f"local_max={local_max} != FEXGetLast_CMP={arca_last}. "
                 "Re-ejecutar el restore (el registro parcial queda bloqueado "
-                "por FAC-48)."
+                "por el guard de registro desactualizado)."
             )
 
     return report

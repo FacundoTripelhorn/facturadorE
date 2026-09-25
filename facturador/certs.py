@@ -1,4 +1,4 @@
-"""Validación y persistencia atómica del par certificado/clave ARCA (FAC-36).
+"""Validación y persistencia atómica del par certificado/clave ARCA.
 
 Servicio de backend sin UI: valida el par PEM, lo escribe en el ``secrets/``
 del perfil con nombres genéricos (``cert.crt`` / ``cert.key``) y permisos
@@ -110,7 +110,7 @@ def store_certificate_pair(
     llamada + lock evitan cruces ante stores concurrentes. Tras un replace
     exitoso se invalida el cache de TA de WSAA del perfil.
 
-    Identidad fiscal (FAC-39): un CUIT distinto al certificado vivo o al
+    Identidad fiscal: un CUIT distinto al certificado vivo o al
     sello ``sealed_cuit`` se rechaza sin mutar el perfil. Renovar el par
     con el mismo CUIT está permitido.
     """
@@ -208,7 +208,7 @@ def _invalidate_wsaa_ta_cache(profile: EnvironmentProfile) -> None:
     """Borra caches de TA WSAA del perfil tras rotar el par cert/key.
 
     Incluye ``ta-wsfex.json`` (emisión) y ``ta-wscdc.json`` (constatación
-    FAC-84): ambos quedan inválidos para el certificado anterior.
+    constatación): ambos quedan inválidos para el certificado anterior.
     """
     for cache in (profile.paths.wsaa_ta_cache, profile.paths.wscdc_ta_cache):
         try:

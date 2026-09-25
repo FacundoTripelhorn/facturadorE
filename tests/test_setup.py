@@ -1,4 +1,4 @@
-"""Setup state por perfil y guardia de onboarding (FAC-35)."""
+"""Setup state por perfil y guardia de onboarding."""
 
 from __future__ import annotations
 
@@ -349,7 +349,7 @@ def test_clientes_y_ui_clientes_son_setup_exempt():
 
 
 def test_cert_distinto_del_sello_fiscal_queda_en_certificate_required(tmp_path):
-    """FAC-39: sello CUIT A + cert CUIT B no llega a ready."""
+    """Sello CUIT A + cert CUIT B no llega a ready."""
     profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "p")
     profile.paths.ensure_layout()
     conn = db.connect(profile.paths.db)

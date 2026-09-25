@@ -1,4 +1,4 @@
-"""FAC-84 — cliente WSCDC y constatación bajo demanda (fake in-process)."""
+"""Cliente WSCDC y constatación bajo demanda (fake in-process)."""
 
 from __future__ import annotations
 

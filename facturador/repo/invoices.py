@@ -186,7 +186,7 @@ def max_authorized_cbte_nro(
 
     Los históricos importados (source=imported) no cuentan: no satisfacen el
     chequeo de DB desactualizada ni pueden hacer parecer que el perfil local
-    está alineado o por delante de ARCA (FAC-48).
+    está alineado o por delante de ARCA.
     """
     row = conn.execute(
         "SELECT MAX(cbte_nro) AS m FROM invoices"
@@ -206,7 +206,7 @@ def delete_draft(conn: sqlite3.Connection, invoice_id: str) -> bool:
     """Borra un borrador jamás enviado (status=draft, raw_request NULL).
 
     Los ítems se borran ANTES que la factura porque ``PRAGMA foreign_keys=ON``
-    (FAC-43) rechazaría borrar el padre primero. Ambos DELETE repiten la
+    rechazaría borrar el padre primero. Ambos DELETE repiten la
     guarda de estado vía subquery, así que la operación sigue siendo
     atómica: si otro proceso ya lo transicionó, no se borra nada."""
     with conn:

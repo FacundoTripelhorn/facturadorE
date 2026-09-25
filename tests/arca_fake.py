@@ -1,4 +1,4 @@
-"""Simulador de WSFEX (+ WSCDC FAC-84) para tests.
+"""Simulador de WSFEX (+ WSCDC) para tests.
 
 Mantiene estado (numeración, comprobantes emitidos) y permite simular los
 modos de falla que definen la máquina de estados: rechazo de negocio,
@@ -71,8 +71,8 @@ class FakeArca:
         self.last_cmp: dict[tuple[int, int], int] = {}
         self.issued: dict[tuple[int, int, int], dict] = {}
         self.authorize_mode = "ok"  # ok | reject | timeout | timeout_but_issued
-        self.get_cmp_mode = "ok"  # ok | timeout | error (FAC-65)
-        # FAC-84: ok | reject | mismatch | error
+        self.get_cmp_mode = "ok"  # ok | timeout | error
+        # Ok | reject | mismatch | error
         self.constatar_mode = "ok"
         self.constatar_error_code = "100"
         self.constatar_error_msg = "CAE inexistente"
@@ -246,7 +246,7 @@ class FakeArca:
         tipo = int(_findtext(body, "Cbte_tipo"))
         pv = int(_findtext(body, "Punto_vta"))
         nro = int(_findtext(body, "Cbte_nro"))
-        # Fallo de transporte configurable (FAC-65 retries / abort).
+        # Fallo de transporte configurable (retries / abort del rebuild).
         if getattr(self, "get_cmp_mode", "ok") == "timeout":
             raise httpx.ConnectTimeout("timeout simulado FEXGetCMP")
         if getattr(self, "get_cmp_mode", "ok") == "error":
@@ -312,7 +312,7 @@ class FakeArca:
         )
 
     def _comprobanteconstatar(self, body):
-        """WSCDC ComprobanteConstatar (FAC-84)."""
+        """WSCDC ComprobanteConstatar."""
         req = {
             "CbteModo": _findtext(body, "CbteModo") or "",
             "CuitEmisor": _findtext(body, "CuitEmisor") or "",

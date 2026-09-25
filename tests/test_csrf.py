@@ -1,4 +1,4 @@
-"""FAC-42 / FAC-62 — CSRF en formularios del browser (double-submit cookie)."""
+"""CSRF en formularios del browser (double-submit cookie)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tests.test_web import CLIENTE_FORM, FACTURA_FORM, _crear_cliente_por_form
 
 
 def _assert_csrf_html_403(response, *, recovery_href: str = "/clientes") -> None:
-    """FAC-62: rechazo /ui/ es HTML con enlace GET, no reload del POST."""
+    """Rechazo /ui/ es HTML con enlace GET, no reload del POST."""
     assert response.status_code == 403
     assert "text/html" in response.headers["content-type"]
     assert CSRF_UI_MESSAGE in response.text
@@ -113,7 +113,8 @@ def test_get_y_api_json_no_exigen_csrf(api):
     api.cookies.clear()
     assert api.get("/").status_code == 200
     assert api.get("/health").status_code == 200
-    # API JSON: sin form CSRF (FAC-41 ya cubre Origin; scripts locales OK).
+    # API JSON: sin form CSRF (la policy Host/Origin ya cubre Origin;
+    # scripts locales OK).
     r = api.post(
         "/clients",
         json={

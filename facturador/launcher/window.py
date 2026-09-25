@@ -1,4 +1,4 @@
-"""Ventana nativa del launcher vía pywebview (FAC-83).
+"""Ventana nativa del launcher vía pywebview.
 
 Tras ``GET /health``, el launcher abre ``http://127.0.0.1:<port>/`` en una
 ventana del webview del SO (WebView2 en Windows, WebKit en macOS) en lugar de
@@ -8,7 +8,7 @@ navegador del sistema con un mensaje claro en el log.
 ``webview.start()`` bloquea el hilo que lo invoca hasta que se cierra la
 ventana (o ``interrupt_check`` fuerza ``destroy``). El caller (supervisor /
 ``__main__``) usa ese retorno para apagar el backend o atender un cambio de
-ambiente (FAC-32).
+ambiente.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def open_app_ui(
         url: Base URL del backend (típicamente ``http://127.0.0.1:<port>/``).
         title: Título de la ventana nativa.
         interrupt_check: Si devuelve True, se destruye la ventana y el
-            resultado es ``INTERRUPTED`` (para FAC-32 sin dejar el GUI loop
+            resultado es ``INTERRUPTED`` (cambio de ambiente sin dejar el GUI loop
             colgado).
         webview_module: Inyectable en tests; por defecto ``import webview``.
         browser_opener: Fallback; por defecto ``webbrowser.open``.

@@ -1,10 +1,10 @@
-"""Supervisor de proceso del launcher (FAC-28 / FAC-30 / FAC-32 / FAC-83, ADR 0001).
+"""Supervisor de proceso del launcher (ADR 0001).
 
 Arranca un backend ligado a un único perfil, espera ``GET /health``, y apaga el
-hijo sin dejarlo huérfano. El lock de perfil (FAC-30) evita un segundo backend
+hijo sin dejarlo huérfano. El lock de perfil evita un segundo backend
 sobre el mismo SQLite; si ya hay una sesión sana, se reutiliza. La UI nativa
-(FAC-83) se abre vía ``open_ui()`` / el CLI — ``start()`` no bloquea en
-pywebview. FAC-32: el supervisor expone el pedido de cambio de ambiente
+se abre vía ``open_ui()`` / el CLI — ``start()`` no bloquea en
+pywebview. El supervisor expone el pedido de cambio de ambiente
 escrito por la UI (sin hot-switch).
 """
 
@@ -65,10 +65,10 @@ class ProcessSupervisor:
     home: Path | None = None
     readiness_timeout: float = DEFAULT_READINESS_TIMEOUT_S
     # False por defecto: start()/start_backend()/``with`` deben devolver el
-    # supervisor listo sin bloquear. La ventana nativa (FAC-83) se abre vía
+    # supervisor listo sin bloquear. La ventana nativa se abre vía
     # open_ui() o el loop del CLI (``python -m facturador.launcher``).
     open_browser: bool = False
-    # None → ventana nativa (FAC-83) solo en open_ui() / allow_blocking.
+    # None → ventana nativa solo en open_ui() / allow_blocking.
     # Callable inyectable en tests / agents (p.ej. ``list.append``) es
     # no bloqueante y sí puede usarse desde start().
     browser_opener: Callable[[str], Any] | None = None
@@ -76,11 +76,12 @@ class ProcessSupervisor:
     base_env: Mapping[str, str] | None = None
     # Inyectable en tests: reemplaza ``python -m facturador``.
     command_override: list[str] | None = None
-    # FAC-30: por defecto toma el lock de perfil; False solo en tests unitarios
+    # Por defecto toma el lock de perfil; False solo en tests unitarios
     # del ciclo start/stop sin contención.
     acquire_profile_lock: bool = True
-    # FAC-83: si True (default), la ventana se interrumpe cuando hay pedido
-    # FAC-32 o el backend muere, para devolver el control al hilo del launcher.
+    # Si True (default), la ventana se interrumpe cuando hay un pedido de
+    # cambio de ambiente o el backend muere, para devolver el control al hilo
+    # del launcher.
     interrupt_ui_on_change_request: bool = True
 
     _plan: BackendLaunchPlan | None = field(default=None, init=False, repr=False)
@@ -216,7 +217,8 @@ class ProcessSupervisor:
             self._release_lock()
 
     def poll_change_environment_request(self) -> ChangeEnvironmentRequest | None:
-        """Pedido FAC-32 escrito por la UI; no muta el ambiente del proceso."""
+        """Pedido de cambio de ambiente escrito por la UI; no muta el ambiente
+        del proceso."""
         return read_change_environment_request(self.plan.profile.paths)
 
     def clear_change_environment_request(self) -> None:
@@ -251,7 +253,7 @@ class ProcessSupervisor:
             ) from exc
 
         # Flock libre: posible backend huérfano tras muerte del launcher.
-        # Opción B (FAC-30): no spawnear otro; fallar con mensaje claro.
+        # Opción B: no spawnear otro; fallar con mensaje claro.
         displaced = lock.displaced_holder
         if displaced is not None and self._holder_session_healthy(
             displaced, plan.environment
@@ -289,7 +291,7 @@ class ProcessSupervisor:
             lock.release()
 
     def open_ui(self, base_url: str | None = None) -> UiOpenResult | None:
-        """Abre (o reabre) la UI; puede bloquear en la ventana nativa (FAC-83)."""
+        """Abre (o reabre) la UI; puede bloquear en la ventana nativa."""
         if not self.open_browser:
             return None
         url_base = base_url if base_url is not None else self.base_url

@@ -8,7 +8,7 @@
 | Changelog note **1.6.0** (2019-09-23) | Same PDF (historial / changelog section) | `Fecha_pago` added to authorize **and** GetCMP response |
 | WSAA developer manual | [PDF](https://www.afip.gob.ar/ws/WSAA/WSAAmanualDev.pdf) · [arca.gob.ar](https://arca.gob.ar/ws/WSAA/WSAAmanualDev.pdf) | LoginCms, TA reuse while vigente (~12 h), already-authenticated / retention guidance |
 | WSAA technical spec 1.2.2 | [PDF](https://www.afip.gob.ar/ws/wsaa/especificacion_tecnica_wsaa_1.2.2.pdf) · [arca.gob.ar](https://arca.gob.ar/ws/WSAA/Especificacion_Tecnica_WSAA_1.2.2.pdf) | TRA fields, CMS, generation/expiration windows |
-| Live WSFEX WSDL (homo) | `https://wswhomo.afip.gov.ar/wsfexv1/service.asmx?WSDL` (fetched **2026-07-17** for FAC-63) | `ClsFEXGetCMPR` includes `Fecha_pago`, `Items`; NS `http://ar.gov.afip.dif.fexv1/` |
+| Live WSFEX WSDL (homo) | `https://wswhomo.afip.gov.ar/wsfexv1/service.asmx?WSDL` (fetched **2026-07-17** for the fidelity matrix) | `ClsFEXGetCMPR` includes `Fecha_pago`, `Items`; NS `http://ar.gov.afip.dif.fexv1/` |
 | Live WSFEX WSDL (prod) | `https://servicios1.afip.gov.ar/wsfexv1/service.asmx?WSDL` | Production schema check |
 
 Do **not** vendor PDF binaries in this skill unless licensing is explicit. Prefer the
@@ -19,14 +19,14 @@ table — do not leave ellipsis-only references.
 
 | Finding | Where | Evidence strength |
 |---------|-------|-------------------|
-| FAC-63 `Fecha_pago` / Cmp fidelity | Linear FAC-63; operator GetCMP matrix; live WSDL | **Obs** + **O** |
-| FAC-65 gap allow-list = ErrCode **1521** | `docs/wsfex-gap-vs-error.md`; `CMP_NOT_FOUND_CODES`; synthetic capture | **Pending** wire — product/fake contract only. **Contrast O:** manual documents **1020**. Promote when a redacted live `FEXGetCMP` dump is attached. |
+| `Fecha_pago` / Cmp fidelity | Operator GetCMP matrix; live WSDL | **Obs** + **O** |
+| Rebuild gap allow-list = ErrCode **1521** | `docs/wsfex-gap-vs-error.md`; `CMP_NOT_FOUND_CODES`; synthetic capture | **Pending** wire — product/fake contract only. **Contrast O:** manual documents **1020**. Promote when a redacted live `FEXGetCMP` dump is attached. |
 | Endpoints / SOAP client behavior | `docs/design.md` §1; `facturador/constants.py`; `facturador/arca/*` | **Obs** aligned with **O** URLs |
 | Reproceso (`Reproceso=S` same Id) | **O** authorize response fields; product authorize path | **O** / Obs |
 | ErrCode **1462** “Nro de comprobante ya utilizado” | `tests/arca_fake.py` + skill table | **Pending** wire capture — not in manual v3.1.1 tables; see [errors-observed.md](errors-observed.md) |
 
 **Note:** the in-process fake is **not** proof of ARCA wire behavior by itself.
-FAC-63 warned against treating a truncated fake GetCMP as fidelity evidence.
+The fidelity matrix warned against treating a truncated fake GetCMP as fidelity evidence.
 Use the fake as a **contract mirror** only where product docs say so (rebuild
 **1521**), and keep **Pending** labels for codes still lacking a redacted live dump
 or Official listing. In particular, **do not** upgrade fake/product ErrCodes

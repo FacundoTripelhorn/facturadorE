@@ -1,8 +1,7 @@
 # ADR 0001 — Perfiles de ambiente aislados, seleccionados por el launcher
 
 - **Estado:** aceptada (2026-07-10).
-- **Origen:** [FAC-22](https://linear.app/ftripelhorn/issue/FAC-22/adr-adopt-launcher-selected-isolated-environment-profiles),
-  proyecto *Seamless Environment Profiles*.
+- **Origen:** proyecto *Seamless Environment Profiles*.
 - **Autoridad:** este documento es **la fuente autoritativa** del contrato de
   ambientes/perfiles. Si otro documento (README, `docs/design.md`, guías de
   setup, diagramas de agentes) lo contradice, vale este ADR.
@@ -54,7 +53,7 @@ Reglas que componen el contrato:
    cache de PDFs, su cache de TA del WSAA, su cache de parámetros de ARCA,
    sus logs, su estado de onboarding y sus backups.
 7. **Un CUIT fiscal por perfil** (el del certificado del perfil). Implementado
-   en [FAC-39](https://linear.app/ftripelhorn/issue/FAC-39/enforce-one-fiscal-cuit-per-environment-profile):
+   en la identidad fiscal por perfil:
    sello en `settings.fiscal_cuit`, snapshot en `invoices.cuit_emisor`,
    rechazo de certificados o configuración de emisor que introduzcan otro
    CUIT (cambiar de contribuyente = perfil nuevo o reset).
@@ -128,7 +127,7 @@ sequenceDiagram
 
 ## Implicaciones de migración (modelo shared-home previo)
 
-Antes de este ADR — y de FAC-23 … FAC-34 — el modelo era un único
+Antes de este ADR el modelo era un único
 `FACTURADOR_HOME` (default `~/facturador`) con `.env` (`ARCA_ENV`) como
 selector, ambos certificados en `secrets/`, una sola DB con
 `emisores.ambiente` y `active_emisor_id_<ambiente>`, TA cache
@@ -136,38 +135,30 @@ selector, ambos certificados en `secrets/`, una sola DB con
 Consecuencias del pasaje al modelo de perfiles (ya implementado):
 
 - **Raíces por perfil, no un home compartido.** Los perfiles se resuelven
-  internamente desde el app-data del SO
-  ([FAC-23](https://linear.app/ftripelhorn/issue/FAC-23/introduce-environmentprofile-and-profilepaths-abstractions));
+  internamente desde el app-data del SO;
   el usuario deja de conocer/gestionar el layout.
 - **`ARCA_ENV` en `.env` deja de ser el selector de producto.** El ambiente se
-  inyecta una sola vez al construir la app
-  ([FAC-24](https://linear.app/ftripelhorn/issue/FAC-24/boot-the-backend-from-one-explicit-environment-profile));
+  inyecta una sola vez al construir la app;
   las URLs de ARCA y los paths derivan de ese perfil. El launcher
-  ([FAC-28](https://linear.app/ftripelhorn/issue/FAC-28/add-launcher-process-supervisor) /
-  [FAC-29](https://linear.app/ftripelhorn/issue/FAC-29/add-launcher-environment-chooser))
   es quien elige Homologación / Producción.
 - **Todo archivo de runtime pasa por `ProfilePaths`** (DB, certs, PDFs, TA,
-  params, logs, staging de backups, onboarding)
-  ([FAC-25](https://linear.app/ftripelhorn/issue/FAC-25/route-all-profile-owned-runtime-files-through-profilepaths));
+  params, logs, staging de backups, onboarding);
   desaparecen los sufijos `<env>` en nombres de archivo dentro de un mismo
   directorio.
 - **El estado de emisor se vuelve local al perfil**:
   `active_emisor_id_<ambiente>` se reemplaza por una única clave del perfil, y
-  el ambiente sale de los formularios/API de emisor
-  ([FAC-26](https://linear.app/ftripelhorn/issue/FAC-26/bind-emisor-state-to-the-selected-profile),
-  [FAC-27](https://linear.app/ftripelhorn/issue/FAC-27/remove-environment-selection-from-emisor-api-and-ui)).
+  el ambiente sale de los formularios/API de emisor.
   `invoices.environment` se mantiene como auditoría inmutable y se valida
   contra el perfil corriente.
 - **Backups por perfil.** El tarball cifrado cubre el estado de un perfil, no
   un home mixto.
-- **Launcher:** supervisión y readiness ([FAC-28](https://linear.app/ftripelhorn/issue/FAC-28/add-launcher-process-supervisor)),
-  chooser ([FAC-29](https://linear.app/ftripelhorn/issue/FAC-29/add-launcher-environment-chooser)),
-  lock contra instancias duplicadas ([FAC-30](https://linear.app/ftripelhorn/issue/FAC-30/prevent-duplicate-launcher-and-backend-instances)),
-  identidad de ambiente en la app ([FAC-31](https://linear.app/ftripelhorn/issue/FAC-31/show-persistent-environment-identity-inside-the-app)),
-  flujo "Cambiar ambiente" por reinicio ([FAC-32](https://linear.app/ftripelhorn/issue/FAC-32/add-restart-based-change-environment-flow)),
-  tests de aislamiento ([FAC-33](https://linear.app/ftripelhorn/issue/FAC-33/add-profile-isolation-integration-tests)),
-  y documentación de producto/agentes alineada
-  ([FAC-34](https://linear.app/ftripelhorn/issue/FAC-34/update-product-and-agent-docs-for-isolated-environment-profiles)).
+- **Launcher:** supervisión y readiness,
+  chooser,
+  lock contra instancias duplicadas,
+  identidad de ambiente en la app,
+  flujo "Cambiar ambiente" por reinicio,
+  tests de aislamiento,
+  y documentación de producto/agentes alineada.
 
 Lo que **no cambia**: localhost-only, secretos fuera del repo con permisos
 `400/600`, ARCA como autoridad de numeración, un solo proceso sin workers, y

@@ -2,7 +2,7 @@
 
 Regla central (design.md §2.1.1 punto 1, reforzada por ADR 0001): TODO se
 deriva de un único ambiente ``ArcaEnvironment`` que se INYECTA una sola vez
-en el arranque (FAC-24). Las URLs de WSAA/WSFEX y los paths de runtime salen
+en el arranque. Las URLs de WSAA/WSFEX y los paths de runtime salen
 del mismo perfil, por lo que es imposible por construcción usar el
 certificado de homologación contra producción o viceversa. No existen
 overrides por URL, y ningún módulo de la app lee ``ARCA_ENV`` por su cuenta:
@@ -14,19 +14,19 @@ Resolución de configuración (única, sin fallbacks al directorio de trabajo):
 1. ``FACTURADOR_HOME`` (default ``~/facturador``; en Docker, ``/facturador``
    fijado por ENV en el Dockerfile) contiene SOLO el ``.env`` de bootstrap.
    Los archivos de runtime ya no viven ahí: cada ambiente tiene su perfil
-   aislado bajo el app-data del SO (ADR 0001 / FAC-25) y ``ProfilePaths``
+   aislado bajo el app-data del SO (ADR 0001) y ``ProfilePaths``
    es la única fuente de esos paths (DB, certs, PDFs, TA cache, logs,
    backups, onboarding).
 2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
    bootstrap mínimo: ``ARCA_ENV`` y, opcionalmente, ``FACTURADOR_PORT``.
    Si no existe, la app crea un esqueleto SIN ambiente activo: elegirlo es
-   un acto explícito del usuario/launcher, nunca un default (FAC-24).
+   un acto explícito del usuario/launcher, nunca un default.
 3. El resto de la configuración (datos del emisor, punto de venta, backups)
    vive en la DB del perfil y se edita desde la página Configuración
    (ver settings.py).
 
 Los certificados son archivos en ``<perfil>/secrets/cert.{crt,key}``
-(nombres genéricos: el perfil YA es el ambiente). FAC-35: el arranque
+(nombres genéricos: el perfil YA es el ambiente). Onboarding: el arranque
 tolera el par ausente (estado ``certificate_required`` + guardia); si la
 clave existe, sus permisos deben ser 400/600.
 """
@@ -60,7 +60,7 @@ DEFAULT_HOME = "~/facturador"
 
 # Bootstrap creado en el primer arranque. Solo lo que no puede vivir en la
 # DB: el flag de ambiente y el puerto local. El ambiente queda comentado a
-# propósito (FAC-24): un arranque sin elección explícita debe fallar, no
+# propósito: un arranque sin elección explícita debe fallar, no
 # caer en homologación en silencio.
 BOOTSTRAP_ENV = f"""\
 # Bootstrap del facturador. El resto de la configuración (datos del emisor,
@@ -83,7 +83,7 @@ class ConfigError(RuntimeError):
 @dataclass(frozen=True)
 class Config:
     env: ArcaEnvironment   # inmutable: fijado al construir, nunca re-leído
-    paths: ProfilePaths    # ÚNICA fuente de paths de runtime (FAC-25)
+    paths: ProfilePaths    # ÚNICA fuente de paths de runtime
 
     @property
     def wsaa_url(self) -> str:
@@ -107,7 +107,7 @@ def resolve_home() -> Path:
 def ensure_home(home: Path) -> None:
     """Crea el home y el .env de bootstrap si no existen.
 
-    El home ya no aloja archivos de runtime (FAC-25): secrets/, data/ y
+    El home ya no aloja archivos de runtime: secrets/, data/ y
     backups/ viven en el perfil de cada ambiente (``ProfilePaths``).
     """
     home.mkdir(parents=True, exist_ok=True)
@@ -152,7 +152,7 @@ def resolve_boot_profile() -> EnvironmentProfile:
 def load_config(profile: EnvironmentProfile) -> Config:
     """Config de un perfil YA elegido y validado.
 
-    El perfil es un parámetro obligatorio (FAC-24/FAC-25): no hay camino que
+    El perfil es un parámetro obligatorio: no hay camino que
     construya una Config sin decidir el ambiente, y los paths salen siempre
     del perfil — nunca de un layout compartido ni del CWD.
     """
@@ -172,7 +172,7 @@ def load_config(profile: EnvironmentProfile) -> Config:
 
 
 def validate_config(config: Config) -> None:
-    """Valida secretos presentes; permite arrancar sin par (FAC-35).
+    """Valida secretos presentes; permite arrancar sin par.
 
     Sin ``cert.crt``/``cert.key`` el backend igual arranca: el estado de
     setup queda en ``certificate_required`` y la guardia bloquea factura/

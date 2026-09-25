@@ -1,4 +1,4 @@
-"""FAC-47: config-change seed backup trigger, coalesce, failure/retry."""
+"""Config-change seed backup trigger, coalesce, failure/retry."""
 
 from __future__ import annotations
 
@@ -309,7 +309,7 @@ def test_authorize_does_not_trigger_seed_backup(
 
 
 def test_run_seed_backup_uploads_to_memory_store(profile_conn):
-    """Integration with FAC-44/45 stubs when age is available."""
+    """Integration with seed/upload stubs when age is available."""
     import shutil
 
     if shutil.which("age") is None:

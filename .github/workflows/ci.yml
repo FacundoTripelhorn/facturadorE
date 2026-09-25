@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # age/age-keygen: FAC-44 cifra el seed a recipients; los tests
+      # age/age-keygen: el seed se cifra a recipients; los tests
       # ejercitan round-trip real (sin loguear plaintext/secretos).
       # Binario oficial: el paquete apt no es uniforme entre runners.
       - name: Instalar age

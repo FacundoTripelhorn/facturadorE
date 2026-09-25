@@ -1,4 +1,4 @@
-"""Identidad fiscal inmutable del perfil (FAC-39 / ADR 0001).
+"""Identidad fiscal inmutable del perfil (ADR 0001).
 
 Un perfil tiene exactamente un CUIT: el del certificado ARCA validado. Se
 sella en ``settings.fiscal_cuit`` la primera vez que se resuelve y no se

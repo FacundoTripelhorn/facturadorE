@@ -2,16 +2,16 @@
 
 La app es dueña de su configuración: los datos del emisor que van al PDF,
 sus puntos de venta y la config de backups se editan desde la página
-Configuración y viajan en el **seed** cifrado (FAC-44) — no en un dump
+Configuración y viajan en el **seed** cifrado — no en un dump
 de la DB. En el ``.env`` de bootstrap queda SOLO lo que no puede vivir
 en la DB: ``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1)
 y ``FACTURADOR_PORT``.
 
-El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001 /
-FAC-26): la DB entera pertenece a un solo ambiente, así que acá no se
+El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001): la
+DB entera pertenece a un solo ambiente, así que acá no se
 selecciona ni filtra por ambiente. Un perfil puede tener varios emisores
 (una sola identidad fiscal: el CUIT del certificado del perfil, sellado
-en ``settings.fiscal_cuit`` — FAC-39) y la app opera con el activo
+en ``settings.fiscal_cuit`` ) y la app opera con el activo
 explícito (``active_emisor_id`` en settings, una única clave); sin
 selección no hay emisor operativo. La config de backups es global al
 perfil. El emisor no lleva CUIT ni puede sobrescribir la identidad fiscal.
@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from . import repo
 
 # Única clave de selección: sin sufijo de ambiente, el perfil YA es el
-# ambiente (FAC-26).
+# ambiente.
 ACTIVE_EMISOR_KEY = "active_emisor_id"
 CONDICION_IVA_DEFAULT = "IVA Responsable Inscripto"
 BACKUP_PREFIX_DEFAULT = "facturador"
@@ -43,8 +43,8 @@ class Emisor:
     iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
     inicio_actividades: str = ""   # DD/MM/AAAA, como lo imprime el comprobante
     condicion_iva: str = CONDICION_IVA_DEFAULT
-    # Sello del perfil al crear (FAC-26): dato de contexto, NO elegible por
-    # el usuario; el form/API lo pierde en FAC-27.
+    # Sello del perfil al crear: dato de contexto, NO elegible por
+    # el usuario; el form/API no lo exponen.
     ambiente: str = "homo"
     # Habilitados para este emisor. En homo el PV es libre; en prod, el PV
     # RECE exclusivo.
@@ -82,7 +82,7 @@ def _parse_puntos_venta(raw_value: str) -> tuple[int, ...]:
     except ValueError:
         return (1,)
     if isinstance(valores, list):
-        # Lista vacía = aún sin PV (FAC-35/38: point_of_sale_required).
+        # Lista vacía = aún sin PV (38: point_of_sale_required).
         if not valores:
             return ()
         if all(isinstance(v, int) and v >= 1 for v in valores):
@@ -127,7 +127,7 @@ def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
     """Fila viva de ``emisores`` (configuración editable).
 
     No usar para PDF ni historial fiscal: esos flujos leen el snapshot del
-    comprobante vía :func:`emisor_from_invoice_snapshot` (FAC-10).
+    comprobante vía :func:`emisor_from_invoice_snapshot`.
     """
     row = repo.get_emisor(conn, emisor_id)
     if row is None:
@@ -136,10 +136,10 @@ def load_emisor(conn: sqlite3.Connection, emisor_id: str) -> Emisor:
 
 
 def emisor_from_invoice_snapshot(inv: sqlite3.Row) -> Emisor:
-    """Emisor inmutable del comprobante (FAC-10), sin releer ``emisores``."""
+    """Emisor inmutable del comprobante, sin releer ``emisores``."""
     keys = inv.keys()
     if "emisor_razon_social" not in keys:
-        # Solo defensivo: el baseline siempre trae estas columnas (FAC-10).
+        # Solo defensivo: el baseline siempre trae estas columnas.
         raise ValueError(
             f"La factura {inv['id']} no tiene snapshot de emisor; "
             "crear un borrador nuevo con el esquema actual."
@@ -158,7 +158,7 @@ def emisor_from_invoice_snapshot(inv: sqlite3.Row) -> Emisor:
 def load_settings(conn: sqlite3.Connection) -> Settings:
     """Settings con el emisor activo del perfil y la config de backups.
 
-    Sin parámetro de ambiente (FAC-26): la DB es de un solo perfil y la
+    Sin parámetro de ambiente: la DB es de un solo perfil y la
     selección activa es una única clave.
     """
     row = _active_emisor_row(conn)

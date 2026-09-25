@@ -2,7 +2,7 @@
 
 Only items with Official, Observed, and/or cited Community evidence.
 
-## 1. `Fecha_pago` round-trips on `FEXGetCMP` (FAC-63)
+## 1. `Fecha_pago` round-trips on `FEXGetCMP`
 
 **Suspect (rejected):** that `Fecha_pago` is authorize-only and lost on consult.
 
@@ -51,8 +51,8 @@ Only items with Official, Observed, and/or cited Community evidence.
 
 ## 8. No range query for rebuild
 
-**Observed (FAC-65):** only one-by-one `FEXGetCMP`. Portal “Mis Comprobantes” CSV is manual cross-check, not an API.
+**Observed:** only one-by-one `FEXGetCMP`. Portal “Mis Comprobantes” CSV is manual cross-check, not an API.
 
 ## 9. Incoterms empty on services
 
-**Observed:** services invoices often authorize with empty `Incoterms`; GetCMP may return empty string. Empty ≠ “field missing from schema”. FAC-63 noted empty Incoterms when not populated on authorize — not a fidelity blocker when the product does not send it for `tipo_expo=2`.
+**Observed:** services invoices often authorize with empty `Incoterms`; GetCMP may return empty string. Empty ≠ “field missing from schema”. The fidelity matrix noted empty Incoterms when not populated on authorize — not a fidelity blocker when the product does not send it for `tipo_expo=2`.

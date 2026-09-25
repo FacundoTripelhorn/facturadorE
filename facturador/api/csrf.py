@@ -1,13 +1,13 @@
-"""Protección CSRF para formularios del browser (FAC-42 / FAC-62).
+"""Protección CSRF para formularios del browser.
 
 Patrón double-submit cookie, apto para una app localhost sin login:
 
 * Cookie ``facturador_csrf`` (HttpOnly, SameSite=Strict, Path=/; sin Secure
-  porque no hay TLS local — design.md §2.5 / FAC-41).
+  porque no hay TLS local — design.md §2.5).
 * Campo oculto ``csrf_token`` (o header ``X-CSRF-Token``) en POSTs a ``/ui/``.
 * Validación solo en métodos que cambian estado bajo ``/ui/``; GET y la API
   JSON quedan fuera (clientes no-browser / scripts).
-* Rechazo bajo ``/ui/`` → HTML de sesión expirada (FAC-62); fuera de ``/ui/``
+* Rechazo bajo ``/ui/`` → HTML de sesión expirada; fuera de ``/ui/``
   el handler responde JSON genérico.
 
 El material del token no se loguea ni se incluye en mensajes de error.

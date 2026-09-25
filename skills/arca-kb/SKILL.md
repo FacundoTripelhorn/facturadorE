@@ -12,7 +12,6 @@ license: MIT
 metadata:
   version: "1.0"
   pinned_manuals: "WSFEXv1 developer manual v3.1.1; WSAA LoginCms (official)"
-  related_issues: "FAC-63, FAC-65, FAC-66"
 ---
 
 # ARCA Knowledge Base (`arca-kb`)
@@ -27,7 +26,7 @@ Tag every non-obvious claim:
 | Label | Meaning |
 |-------|---------|
 | **Official** | Pinned ARCA/AFIP manuals or live WSDL |
-| **Observed** | Homologación / project findings with **wire or WSDL evidence** (FAC-63, design spike) |
+| **Observed** | Homologación / project findings with **wire or WSDL evidence** (design spike) |
 | **Pending** | Product/fake contract modeled for FacturadorE; **no redacted live dump yet** |
 | **Community** | Third-party tech notes (e.g. AfipSDK); cite URL; contrast with Official/Observed/Pending |
 
@@ -88,7 +87,7 @@ Factura E is **WSFEX**, not WSFEv1 (national A/B/C).
 | `FEXGetPARAM_*` | Dynamic tables (moneda, país, CUIT país, UMed, tipos, idiomas, Incoterms, …) |
 | `FEXGetPARAM_Ctz` | FX rate for a currency/date (foreign currency invoices) |
 
-**Observed:** WSFEXv1 has **no** bulk/range GetCMP API; rebuild walks numbers one-by-one (FAC-65).
+**Observed:** WSFEXv1 has **no** bulk/range GetCMP API; rebuild walks numbers one-by-one.
 
 ## Canonical Factura E fields (services)
 
@@ -105,7 +104,7 @@ Factura E is **WSFEX**, not WSFEv1 (national A/B/C).
 | Total | `Imp_total` | Sum of items |
 | Incoterms | often empty for services | Still a Cmp field |
 
-**FAC-63 / Observed + Official (manual v3.1.1 changelog 1.6.0):** `Fecha_pago` is on **both** authorize request and `FEXGetCMP` response (`ClsFEXGetCMPR`). Mandatory for tipo 19 + expo 2/4 (validations 1671–1674). It **round-trips**; it is not a silent local-only field. Details: [gotchas.md](references/gotchas.md).
+**Observed + Official (manual v3.1.1 changelog 1.6.0):** `Fecha_pago` is on **both** authorize request and `FEXGetCMP` response (`ClsFEXGetCMPR`). Mandatory for tipo 19 + expo 2/4 (validations 1671–1674). It **round-trips**; it is not a silent local-only field. Details: [gotchas.md](references/gotchas.md).
 
 Formats:
 
@@ -121,7 +120,7 @@ Formats:
 4. Numbering: always `FEXGetLast_CMP + 1`; never trust a local counter alone.
 5. Concurrent issuers against one PV collide; serialize authorize (**Observed** product constraint).
 
-## Gap vs error on `FEXGetCMP` (FAC-65)
+## Gap vs error on `FEXGetCMP`
 
 **Product allow-list** (FacturadorE `CMP_NOT_FOUND_CODES` — **Pending** live wire dump):
 
@@ -146,7 +145,7 @@ Synthetic shape (fake/product, not live): [captures/fexgetcmp-not-found-1521.xml
 ## Quick answers
 
 **Q: Does `Fecha_pago` come back from `FEXGetCMP`?**  
-Yes — **Official** (manual v3.1.1 / WSDL `ClsFEXGetCMPR`) and **Observed** (FAC-63 fidelity matrix, live homo WSDL 2026-07-17; operator smoke confirmed non-empty).
+Yes — **Official** (manual v3.1.1 / WSDL `ClsFEXGetCMPR`) and **Observed** (FEXGetCMP fidelity matrix, live homo WSDL 2026-07-17; operator smoke confirmed non-empty).
 
 **Q: How do I know a number is a hole vs ARCA failure during rebuild?**  
 Treat only **allow-listed not-found codes** as absence. FacturadorE currently

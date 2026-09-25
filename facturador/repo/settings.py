@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 
-# Claves que solo escriben helpers dedicados (FAC-39: identidad fiscal;
-# FAC-47: estado de seed backup). ``save_settings`` las rechaza para que
+# Claves que solo escriben helpers dedicados (identidad fiscal;
+# Estado de seed backup). ``save_settings`` las rechaza para que
 # la config de emisor/backups no pueda sobrescribirlas. Los nombres deben
 # coincidir con ``SEED_BACKUP_STATE_KEYS`` en ``seed_backup_sync``.
 PROTECTED_KEYS = frozenset(

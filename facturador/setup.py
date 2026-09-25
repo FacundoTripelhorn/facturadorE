@@ -1,9 +1,10 @@
-"""Estado de setup por perfil (FAC-35).
+"""Estado de setup por perfil.
 
 Cada perfil oculto (Homologación / Producción) guarda su propio
 ``data/onboarding.json`` vía ``ProfilePaths.onboarding``. El paso actual se
 deriva de hechos del perfil (certificado, emisor activo, puntos de venta) y
-se persiste para que un reinicio retome el mismo paso. FAC-37/38 avanzan el
+se persiste para que un reinicio retome el mismo paso. Los pasos de
+certificado y emisor avanzan el
 flujo de UI; este módulo solo modela el estado y la readiness.
 """
 
@@ -139,7 +140,7 @@ def evaluate_setup_state(
     if not certificate_pair_is_usable(profile):
         return SetupState.CERTIFICATE_REQUIRED
 
-    # FAC-39: si hay sello, el cert vivo debe coincidir (sin sellar acá).
+    # Si hay sello, el cert vivo debe coincidir (sin sellar acá).
     if get_sealed_fiscal_cuit(conn) is not None:
         try:
             resolve_profile_fiscal_cuit(conn, profile)
@@ -174,7 +175,7 @@ def reconcile_setup_state(
     Si ``onboarding.json`` está corrupto, se ignora y se re-deriva el
     estado desde hechos (nunca 500 por el archivo de estado).
 
-    ``on_became_ready`` (FAC-47): se invoca solo al cruzar a ``ready`` desde
+    ``on_became_ready``: se invoca solo al cruzar a ``ready`` desde
     otro paso (p.ej. fin de onboarding). El reconcile inicial de
     ``create_app`` no pasa callback — perfiles ya listos no disparan backup
     en cada arranque.

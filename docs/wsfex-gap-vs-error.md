@@ -1,4 +1,4 @@
-# WSFEX: distinguishing "comprobante does not exist" from errors (FAC-65)
+# WSFEX: distinguishing "comprobante does not exist" from errors
 
 **Status:** Documented for rebuild/catch-up gap handling.  
 **Related:** `facturador/arca/wsfex.py` (`CmpNotFoundError`, `CMP_NOT_FOUND_CODES`),
@@ -10,7 +10,7 @@ On **WSFEXv1 `FEXGetCMP`**, a missing voucher is signaled with a business
 `FEXErr` (not a SOAP Fault / HTTP transport failure). This product’s
 rebuild allow-list currently treats **`1521`** as that signal:
 
-| Signal | Meaning for FAC-65 |
+| Signal | Meaning for the rebuild |
 |--------|--------------------|
 | `FEXErr.ErrCode = 1521` | **Does not exist** (product/fake contract) — known gap. Message typically *"No existen datos para el comprobante"*. Record a known-gap row and continue. |
 | Other `FEXErr.ErrCode ≠ 0` | Business / server error — **not** a gap. Bounded retry, then **abort** the rebuild. |

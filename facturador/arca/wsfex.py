@@ -43,7 +43,7 @@ class WsfexError(RuntimeError):
         self.message = message
 
 
-# FAC-65 / docs/wsfex-gap-vs-error.md: FEXGetCMP ErrCode when the requested
+# docs/wsfex-gap-vs-error.md: FEXGetCMP ErrCode when the requested
 # (tipo, PV, nro) is not on ARCA's ledger. Distinct from transport/SOAP faults
 # and from other business ErrCodes (which abort a rebuild after retries).
 CMP_NOT_FOUND_CODES = frozenset({"1521"})
@@ -55,7 +55,7 @@ class CmpNotFoundError(WsfexError):
 
 @dataclass(frozen=True)
 class CmpItem:
-    """Línea de ítem devuelta por FEXGetCMP (FAC-65 rebuild)."""
+    """Línea de ítem devuelta por FEXGetCMP (rebuild)."""
 
     pro_codigo: str
     pro_ds: str
@@ -256,7 +256,7 @@ def parse_auth_result(result: ET.Element) -> AuthResult:
 
 
 def parse_cmp_record(result: ET.Element) -> CmpRecord:
-    """Parsea ``FEXGetCMPResult`` en campos planos + ítems (FAC-65).
+    """Parsea ``FEXGetCMPResult`` en campos planos + ítems.
 
     Los tags bajo ``Items/Item`` no se aplastan en ``fields`` (evitarían
     colisiones entre líneas). El resto de hojas de ``FEXResultGet`` sí.
@@ -369,7 +369,7 @@ class WsfexClient:
         self.config = config
         self.wsaa = wsaa or WsaaClient(config)
         # TLS verify activo (design.md §2.1.1 punto 5). En prod WSFEX, OpenSSL
-        # SECLEVEL=1 acepta el DH 1024 de servicios1.afip.gov.ar (FAC-81);
+        # SECLEVEL=1 acepta el DH 1024 de servicios1.afip.gov.ar;
         # homologación y WSAA siguen en defaults.
         self.http = http or httpx.Client(
             timeout=60.0, verify=wsfex_verify(config.env)
@@ -536,7 +536,7 @@ class WsfexClient:
     def get_cmp_record(
         self, cbte_tipo: int, punto_vta: int, cbte_nro: int
     ) -> CmpRecord:
-        """FEXGetCMP estructurado: campos + ``Items/Item`` (FAC-65).
+        """FEXGetCMP estructurado: campos + ``Items/Item``.
 
         Raises:
             CmpNotFoundError: ARCA confirma que el número no existe (gap).

@@ -1,4 +1,4 @@
-"""Migraciones de esquema e integridad SQLite (FAC-43)."""
+"""Migraciones de esquema e integridad SQLite."""
 
 from __future__ import annotations
 

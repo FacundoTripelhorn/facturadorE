@@ -53,9 +53,9 @@ finishing.
 | Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |
 | Setup state / onboarding guard | `facturador/setup.py`, `facturador/api/setup_guard.py`, `facturador/api/setup.py`, `facturador/api/app.py` | `uv run pytest tests/test_setup.py tests/test_config.py` |
 | SQLite settings / emisor | `facturador/settings.py`, `facturador/repo/settings.py`, `facturador/repo/emisores.py` | `uv run pytest tests/test_settings.py` |
-| Seed backup (FAC-44) / restore + rebuild (FAC-65) | `facturador/seed_backup.py`, `facturador/backup.py`, `facturador/restore.py`, `facturador/reconstruct.py`, `facturador/seed_import.py` | `uv run pytest tests/test_seed_backup.py tests/test_backup.py tests/test_reconstruct.py` |
-| S3 seed storage adapter (FAC-45) | `facturador/s3_seed.py` | `uv run pytest tests/test_s3_seed.py` |
-| Seed backup trigger / retry (FAC-47) | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `facturador/service.py` | `uv run pytest tests/test_seed_backup_sync.py` |
+| Seed backup / restore + rebuild | `facturador/seed_backup.py`, `facturador/backup.py`, `facturador/restore.py`, `facturador/reconstruct.py`, `facturador/seed_import.py` | `uv run pytest tests/test_seed_backup.py tests/test_backup.py tests/test_reconstruct.py` |
+| S3 seed storage adapter | `facturador/s3_seed.py` | `uv run pytest tests/test_s3_seed.py` |
+| Seed backup trigger / retry | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `facturador/service.py` | `uv run pytest tests/test_seed_backup_sync.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/migrations/`, `facturador/db.py` | `uv run pytest tests/test_migrations.py` then full `uv run pytest` (many modules touch the DB) |
 | Docker / launchers / profiles | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `facturador/profile.py`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py tests/test_profile.py tests/test_profile_isolation.py`; `docker build -t facturador:ci .` if image/entrypoint changed |
 | Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md`, `docs/adr/` | None required; spot-check links and Mermaid diagrams |
@@ -65,7 +65,7 @@ per-module narrow mode. After a focused edit, still run both once.
 
 **Manual UI check** (optional, localhost only):
 `uv run python -m facturador.launcher --env homo` opens a dedicated pywebview
-window to `http://127.0.0.1:8399` (FAC-83; `--no-browser` skips it). Requires
+window to `http://127.0.0.1:8399` (`--no-browser` skips it). Requires
 certs on the Homologación profile; ARCA calls need a real homologación
 certificate (see below). On Windows, WebView2 must be installed or the
 launcher falls back to the system browser.

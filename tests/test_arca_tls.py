@@ -1,4 +1,4 @@
-"""FAC-81: prod-only WSFEX TLS verify (SECLEVEL=1, never verify=False)."""
+"""Prod-only WSFEX TLS verify (SECLEVEL=1, never verify=False)."""
 
 from __future__ import annotations
 

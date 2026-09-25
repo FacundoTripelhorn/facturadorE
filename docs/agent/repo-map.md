@@ -50,7 +50,7 @@ flowchart TB
     DC["docker-compose.yml"]
     DKR["Dockerfile"]
     EP["docker/entrypoint.sh"]
-    LAUNCH_PY["facturador/launcher/<br/>process supervisor (FAC-28)"]
+    LAUNCH_PY["facturador/launcher/<br/>process supervisor"]
     LAUNCH["scripts/launch.cmd<br/>scripts/launch.command"]
   end
 
@@ -125,11 +125,11 @@ flowchart TB
 | What | Where |
 |------|-------|
 | App assembly, error mapping, router registration | `facturador/api/app.py` |
-| Localhost Host/Origin policy (FAC-41) | `facturador/api/localhost_policy.py` |
-| CSRF for browser forms (FAC-42 / FAC-62) | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html`, `csrf_error.html` |
-| Production first-use confirmation (FAC-40) | `facturador/production_ack.py`, `facturador/launcher/production_ack.py`, launcher `__main__.py` |
+| Localhost Host/Origin policy | `facturador/api/localhost_policy.py` |
+| CSRF for browser forms | `facturador/api/csrf.py`, `facturador/web/templates/_csrf_field.html`, `csrf_error.html` |
+| Production first-use confirmation | `facturador/production_ack.py`, `facturador/launcher/production_ack.py`, launcher `__main__.py` |
 
-| Per-profile setup state + guard (FAC-35) | `facturador/setup.py` (incl. `make_setup_state_provider`), `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
+| Per-profile setup state + guard | `facturador/setup.py` (incl. `make_setup_state_provider`), `facturador/api/setup_guard.py`, `facturador/api/setup.py` |
 | Shared `InvoiceService` dependency | `facturador/api/deps.py` |
 | REST: invoices (create, authorize, list, PDF, ARCA peek) | `facturador/api/invoices.py` |
 | REST: clients CRUD | `facturador/api/clients.py` |
@@ -152,12 +152,12 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 |------|-------|
 | WSAA: TRA, CMS sign, TA cache (`wsfex` / `wscdc`) | `facturador/arca/wsaa.py` |
 | WSFEX: SOAP build/parse, `FEXAuthorize`, params | `facturador/arca/wsfex.py` |
-| WSCDC: `ComprobanteConstatar` (FAC-84, botón Constatar) | `facturador/arca/wscdc.py`, UI `/constatacion` |
+| WSCDC: `ComprobanteConstatar` (botón Constatar) | `facturador/arca/wscdc.py`, UI `/constatacion` |
 | Environment URLs (`homo` / `prod`) | `facturador/constants.py` (`WSAA_URLS`, `WSFEX_URLS`, `WSCDC_URLS`) |
 | Profile roots & runtime paths | `facturador/profile.py` (`EnvironmentProfile`, `ProfilePaths`) |
 | Boot: inject one environment, validate certs | `facturador/config.py` (`resolve_boot_profile`, `load_config`) |
 | Domain rules & checklist | `docs/design.md` §1–2 |
-| Distilled ARCA KB skill (FAC-66; portable) | [`skills/arca-kb/`](../../skills/arca-kb/) — endpoints, TA, methods, observed errors, gotchas, redacted captures |
+| Distilled ARCA KB skill (portable) | [`skills/arca-kb/`](../../skills/arca-kb/) — endpoints, TA, methods, observed errors, gotchas, redacted captures |
 | Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |
 | In-process fake (no network) | `tests/arca_fake.py` |
 | WSAA unit tests | `tests/test_wsaa.py` |
@@ -187,7 +187,7 @@ UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domai
 | What | Where |
 |------|-------|
 | PDF renderer v1 (fpdf2 layout) + cache helper | `facturador/pdf/render.py` |
-| Versioned renderer registry (FAC-53) | `facturador/pdf/registry.py` |
+| Versioned renderer registry | `facturador/pdf/registry.py` |
 | QR payload (RG 4892) | `facturador/pdf/qr.py` |
 | Embedded font (Liberation Sans, SIL OFL) | `facturador/pdf/fonts/` |
 | PDF download route (API) | `facturador/api/invoices.py` (`GET …/pdf`) |
@@ -197,14 +197,13 @@ UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domai
 Generated PDFs are an optional local cache under the active profile's
 `data/pdfs/` (`ProfilePaths.pdf_dir`). Missing cache regenerates from the
 invoice snapshot via the renderer selected by `pdf_render_version`; normal
-backups exclude `data/pdfs/` (FAC-53).
+backups exclude `data/pdfs/`.
 
-### Emisor entity / multi-emisor (FAC-8 area)
+### Emisor entity / multi-emisor
 
 Use this section for work on **alta de emisores** (each emisor with its own
-puntos de venta). Emisores are **local to the active profile** (ADR 0001 /
-FAC-26): the DB belongs to one environment, so there is no per-emisor
-environment selector in the API/UI (FAC-27). Do not grep the whole tree — the
+puntos de venta). Emisores are **local to the active profile** (ADR 0001): the DB belongs to one environment, so there is no per-emisor
+environment selector in the API/UI. Do not grep the whole tree — the
 split between `emisores` and global backup `settings` is easy to miss.
 
 | What | Where |
@@ -230,7 +229,7 @@ split between `emisores` and global backup `settings` is easy to miss.
 - Invoicing uses the **first** value in `puntos_venta` (`Emisor.punto_venta`).
 - S3 backup config is **global to the profile** (not per emisor).
 
-**FAC-8 scope (still open):** richer UI to register multiple emisores and choose
+**Still open:** richer UI to register multiple emisores and choose
 which one operates; PV selection when more than one is enabled. See
 [`known-non-bugs.md`](known-non-bugs.md) § Multi-emisor schema vs selection UI.
 
@@ -248,10 +247,10 @@ which one operates; PV selection when more than one is enabled. See
 | Container entrypoint (profile normalize + secrets copy) | `docker/entrypoint.sh` |
 | Process supervisor + chooser + switch | `facturador/launcher/` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
-| Encrypted seed backup (FAC-44) | `facturador/seed_backup.py`, `facturador/backup.py` |
-| S3 seed adapter (FAC-45: `seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
-| Seed backup trigger / retry state (FAC-47) | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `tests/test_seed_backup_sync.py` |
-| Rebuild from ARCA / catch-up (FAC-65) | `facturador/reconstruct.py`, `facturador/seed_import.py`, `facturador/restore.py`, `facturador/launcher/restore_flow.py`, `facturador/api/registry.py` |
+| Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |
+| S3 seed adapter (`seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
+| Seed backup trigger / retry state | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `tests/test_seed_backup_sync.py` |
+| Rebuild from ARCA / catch-up | `facturador/reconstruct.py`, `facturador/seed_import.py`, `facturador/restore.py`, `facturador/launcher/restore_flow.py`, `facturador/api/registry.py` |
 | Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |
 | Restore CLI (seed + rebuild) | `facturador/restore.py` (`python -m facturador.restore`) |
 | Homologación setup walkthrough | `docs/setup-homologacion.md` |
@@ -261,7 +260,7 @@ which one operates; PV selection when more than one is enabled. See
 
 Never commit secrets. Key files must stay mode 400/600.
 
-**Launcher supervisor (FAC-28 / FAC-29 / FAC-30 / FAC-32 / FAC-83):**
+**Launcher supervisor:**
 `python -m facturador.launcher` (optionally `--env homo|prod`) shows the
 Homologación/Producción chooser unless `--env` is passed, resolves the hidden
 profile, takes a per-profile lock (`ProfilePaths.launcher_lock`), starts
@@ -272,7 +271,7 @@ and stops the child when the window closes or on Ctrl+C without orphaning it.
 A second launch against the same profile reuses a healthy session (reopens the
 UI) or fails with a clear message; stale lock files without a live flock do not
 block startup. Startup failures from the chooser return to the chooser.
-**Cambiar ambiente** (FAC-32): the UI writes a request file under the current
+**Cambiar ambiente**: the UI writes a request file under the current
 profile; the native window is interrupted so the launcher can show the chooser
 while the backend is still running (cancel keeps it); confirming another
 environment stops the current backend before starting the target profile (no

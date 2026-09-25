@@ -2,7 +2,7 @@
 
 Flujo (design.md §1.2):
   1. Armar LoginTicketRequest.xml (TRA) con el ``service`` pedido (``wsfex``
-     para emisión, ``wscdc`` para constatación FAC-84) y ventana amplia de
+     para emisión, ``wscdc`` para constatación) y ventana amplia de
      tiempos (gen -10 min / exp +10 min, checklist §2.1.1 punto 8).
   2. Firmarlo como CMS/PKCS#7 con `cryptography` (sin subprocesos openssl).
   3. POST SOAP a LoginCms; la respuesta trae token + sign (~12 h de vida).
@@ -284,9 +284,9 @@ class WsaaClient:
         self.service = service
         # TLS verify queda en el default de httpx (activo) — checklist punto 5.
         self.http = http or httpx.Client(timeout=30.0)
-        # Sin sufijo de ambiente en el nombre: el perfil YA es el ambiente
-        # (FAC-25); load() igual valida service/environment del TA.
-        # Un TA por servicio WSAA: wsfex y wscdc no se comparten (FAC-84).
+        # Sin sufijo de ambiente en el nombre: el perfil YA es el ambiente;
+        # load() igual valida service/environment del TA.
+        # Un TA por servicio WSAA: wsfex y wscdc no se comparten.
         if cache_path is not None:
             path = cache_path
         elif service == SERVICE_WSCDC:
@@ -309,7 +309,7 @@ class WsaaClient:
     def _request_new_ticket(self) -> Ticket:
         tra = build_tra(service=self.service)
         # Lectura bajo el mismo lock que store_certificate_pair: evita firmar
-        # con cert nuevo + key vieja si hay una rotación en curso (FAC-36).
+        # con cert nuevo + key vieja si hay una rotación en curso.
         cert_pem, key_pem = read_live_certificate_pair(self.config.paths)
         cms = sign_tra_cms(tra, cert_pem, key_pem)
         request_body = build_login_request(cms)

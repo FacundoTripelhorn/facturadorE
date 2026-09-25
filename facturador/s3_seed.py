@@ -1,7 +1,7 @@
-"""S3 adapter for the encrypted profile seed (FAC-45).
+"""S3 adapter for the encrypted profile seed.
 
 Stores and retrieves the **already-encrypted** seed blob plus the cleartext
-recipients list. Seed creation / age encryption is FAC-44; this module only
+recipients list. Seed creation / age encryption lives in seed_backup; this module only
 talks to object storage.
 
 Layout (exactly one logical bundle per profile + environment)::

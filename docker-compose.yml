@@ -2,13 +2,13 @@
 #
 # FACTURADOR_HOME (host) apunta al directorio de datos del usuario: el .env
 # de bootstrap en la raíz y un perfil por ambiente en profiles/<env>/
-# (secrets/, data/, backups/ — ADR 0001 / FAC-25). Default: ~/facturador.
+# (secrets/, data/, backups/ — ADR 0001). Default: ~/facturador.
 # El publish del puerto queda SIEMPRE en 127.0.0.1 — la app no es accesible
 # desde la red aunque el proceso interno escuche en 0.0.0.0.
 #
 # FACTURADOR_PORT en el shell del host controla el lado publicado
 # (127.0.0.1:PORT→8399). Adentro el bind sigue en 8399 (Dockerfile).
-# FACTURADOR_PUBLIC_PORT lleva ese PORT al middleware Host/Origin (FAC-41)
+# FACTURADOR_PUBLIC_PORT lleva ese PORT al middleware Host/Origin
 # para que el browser en http://localhost:PORT no reciba 400.
 services:
   facturador:

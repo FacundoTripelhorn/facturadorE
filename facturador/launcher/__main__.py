@@ -1,21 +1,21 @@
 """CLI del launcher: ``python -m facturador.launcher [--env homo|prod]``.
 
-Sin ``--env`` muestra el chooser (FAC-29): Homologación o Producción en
+Sin ``--env`` muestra el chooser: Homologación o Producción en
 lenguaje de negocio. Con ``--env`` arranca ese ambiente de una vez (tests /
-automatización). El supervisor (FAC-28) arranca el backend del perfil oculto,
-espera readiness, abre una ventana nativa (FAC-83 / pywebview) y permanece en
+automatización). El supervisor arranca el backend del perfil oculto,
+espera readiness, abre una ventana nativa (pywebview) y permanece en
 primer plano hasta que se cierra la ventana o Ctrl+C. Si el webview no puede
 arrancar, cae al navegador del sistema. ``--no-browser`` salta la UI (agents /
-headless). Si el perfil ya tiene una sesión sana (FAC-30), reabre la UI y sale
+headless). Si el perfil ya tiene una sesión sana, reabre la UI y sale
 sin duplicar el backend. Un error de arranque desde el chooser vuelve a la
 pantalla de elección.
 
-FAC-32: si la UI pide "Cambiar ambiente", el launcher muestra el chooser
+Si la UI pide "Cambiar ambiente", el launcher muestra el chooser
 mientras el backend actual sigue vivo (cancelar = seguir igual). Al confirmar
 otro ambiente, detiene el backend corriente *antes* de arrancar el perfil
 nuevo; un fallo de arranque del destino no muta ninguno de los dos perfiles.
 
-FAC-40: la primera vez que se abre Producción pide confirmación explícita
+La primera vez que se abre Producción pide confirmación explícita
 sobre la validez fiscal; cancelar vuelve al chooser sin arrancar.
 """
 
@@ -38,7 +38,7 @@ from .window import UiEndReason
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
-# Inyectable en tests: confirmación de primer uso de Producción (FAC-40).
+# Inyectable en tests: confirmación de primer uso de Producción.
 _ConfirmProdFn = Callable[[], bool]
 
 
@@ -111,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--restore",
         action="store_true",
         help=(
-            "FAC-65: restaurar el perfil desde seed.age + rebuild ARCA "
+            "Restaurar el perfil desde seed.age + rebuild ARCA "
             "(backend debe estar detenido). Requiere --env e --identity."
         ),
     )
@@ -202,7 +202,7 @@ def main(
         )
         if isinstance(outcome, SwitchTo):
             # Ya confirmado en el chooser del cambio: arrancar el destino.
-            # FAC-40 vuelve a pedir ack solo si el perfil prod aún no lo tiene.
+            # Vuelve a pedir ack solo si el perfil prod aún no lo tiene.
             pending = outcome.environment
             allow_chooser_retry = True
             continue
@@ -271,7 +271,7 @@ def _run_session(
         environment=environment,
         port=args.port,
         # start() no abre UI: el mensaje "listo" debe imprimirse antes de que
-        # webview bloquee el hilo (FAC-83).
+        # webview bloquee el hilo.
         open_browser=False,
         readiness_timeout=args.timeout,
     )
@@ -317,7 +317,7 @@ def _run_session(
     )
 
     # Dueños del backend: cualquier Ctrl+C mientras la UI bloquea (webview) o
-    # mientras supervisamos debe apagar el hijo (evita huérfanos FAC-30/83).
+    # mientras supervisamos debe apagar el hijo (evita huérfanos).
     try:
         ui_reason: UiEndReason | None = None
         if want_ui:
@@ -381,7 +381,8 @@ def _after_native_ui_session(
     return_to_chooser_on_startup_error: bool,
     initial_reason: UiEndReason,
 ) -> int | None | SwitchTo | ReturnToChooser:
-    """Ciclo post-webview: cerrar = apagar backend; interrupt = FAC-32 / muerte."""
+    """Ciclo post-webview: cerrar = apagar backend; interrupt = cambio de
+    ambiente / muerte."""
     reason = initial_reason
     try:
         while True:
@@ -499,11 +500,11 @@ def _handle_change_environment_request(
     confirm_production: _ConfirmProdFn | None = None,
     reopen_on_same: bool = True,
 ) -> SwitchTo | None:
-    """FAC-32: chooser con el backend aún vivo; stop solo si confirma otro.
+    """Chooser con el backend aún vivo; stop solo si confirma otro.
 
     ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
     Si el destino es Producción sin ack, la confirmación corre *antes* de
-    ``stop()``: cancelar mantiene la sesión actual (FAC-40).
+    ``stop()``: cancelar mantiene la sesión actual.
 
     ``reopen_on_same``: si False, el caller reabre la UI (sesión webview nativa
     donde ``open_ui`` bloquearía de nuevo dentro de este handler).
@@ -556,7 +557,7 @@ def _handle_change_environment_request(
                         pass
         return None
 
-    # FAC-40: ack de Producción antes de apagar el backend actual.
+    # Ack de Producción antes de apagar el backend actual.
     try:
         acknowledged = ensure_production_acknowledged(
             selected,

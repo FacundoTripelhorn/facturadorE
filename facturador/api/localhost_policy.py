@@ -1,4 +1,4 @@
-"""Política estricta de Host y Origin para el servidor local (FAC-41).
+"""Política estricta de Host y Origin para el servidor local.
 
 La app solo acepta tráfico del browser local. Validar Host mitiga DNS
 rebinding; validar Origin/Referer en métodos que cambian estado mitiga
@@ -20,8 +20,7 @@ Puertos de la allowlist:
 
 Sin TLS (design.md §2.5). Los clientes no-browser (API, health del
 launcher) que no envían Origin/Referer siguen permitidos acá; los
-formularios del browser quedan cubiertos por tokens CSRF (FAC-42,
-``facturador/api/csrf.py``).
+formularios del browser quedan cubiertos por tokens CSRF (``facturador/api/csrf.py``).
 """
 
 from __future__ import annotations
@@ -171,7 +170,7 @@ def check_origin_headers(
 
     - Origin presente e inesperado → rechazo.
     - Sin Origin pero Referer con origen inesperado → rechazo.
-    - Sin Origin ni Referer → permitido (clientes no-browser; ver FAC-42).
+    - Sin Origin ni Referer → permitido (clientes no-browser; los forms los cubre CSRF).
     """
     if method.upper() not in _UNSAFE_METHODS:
         return None

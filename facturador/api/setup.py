@@ -1,4 +1,4 @@
-"""Estado de setup del perfil activo (FAC-35). Diagnóstico seguro, sin ARCA."""
+"""Estado de setup del perfil activo. Diagnóstico seguro, sin ARCA."""
 
 from __future__ import annotations
 

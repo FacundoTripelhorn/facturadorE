@@ -1,4 +1,4 @@
-"""Lock de perfil del launcher (FAC-30, ADR 0001).
+"""Lock de perfil del launcher (ADR 0001).
 
 Evita dos launchers (y por tanto dos backends) sobre el mismo perfil SQLite.
 El lock es por perfil: Homologación y Producción pueden coexistir.
@@ -18,7 +18,7 @@ Comportamiento:
   reutilizar la sesión sana (abrir el browser) o fallar con mensaje claro.
 - Backend huérfano (launcher muerto, flock libre, ``/health`` OK): no se
   arranca un segundo proceso; se restaura el metadata y se falla con mensaje
-  claro (FAC-30 opción B).
+  claro.
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ class ProfileLock:
         Locks stale (proceso muerto): el flock ya no está tomado; se adquiere
         y se reescribe el metadata. No bloquea el arranque de forma permanente.
         El caller debe inspeccionar ``displaced_holder`` si un backend huérfano
-        pudiera seguir vivo (FAC-30).
+        pudiera seguir vivo.
         """
         if self.is_held:
             assert self._holder is not None

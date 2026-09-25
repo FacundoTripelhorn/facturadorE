@@ -131,13 +131,13 @@ class InvoiceService:
         self.config = config
         self.conn = conn
         self.wsfex = wsfex
-        # FAC-84: cliente WSCDC opcional en tests unitarios sin constatación.
+        # Cliente WSCDC opcional en tests unitarios sin constatación.
         self.wscdc = wscdc or WscdcClient(config)
-        # FAC-47: opcional para tests unitarios del service sin coordinator.
+        # Opcional para tests unitarios del service sin coordinator.
         self.seed_backup = seed_backup
 
     def _notify_seed_backup(self, reason: str) -> None:
-        """Config-change hook (FAC-47). Never raises; never called from authorize."""
+        """Config-change hook. Never raises; never called from authorize."""
         if self.seed_backup is None:
             return
         try:
@@ -163,7 +163,7 @@ class InvoiceService:
         return settings
 
     def _check_emisor_profile(self, emisor: Emisor) -> None:
-        """Rechaza operar con un emisor activo de OTRO perfil (FAC-26).
+        """Rechaza operar con un emisor activo de OTRO perfil.
 
         Contraparte de _check_invoice_profile: por construcción no debería
         pasar, pero si una DB ajena se restauró en el perfil equivocado,
@@ -251,7 +251,7 @@ class InvoiceService:
         self._notify_seed_backup("active_emisor")
 
     def get_seed_backup_state(self) -> SeedBackupState:
-        """Estado queryable del seed backup (FAC-47 → FAC-49)."""
+        """Estado queryable del seed backup."""
         if self.seed_backup is None:
             from .seed_backup_sync import load_seed_backup_state
 
@@ -259,7 +259,7 @@ class InvoiceService:
         return self.seed_backup.get_state()
 
     def run_seed_backup_now(self) -> SeedBackupState:
-        """Disparo manual / flush del seed backup (FAC-47)."""
+        """Disparo manual / flush del seed backup."""
         if self.seed_backup is None:
             raise ConflictError(
                 "Seed backup no está habilitado en este proceso."
@@ -267,7 +267,7 @@ class InvoiceService:
         return self.seed_backup.backup_now()
 
     def replace_seed_recipients(self, text: str) -> SeedBackupState:
-        """Actualiza recipients.txt local y dispara backup (FAC-47)."""
+        """Actualiza recipients.txt local y dispara backup."""
         if self.seed_backup is None:
             raise ConflictError(
                 "Seed backup no está habilitado en este proceso."
@@ -308,7 +308,7 @@ class InvoiceService:
             )
 
     def _param_description(self, kind: str, code: object) -> str:
-        """Descripción de un código ARCA al momento del snapshot (FAC-52).
+        """Descripción de un código ARCA al momento del snapshot.
 
         Mejor esfuerzo: si el cache no trae descripción, queda vacío y el
         PDF imprime solo el código. No se relee en el render.
@@ -325,7 +325,7 @@ class InvoiceService:
     def create_client(self, payload: ClientIn) -> sqlite3.Row:
         self._validate_client_codes(payload)
         row = repo.create_client(self.conn, payload.model_dump())
-        # Solo el cliente default viaja en el seed (FAC-44 / FAC-47).
+        # Solo el cliente default viaja en el seed.
         if row["is_default"]:
             self._notify_seed_backup("default_client")
         return row
@@ -365,7 +365,7 @@ class InvoiceService:
             raise ConflictError(
                 "No hay emisor activo para emitir; elegir uno en Configuración."
             )
-        # Identidad fiscal ANTES de cualquier WSFEX (FAC-39): get_param /
+        # Identidad fiscal ANTES de cualquier WSFEX: get_param /
         # get_ctz también llevan Auth{Token,Sign,Cuit} del cert vivo.
         cuit_emisor = self._resolve_fiscal_cuit()
 
@@ -473,7 +473,7 @@ class InvoiceService:
             "id_impositivo": client["id_impositivo"],
             "moneda_id": moneda_id,
             "moneda_ctz": dec(ctz),
-            # Descripciones de params al crear el borrador (FAC-52): el PDF
+            # Descripciones de params al crear el borrador: el PDF
             # regenera desde estos campos, nunca desde arca_params vivos.
             "dst_cmp_ds": self._param_description("pais", client["pais_dst"]),
             "cuit_pais_cliente_ds": self._param_description(
@@ -486,10 +486,10 @@ class InvoiceService:
             "idioma_cbte": client["idioma_default"],
             "imp_total": dec(payload.imp_total),
             "obs": payload.obs,
-            # Identidad fiscal del perfil (FAC-39): CUIT del certificado,
+            # Identidad fiscal del perfil: CUIT del certificado,
             # no editable vía emisor. Snapshot inmutable en el comprobante.
             "cuit_emisor": cuit_emisor,
-            # Snapshot del emisor al crear el borrador (FAC-10): la revisión
+            # Snapshot del emisor al crear el borrador: la revisión
             # y el PDF usan estos valores; editar emisores después no muda
             # el comprobante. emisor_id queda solo para trazabilidad.
             "emisor_razon_social": settings.emisor.razon_social,
@@ -497,9 +497,9 @@ class InvoiceService:
             "emisor_condicion_iva": settings.emisor.condicion_iva,
             "emisor_iibb": settings.emisor.iibb,
             "emisor_inicio_actividades": settings.emisor.inicio_actividades,
-            # Contrato de render (FAC-52); FAC-53 despachará por versión.
+            # Contrato de render; el registry despacha por versión.
             "pdf_render_version": PDF_RENDER_VERSION,
-            # Auditoría inmutable (ADR 0001 / FAC-26): el ambiente del
+            # Auditoría inmutable (ADR 0001): el ambiente del
             # comprobante sale SIEMPRE del perfil corriente, nunca del
             # request, y después se valida en cada acceso por id.
             "environment": self.config.env,
@@ -507,7 +507,7 @@ class InvoiceService:
         return repo.create_invoice(self.conn, data, items)
 
     def _check_invoice_profile(self, inv: sqlite3.Row) -> None:
-        """Rechaza el acceso a comprobantes de OTRO perfil (FAC-26).
+        """Rechaza el acceso a comprobantes de OTRO perfil.
 
         Por construcción no debería pasar (la DB es del perfil); si pasa, es
         una DB ajena restaurada en el perfil equivocado y ningún flujo debe
@@ -534,7 +534,7 @@ class InvoiceService:
             raise ConflictError(str(exc)) from exc
 
     def _check_invoice_fiscal_identity(self, inv: sqlite3.Row) -> None:
-        """FAC-39: el snapshot de la factura debe coincidir con el perfil.
+        """El snapshot de la factura debe coincidir con el perfil.
 
         Se revalida antes de cualquier WSFEX (authorize y reconcile) para que
         un swap manual del certificado o del sello no opere bajo un CUIT
@@ -570,7 +570,7 @@ class InvoiceService:
         return inv
 
     def constatar_cae(self, invoice_id: str) -> ConstatacionResult:
-        """Constatación WSCDC bajo demanda (FAC-84).
+        """Constatación WSCDC bajo demanda.
 
         Nunca se llama desde authorize / FEXGetCMP. El operador dispara el
         botón Constatar; el request sale del snapshot local (CUIT país = 80).
@@ -588,7 +588,7 @@ class InvoiceService:
         if cuit_raw:
             cuit_emisor = int(cuit_raw)
         else:
-            # Snapshot pre-FAC-39: caer al CUIT del certificado vivo.
+            # Snapshot sin CUIT fiscal (legado): caer al CUIT del certificado vivo.
             cuit_emisor = self.wsfex.cuit
         try:
             req = WscdcClient.request_from_invoice_row(
@@ -610,12 +610,12 @@ class InvoiceService:
         cae: str,
         doc_nro_receptor: str,
     ) -> ConstatacionResult:
-        """Constatación WSCDC de un comprobante externo (FAC-84, grill #4b).
+        """Constatación WSCDC de un comprobante externo.
 
         Para Facturas E NO emitidas por la app (p.ej. Comprobantes en Línea
         u otro punto de venta): el operador tipea los mismos campos del
         portal. El CUIT emisor sale del certificado del perfil (identidad
-        fiscal única, FAC-39); tipo 19, modo CAE y receptor CUIT (80) van
+        fiscal única); tipo 19, modo CAE y receptor CUIT (80) van
         fijos por alcance del producto.
         """
         if punto_venta <= 0 or cbte_nro <= 0:
@@ -646,7 +646,7 @@ class InvoiceService:
             raise DomainError(
                 "Doc. receptor: ingresar la CUIT país (solo números)"
             )
-        # Identidad fiscal ANTES de WSCDC (FAC-39): resolver sella el CUIT
+        # Identidad fiscal ANTES de WSCDC: resolver sella el CUIT
         # del perfil si esta es su primera operación fiscal, y después exige
         # sello/cert consistentes. Leer el cert directo saltaría ese control.
         cuit_emisor = int(self._resolve_fiscal_cuit())
@@ -682,7 +682,7 @@ class InvoiceService:
         offset: int = 0,
         cbte_nro: int | None = None,
     ) -> ArcaInvoicesOut:
-        """FAC-68: peek de solo lectura del registro ARCA (sin escribir local).
+        """Peek de solo lectura del registro ARCA (sin escribir local).
 
         WSFEX no tiene listado: se consulta ``FEXGetLast_CMP`` y luego
         ``FEXGetCMP`` por número. ``offset`` cuenta desde el más reciente.
@@ -736,7 +736,7 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def catch_up_from_arca(self) -> ReconstructReport:
-        """FAC-65 / FAC-48: append N_local+1..N_arca en lotes.
+        """Append N_local+1..N_arca en lotes.
 
         Remediación cuando el guard de registro desactualizado bloquea la
         emisión. Solo append (no wipe); usa conexión dedicada.
@@ -776,7 +776,7 @@ class InvoiceService:
                     "Los comprobantes importados son solo lectura histórica; "
                     "no se pueden autorizar ni reenviar a ARCA."
                 )
-            # Identidad fiscal antes de cualquier WSFEX (FAC-39).
+            # Identidad fiscal antes de cualquier WSFEX.
             self._check_invoice_fiscal_identity(inv)
 
             # Lock anti doble-submit de ESTA factura (regla 1).
@@ -810,7 +810,7 @@ class InvoiceService:
         *,
         force_desync: bool,
     ) -> None:
-        """FAC-48 / design.md §2.5: local wsfex vs FEXGetLast_CMP.
+        """design.md §2.5: local wsfex vs FEXGetLast_CMP.
 
         Solo cuentan filas ``source=wsfex`` autorizadas. Si ARCA está adelante,
         el perfil local está desactualizado (otra máquina / backup viejo).
@@ -980,7 +980,7 @@ class InvoiceService:
         """FEXGetCMP para una factura submitting/unknown. Devuelve la fila
         actualizada si se resolvió, None si ARCA no registra el comprobante
         (=> es seguro reintentar/reprocesar)."""
-        # FEXGetCMP autentica con Auth.Cuit del cert vivo (FAC-39).
+        # FEXGetCMP autentica con Auth.Cuit del cert vivo.
         self._check_invoice_fiscal_identity(inv)
         try:
             registrado = self.wsfex.get_cmp(

@@ -56,18 +56,18 @@ def create_app(
 ) -> FastAPI:
     """Construye la app contra UN perfil de ambiente explícito e inmutable.
 
-    ADR 0001 / FAC-24: el ambiente se decide antes de crear FastAPI, SQLite
+    ADR 0001: el ambiente se decide antes de crear FastAPI, SQLite
     y los clientes ARCA, y no existe forma de cambiarlo después (perfil y
     Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
-    y paths derivan todos del perfil vía Config/ProfilePaths (FAC-25).
+    y paths derivan todos del perfil vía Config/ProfilePaths.
 
-    FAC-41: ``port`` (o ``FACTURADOR_PORT``) es el bind; la allowlist de
+    ``port`` (o ``FACTURADOR_PORT``) es el bind; la allowlist de
     Host/Origin usa ese puerto y, si aplica, ``public_port`` /
     ``FACTURADOR_PUBLIC_PORT`` (publish del host en Docker cuando difiere
-    del 8399 interno). FAC-42: cookie CSRF emitida en respuestas; los
-    POST ``/ui/…`` la validan vía dependency del router HTML. FAC-35:
+    del 8399 interno). Cookie CSRF emitida en respuestas; los
+    POST ``/ui/…`` la validan vía dependency del router HTML. Guard de onboarding:
     setup state por perfil + guardia que bloquea factura/ARCA hasta
-    ``ready`` (``GET /health`` y ``/setup`` quedan libres). FAC-47: seed
+    ``ready`` (``GET /health`` y ``/setup`` quedan libres). Backup del seed
     backup coordinator (config-change trigger + retry on launch).
     """
     if config is None:
@@ -101,7 +101,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # Retry pending/failed seed upload from a prior session (FAC-47).
+        # Retry pending/failed seed upload from a prior session.
         try:
             coordinator.retry_if_pending()
         except Exception:
@@ -120,7 +120,7 @@ def create_app(
     app.state.policy_ports = policy_ports
     app.state.setup_state = setup_state
 
-    # Setup guard (FAC-35) + CSRF (FAC-42) + Host/Origin (FAC-41).
+    # Setup guard + CSRF + Host/Origin.
     # add_middleware apila por fuera: el último agregado es el más externo.
     # Orden de request: LocalhostPolicy → CsrfCookie → SetupGuard → routers.
     app.add_middleware(
@@ -141,7 +141,7 @@ def create_app(
     for tipo, status in _ERROR_STATUS.items():
         app.add_exception_handler(tipo, _handler_for(status))
 
-    # FAC-62: CSRF fallido en formularios /ui/ → HTML; JSON fuera de /ui/.
+    # CSRF fallido en formularios /ui/ → HTML; JSON fuera de /ui/.
     app.add_exception_handler(CsrfRejected, web.csrf_rejected_handler)
 
     app.include_router(invoices.router)
