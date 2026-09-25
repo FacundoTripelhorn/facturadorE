@@ -28,7 +28,7 @@
           {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}
           · {{ f["cliente"] }}
           · CAE {{ f["cae"] }}
-          · {{ f["imp_total"] }} {{ f["moneda_id"] }}
+          · {{ f["imp_total"] | importe }} {{ f["moneda_id"] }}
         </option>
         {% endfor %}
         <option value="manual" {% if modo_manual %}selected{% endif %}>
@@ -56,6 +56,7 @@
         <div>
           <label for="imp_total">Importe (moneda original)</label>
           <input type="text" inputmode="decimal" name="imp_total" id="imp_total"
+                 placeholder="1.500,00" autocomplete="off"
                  required value="{{ manual.get('imp_total', '') }}">
         </div>
         <div>
@@ -89,7 +90,7 @@
         </div>
         <div>
           <dt>Importe (moneda original)</dt>
-          <dd class="num">{{ preview.imp_total }}</dd>
+          <dd class="num">{{ preview.imp_total | importe }}</dd>
         </div>
         <div>
           <dt>CAE</dt>

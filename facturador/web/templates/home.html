@@ -36,8 +36,8 @@
     <div class="fila">
       <div>
         <label for="imp_total">Monto ({{ (default["moneda_default"] if default else "DOL") | moneda }})</label>
-        <input id="imp_total" name="imp_total" type="number" step="0.01" min="0.01"
-               class="num" required autofocus>
+        <input id="imp_total" name="imp_total" type="text" inputmode="decimal"
+               autocomplete="off" placeholder="1.500,00" class="num" required autofocus>
       </div>
       <div>
         <label for="fecha_pago">Fecha de pago</label>
@@ -72,7 +72,7 @@
     <p class="nota">
       Emisión: hoy{% if emisor %}, emisor {{ emisor.razon_social }}{% endif %}.
       {% if puntos_venta|length == 1 %}, PV {{ puntos_venta[0] }}{% endif %}.
-      {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz }}</span>.
+      {% if ctz %}Cotización ARCA del día ({{ ctz_fecha }}): <span class="num">{{ ctz | importe }}</span>.
       {% else %}Cotización: se obtiene de ARCA al autorizar.{% endif %}
       Genera un borrador y pasa a la revisión: nada viaja a ARCA hasta confirmarlo.
     </p>

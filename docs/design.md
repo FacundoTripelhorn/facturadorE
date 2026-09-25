@@ -47,11 +47,13 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 | Forma de Pago ("WIRE TRANSFER") | `Forma_pago` | Texto libre; default del cliente |
 | Incoterms | `Incoterms` | **Vacío en servicios** — el form lo oculta para tipo_expo=2 |
 | Ítem único: código `0001`, descripción del servicio, cant. `1,000000`, U.Medida "unidades", precio unit. = total | `Items[]`: `Pro_codigo`, `Pro_ds`, `Pro_qty=1`, `Pro_umed=7` (unidades), `Pro_precio_uni`, `Pro_total_item` | Patrón real: 1 línea, qty 1, precio = importe total. El form puede reducirse a descripción (default del cliente) + monto |
-| Importe Total | `Imp_total` | = suma de ítems; validar en dominio |
+| Importe Total | `Imp_total` | = suma de ítems; validar en dominio. Formato de cada importe (enteros + decimales del manual WSFEX V3.1.1, p.ej. `Imp_total` 13+2, `Moneda_ctz` 4+6, `Pro_qty`/`Pro_precio_uni` 12+6) validado al crear el borrador y otra vez antes de serializar: `facturador/arca/amounts.py` |
 | Leyenda "IVA EXENTO OPERACIÓN DE EXPORTACIÓN", IIBB, inicio de actividades | — (no viajan a ARCA) | Datos del emisor para el PDF: snapshot inmutable en la factura al crear el borrador; la página Configuración edita la entidad `emisores` viva, no el historial |
 | CAE + Fecha Vto. CAE + QR | respuesta de `FEXAuthorize` | Al PDF junto con QR RG 4892 |
 
 Consecuencia para el frontend: el caso feliz semanal se reduce a **3 campos: monto, fecha de pago (default hoy) y descripción (default precargado)**. Todo lo demás sale del cliente default + cotización automática.
+
+**Importes en la UI:** formato argentino, coma decimal y punto de miles (`1.500,50`), tanto al tipear como al mostrar (`facturador/web/numeros.py`). Un punto como separador decimal (`1500.50`) se rechaza con un mensaje en vez de interpretarse: leer mal el separador multiplica el importe. La API JSON, la DB y ARCA siguen con punto decimal; el PDF usa coma decimal sin separador de miles, como el comprobante real.
 
 **Layout impreso del comprobante real** (replicado en `facturador/pdf/render.py`, renderer v1 con fpdf2; posiciones verificadas contra el PDF de Comprobantes en Línea):
 

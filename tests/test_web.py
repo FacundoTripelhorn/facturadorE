@@ -19,6 +19,7 @@ from facturador.constants import ArcaEnvironment
 from facturador.fiscal_identity import get_sealed_fiscal_cuit
 from facturador.profile import EnvironmentProfile
 from facturador.settings import get_active_emisor_id
+from facturador.web.numeros import formato_importe
 from tests.arca_fake import FakeWsaa
 from tests.conftest import (
     TEST_CUIT,
@@ -42,7 +43,7 @@ CLIENTE_FORM = {
 }
 
 FACTURA_FORM = {
-    "imp_total": "1500.00",
+    "imp_total": "1500,00",
     "fecha_pago": "2026-07-05",
     "descripcion": "Servicios de desarrollo de software",
     "obs": "",
@@ -97,7 +98,9 @@ def test_home_precarga_cliente_default_y_cotizacion(api, arca):
     assert r.status_code == 200
     assert "CLIENTE URUGUAY S.A." in r.text
     assert 'value="Servicios de desarrollo de software"' in r.text
-    assert arca.ctz in r.text                 # cotización ARCA del día, informativa
+    # Cotización ARCA del día, informativa, en formato argentino.
+    assert formato_importe(arca.ctz) in r.text
+    assert formato_importe(arca.ctz) == "1.145,5690"
     assert "Monto (USD)" in r.text            # DOL se muestra como USD
     assert "htmx.min.js" in r.text
 
@@ -129,7 +132,7 @@ def test_generar_redirige_a_revision_sin_tocar_arca(api, arca):
     assert "Revisar antes de enviar" in r.text
     assert "CLIENTE URUGUAY S.A." in r.text
     assert "USD" in r.text
-    assert "1500.00" in r.text
+    assert "1.500,00" in r.text  # formato argentino en la UI
     assert "Confirmar y autorizar" in r.text
     assert "Descartar borrador" in r.text
     # Página read-only: ningún campo editable de factura; solo CSRF.
@@ -332,7 +335,7 @@ _MANUAL_FORM = {
     "punto_venta": "7",
     "cbte_nro": "42",
     "fecha_cbte": "2026-08-01",
-    "imp_total": "1500.00",
+    "imp_total": "1500,00",
     "cae": "76100000000001",
     "doc_nro_receptor": "55000002002",
 }
@@ -403,7 +406,7 @@ def test_constatacion_manual_rechaza_importe_no_numerico(api, arca):
         data=with_csrf(api, {**_MANUAL_FORM, "imp_total": "abc"}),
     )
     assert r.status_code == 422
-    assert "numéricos" in r.text
+    assert "no es un importe válido" in r.text
     assert arca.calls["ComprobanteConstatar"] == 0
 
 
@@ -423,14 +426,13 @@ def test_constatacion_manual_rechaza_importe_no_finito(api, arca):
 
 @pytest.mark.parametrize(
     "importe",
-    ["1e300", "1e1000000000", "12345678901234.00", "1.234"],
+    ["12345678901234,00", "1,234", "99999999999999999999999999999999999999,5"],
 )
 def test_constatacion_manual_rechaza_importe_fuera_de_formato_arca(
     api, arca, importe
 ):
-    """1e1000000000 pasaba todos los chequeos y format(x, "f") materializaba
-    un string de ~1 GB en el request SOAP (DoS local). El formato ARCA
-    ImpTotal (13 enteros + 2 decimales) los rechaza antes, sin renderizar."""
+    """El formato ARCA ImpTotal (13 enteros + 2 decimales) los rechaza antes
+    de armar el request, sin renderizar el número."""
     r = api.post(
         "/ui/constatacion",
         data=with_csrf(api, {**_MANUAL_FORM, "imp_total": importe}),
@@ -440,10 +442,23 @@ def test_constatacion_manual_rechaza_importe_fuera_de_formato_arca(
     assert arca.calls["ComprobanteConstatar"] == 0
 
 
+@pytest.mark.parametrize("importe", ["1e300", "1e1000000000", "1500.50"])
+def test_constatacion_manual_rechaza_notacion_no_argentina(api, arca, importe):
+    """Exponentes y punto decimal no son importes con coma decimal: 1e1000000000
+    ni siquiera llega a Decimal (antes armaba un string de ~1 GB)."""
+    r = api.post(
+        "/ui/constatacion",
+        data=with_csrf(api, {**_MANUAL_FORM, "imp_total": importe}),
+    )
+    assert r.status_code == 422
+    assert "1.500,50" in r.text  # el mensaje muestra el formato esperado
+    assert arca.calls["ComprobanteConstatar"] == 0
+
+
 def test_constatacion_manual_acepta_importes_limite(api, arca):
     """Bordes válidos del formato: 13 enteros + 2 decimales exactos, y el
     mínimo positivo 0.01. Los ceros finales no cuentan como decimales."""
-    for importe in ("9999999999999.99", "0.01", "100.10"):
+    for importe in ("9999999999999,99", "9.999.999.999.999,99", "0,01", "100,10"):
         r = api.post(
             "/ui/constatacion",
             data=with_csrf(api, {**_MANUAL_FORM, "imp_total": importe}),
@@ -643,7 +658,7 @@ def test_unknown_ofrece_reintento_en_el_detalle(api, arca):
 def test_comprobantes_filtra_por_tab(api, arca):
     _crear_cliente_por_form(api)
     _generar_borrador(api)
-    autorizada_id = _generar_borrador(api, imp_total="900.00")
+    autorizada_id = _generar_borrador(api, imp_total="900,00")
     _autorizar(api, autorizada_id)
 
     todas = api.get("/comprobantes")

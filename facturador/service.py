@@ -23,6 +23,13 @@ from typing import Any
 import httpx
 
 from . import repo
+from .arca.amounts import (
+    IMP_TOTAL,
+    MONEDA_CTZ,
+    PRO_TOTAL_ITEM,
+    ImporteFueraDeFormato,
+    validar_importe,
+)
 from .arca.wsaa import WsaaError
 from .arca.wscdc import (
     ConstatacionRequest,
@@ -402,20 +409,37 @@ class InvoiceService:
                     f"No se pudo obtener la cotización {moneda_id} de ARCA: {exc}"
                 ) from exc
 
+        try:
+            ctz = validar_importe(ctz, MONEDA_CTZ)
+        except ImporteFueraDeFormato as exc:
+            raise DomainError(str(exc)) from None
+
         items: list[dict[str, Any]]
         if payload.items:
-            items = [
-                {
-                    "pro_codigo": i.pro_codigo,
-                    "pro_ds": i.pro_ds,
-                    "pro_qty": dec(i.pro_qty),
-                    "pro_umed": i.pro_umed,
-                    "pro_umed_ds": self._param_description("umed", i.pro_umed),
-                    "pro_precio_uni": dec(i.pro_precio_uni),
-                    "pro_total_item": dec(i.pro_qty * i.pro_precio_uni),
-                }
-                for i in payload.items
-            ]
+            items = []
+            for nro, i in enumerate(payload.items, start=1):
+                # qty y precio ya vienen acotados (12+6), así que el producto
+                # es chico; lo que falta ver es que entre en 13 enteros y 2
+                # decimales, como lo recibe ARCA.
+                try:
+                    total_item = validar_importe(
+                        i.pro_qty * i.pro_precio_uni, PRO_TOTAL_ITEM
+                    )
+                except ImporteFueraDeFormato as exc:
+                    raise DomainError(
+                        f"Ítem {nro} (cantidad × precio): {exc}"
+                    ) from None
+                items.append(
+                    {
+                        "pro_codigo": i.pro_codigo,
+                        "pro_ds": i.pro_ds,
+                        "pro_qty": dec(i.pro_qty),
+                        "pro_umed": i.pro_umed,
+                        "pro_umed_ds": self._param_description("umed", i.pro_umed),
+                        "pro_precio_uni": dec(i.pro_precio_uni),
+                        "pro_total_item": dec(total_item),
+                    }
+                )
         else:
             # Patrón real §0.1: 1 línea, qty 1, precio = importe total.
             if not descripcion:
@@ -624,22 +648,11 @@ class InvoiceService:
             dt.datetime.strptime(fecha_cbte, "%Y%m%d")
         except ValueError:
             raise DomainError("Fecha inválida: usar formato AAAAMMDD") from None
-        if not imp_total.is_finite() or imp_total <= 0:
-            # NaN parsea como Decimal y las comparaciones de orden lanzan
-            # InvalidOperation (500); Infinity pasaría "> 0" y llegaría a WSCDC.
-            raise DomainError("El importe debe ser un número finito mayor a cero")
-        # Formato ARCA ImpTotal: hasta 13 enteros y 2 decimales (manual WSCDC).
-        # Sin esta cota, Decimal("1e1000000000") pasaría los chequeos y
-        # format(x, "f") materializaría un string de ~1 GB (DoS del proceso).
-        # Ojo: normalize() aplica el contexto decimal (Emax=999999) y lanzaría
-        # Overflow con exponentes enormes; as_tuple/adjusted son context-free.
-        tup = imp_total.as_tuple()
-        exp = tup.exponent
-        ajustado = len(tup.digits) + exp - 1 if isinstance(exp, int) else 0
-        if ajustado > 12 or (isinstance(exp, int) and exp < -2):
-            raise DomainError(
-                "El importe excede el formato ARCA (hasta 13 enteros y 2 decimales)"
-            )
+        # ImpTotal en WSCDC tiene el mismo formato que en WSFEX (13+2).
+        try:
+            imp_total = validar_importe(imp_total, IMP_TOTAL)
+        except ImporteFueraDeFormato as exc:
+            raise DomainError(str(exc)) from None
         if not (cae.isdigit() and len(cae) == 14):
             raise DomainError("El CAE debe tener 14 dígitos")
         if not doc_nro_receptor.isdigit():
@@ -861,6 +874,15 @@ class InvoiceService:
         wsfex_invoice = row_to_wsfex_invoice(
             inv, arca_id, cbte_nro, repo.get_invoice_items(self.conn, invoice_id)
         )
+        # Los importes se validan al crear el borrador; esto cubre filas que
+        # no pasaron por ahí (datos viejos o editados a mano). Antes de
+        # persistir raw_request, así el wrapper devuelve la factura a draft.
+        try:
+            wsfex_invoice.validate()
+        except ValueError as exc:
+            raise ConflictError(
+                f"El borrador no se puede enviar a ARCA: {exc}"
+            ) from None
         # Regla 3: persistir el request completo ANTES de llamar. El try
         # atrapa una colisión del UNIQUE(arca_id) que, con el lock de
         # numeración, no debería ocurrir; si ocurriera (p.ej. restore de
@@ -892,6 +914,23 @@ class InvoiceService:
         # Regla 5: reproceso con el MISMO arca_id y datos idénticos, tomados
         # del request persistido (no de la fila, por si algo mutó).
         wsfex_invoice = raw_to_wsfex_invoice(json.loads(inv["raw_request"]))
+        try:
+            wsfex_invoice.validate()
+        except ValueError as exc:
+            # Request guardado por una versión anterior, fuera del formato de
+            # ARCA: no se reenvía. Queda "a reconciliar" (no trabada en
+            # submitting); un nuevo intento vuelve a consultar ARCA primero.
+            mensaje = (
+                f"El request guardado no cumple el formato de ARCA ({exc}); "
+                "no se reenvía. Revisar el comprobante manualmente."
+            )
+            repo.update_invoice(
+                self.conn,
+                inv["id"],
+                status=InvoiceStatus.UNKNOWN,
+                last_error=mensaje,
+            )
+            raise ConflictError(mensaje) from None
         return self._send(inv["id"], wsfex_invoice)
 
     def delete_draft(self, invoice_id: str) -> None:
