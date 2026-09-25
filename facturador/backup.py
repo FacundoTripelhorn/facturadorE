@@ -248,7 +248,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Seed cifrado: {archive} ({archive.stat().st_size} bytes)")
         print(f"Clave lógica (S3): {logical}")
         print(
-            "Upload a S3: lo hace la app al cambiar la configuración "
+            "Upload a S3: este comando no sube nada. Lo hace la app al "
+            "cambiar la configuración, o a pedido con POST /backup/seed "
             f"(recipients locales: {recipients_path(paths)})."
         )
         # Evitar que un seed.age viejo con otro nombre confunda: el único

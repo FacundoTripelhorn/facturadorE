@@ -220,10 +220,13 @@ uv run python -m facturador.backup --env homo
 uv run python -m facturador.backup --root ~/facturador/profiles/homo
 ```
 
-El CLI escribe `backups/seed.age` (nombre fijo, overwrite). La clave lógica
-en el bucket del usuario es `{prefix}/{cuit}/{env}/seed.age` (upload automático;
-versioning del bucket como red de seguridad). El registro de comprobantes se
-reconstruye desde ARCA, no desde S3.
+El CLI escribe `backups/seed.age` (nombre fijo, overwrite) y **no sube nada a
+S3**: es solo local. El upload lo hace la app: se dispara solo después de cada
+cambio de configuración del perfil (y se reintenta al arrancar si quedó
+pendiente), o a pedido con `POST /backup/seed`. Correr el CLI sobre un perfil
+sin cambios no actualiza el seed del bucket. La clave lógica en el bucket del
+usuario es `{prefix}/{cuit}/{env}/seed.age` (versioning del bucket como red de
+seguridad). El registro de comprobantes se reconstruye desde ARCA, no desde S3.
 
 Nunca emitir desde dos máquinas en paralelo: el chequeo de registro desactualizado bloquea si el
 registro local quedó detrás de ARCA.
