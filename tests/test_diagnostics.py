@@ -4,6 +4,7 @@ import dataclasses
 import datetime as dt
 
 import httpx
+import pytest
 
 from facturador import diagnostics
 from facturador.api.setup_guard import is_setup_exempt
@@ -22,6 +23,8 @@ from facturador.seed_backup_sync import (
 from facturador.settings import load_settings, save_settings
 from tests.conftest import TEST_CUIT
 from tests.test_setup import _client_for_profile
+
+AGE_KEY = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
 
 CLIENTE = {
     "razon_social": "CLIENTE URUGUAY S.A.",
@@ -47,7 +50,7 @@ def _backup_al_dia(api) -> None:
     save_settings(
         conn, dataclasses.replace(load_settings(conn), backup_s3_bucket="mi-bucket")
     )
-    recipients_path(_profile(api).paths).write_text("age1xyz\n", encoding="utf-8")
+    recipients_path(_profile(api).paths).write_text(AGE_KEY + "\n", encoding="utf-8")
     _write_settings(
         conn, {STATUS_KEY: "ok", LAST_SUCCESS_KEY: "2026-09-20T10:00:00+00:00"}
     )
@@ -169,7 +172,28 @@ def test_backup_sin_recipients_es_aviso(api):
     recipients_path(_profile(api).paths).unlink()
     backup = _chequeo(diagnosticar_perfil(_profile(api), api.conn), "Backup")
     assert backup.nivel is Nivel.AVISO
-    assert "recipients.txt" in backup.detalle
+    assert "No hay claves age válidas en recipients.txt" in backup.detalle
+
+
+@pytest.mark.parametrize(
+    "contenido",
+    ["", "# laptop vieja, dada de baja\n\n", "clave-que-no-es-age\n"],
+)
+def test_recipients_sin_claves_validas_es_aviso_aunque_el_estado_sea_ok(
+    api, contenido
+):
+    """Vacío, solo comentarios o mal formado: el backup real no puede cifrar,
+    aunque el último estado guardado diga ok. El error de lectura (con la
+    ruta y el contenido) no se muestra."""
+    _backup_al_dia(api)
+    recipients_path(_profile(api).paths).write_text(contenido, encoding="utf-8")
+    backup = _chequeo(diagnosticar_perfil(_profile(api), api.conn), "Backup")
+    assert backup.nivel is Nivel.AVISO
+    assert "No hay claves age válidas en recipients.txt" in backup.detalle
+    pagina = api.get("/diagnostico").text
+    assert "Al día" not in pagina
+    assert "clave-que-no-es-age" not in pagina
+    assert str(_profile(api).paths.root) not in pagina
 
 
 def test_avisos_de_arca_vigentes_son_aviso(api):
@@ -192,6 +216,23 @@ def test_arca_ok_y_numeracion_alineada(api, arca):
     assert "Último comprobante 0, igual en ARCA." in r.text
     assert "Volver a verificar" in r.text
     assert arca.calls["FEXDummy"] == 1
+
+
+def test_avisos_en_fexdummy_no_son_una_caida(api, arca):
+    """Una respuesta exitosa de FEXDummy puede traer FEXEvents: es un aviso,
+    no un servidor caído, y la numeración se sigue chequeando."""
+    arca.events = [("12", "Mantenimiento el domingo")]
+    r = api.get("/diagnostico?arca=1")
+    assert "appserver: OK, authserver: OK, dbserver: OK" in r.text
+    assert "fexevents" not in r.text.lower()
+    assert "Numeración PV 1" in r.text
+    assert arca.calls["FEXGetLast_CMP"] == 1
+
+
+def test_dummy_devuelve_solo_los_servidores(api, arca):
+    arca.events = [("12", "Mantenimiento el domingo")]
+    wsfex = api.app.state.service.wsfex
+    assert wsfex.dummy() == {"appserver": "OK", "dbserver": "OK", "authserver": "OK"}
 
 
 def test_arca_adelantado_bloquea_y_ofrece_sincronizar(api, arca):

@@ -208,6 +208,9 @@ class AuthResult:
     events: list[tuple[str, str]] = field(default_factory=list)
 
 
+_SERVIDORES_DUMMY = ("appserver", "dbserver", "authserver")
+
+
 def _dec(
     value: Decimal, formato: FormatoImporte, *, permite_cero: bool = False
 ) -> str:
@@ -506,11 +509,16 @@ class WsfexClient:
     # --- métodos de negocio ---
 
     def dummy(self) -> dict[str, str]:
-        """FEXDummy: estado de appserver/dbserver/authserver (sin TA)."""
+        """FEXDummy: estado de appserver/dbserver/authserver (sin TA).
+
+        Solo esos tres campos: una respuesta exitosa puede traer además
+        ``FEXEvents`` (avisos), que no es un estado de servidor.
+        """
         result = self.call("FEXDummy")
         return {
-            _local(child.tag).lower(): (child.text or "").strip()
+            nombre: (child.text or "").strip()
             for child in result
+            if (nombre := _local(child.tag).lower()) in _SERVIDORES_DUMMY
         }
 
     def get_param(self, kind: str) -> list[ParamRecord]:

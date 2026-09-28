@@ -27,7 +27,7 @@ from .constants import CBTE_TIPO_FACTURA_E, InvoiceStatus
 from .fiscal_identity import FiscalIdentityError, resolve_profile_fiscal_cuit
 from .migrations import current_version, latest_version
 from .profile import EnvironmentProfile
-from .seed_backup import recipients_path
+from .seed_backup import SeedBackupError, parse_recipients, recipients_path
 from .seed_backup_sync import SeedBackupStatus, load_seed_backup_state
 from .settings import get_active_emisor_id, load_settings
 from .setup import SetupState, certificate_pair_is_usable, evaluate_setup_state
@@ -253,10 +253,11 @@ def _backup(profile: EnvironmentProfile, conn: sqlite3.Connection) -> Chequeo:
             "reconfigurar el perfil a mano.",
             configurar,
         )
-    if not recipients_path(profile.paths).is_file():
+    if not _hay_recipients_validos(profile):
         return Chequeo(
             titulo, Nivel.AVISO,
-            "No hay claves age en recipients.txt: el backup no se puede cifrar.",
+            "No hay claves age válidas en recipients.txt: el backup no se "
+            "puede cifrar.",
             Accion("Agregar las claves públicas (ver README, Backups)."),
         )
     estado = load_seed_backup_state(conn)
@@ -278,6 +279,16 @@ def _backup(profile: EnvironmentProfile, conn: sqlite3.Connection) -> Chequeo:
         titulo, Nivel.AVISO,
         "Todavía no se subió ningún backup: se sube al cambiar la configuración.",
     )
+
+
+def _hay_recipients_validos(profile: EnvironmentProfile) -> bool:
+    """Misma lectura que usa el backup. El detalle del error no se muestra:
+    trae la ruta del archivo o su contenido."""
+    try:
+        texto = recipients_path(profile.paths).read_text(encoding="utf-8")
+        return bool(parse_recipients(texto))
+    except (OSError, UnicodeDecodeError, SeedBackupError):
+        return False
 
 
 def _avisos_arca(profile: EnvironmentProfile) -> Chequeo:
@@ -312,8 +323,10 @@ def diagnosticar_arca(
             "Conexión con ARCA", Nivel.BLOQUEA, f"ARCA no responde: {exc}",
             Accion("Reintentar en unos minutos; ver si ARCA anunció mantenimiento."),
         )]
+    # dummy() devuelve solo appserver/dbserver/authserver: los avisos que
+    # ARCA agregue a la respuesta no cuentan como caída.
     servidores = ", ".join(f"{k}: {v}" for k, v in sorted(estado.items()))
-    if not estado or any(v.upper() != "OK" for v in estado.values()):
+    if len(estado) < 3 or any(v.upper() != "OK" for v in estado.values()):
         return [Chequeo(
             "Conexión con ARCA", Nivel.BLOQUEA, servidores or "Respuesta vacía.",
             Accion("Reintentar en unos minutos."),
