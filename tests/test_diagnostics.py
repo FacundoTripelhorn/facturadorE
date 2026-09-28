@@ -267,3 +267,28 @@ def test_no_expone_rutas_ni_secretos(api, arca, test_cert_and_key):
         assert "PRIVATE KEY" not in texto
         assert key_pem.decode().splitlines()[1] not in texto
         assert "token" not in texto.lower().replace("csrf_token", "")
+
+
+def test_arca_con_respuesta_html_bloquea_sin_error_500(api, arca, monkeypatch):
+    """Un proxy caído devuelve HTML: la página muestra ARCA caído, no un 500."""
+    monkeypatch.setattr(
+        arca, "_fexdummy",
+        lambda body: httpx.Response(
+            502, text="<!DOCTYPE html><html>Bad Gateway<br></html>"
+        ),
+    )
+    r = api.get("/diagnostico?arca=1")
+    assert r.status_code == 200
+    assert "ARCA no responde" in r.text
+
+
+def test_numeracion_con_respuesta_vacia_bloquea_sin_error_500(
+    api, arca, monkeypatch
+):
+    monkeypatch.setattr(
+        arca, "_fexgetlast_cmp", lambda body: httpx.Response(200, text="")
+    )
+    r = api.get("/diagnostico?arca=1")
+    assert r.status_code == 200
+    assert "Conexión con ARCA" in r.text
+    assert "ARCA no respondió" in r.text

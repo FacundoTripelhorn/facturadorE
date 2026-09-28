@@ -162,3 +162,27 @@ def test_cache_de_params_en_sqlite(tmp_path):
     )
     filas = repo.get_params(conn, "moneda")
     assert [f["code"] for f in filas] == ["EUR"]
+
+
+@pytest.mark.parametrize(
+    ("status", "cuerpo", "error"),
+    [
+        # HTML real de un proxy: no es XML bien formado.
+        (502, "<!DOCTYPE html><html><body>Bad Gateway<br></body></html>",
+         httpx.HTTPStatusError),
+        # HTML que sí parsea como XML, pero sin SOAP Fault.
+        (502, "<html><body>Bad Gateway</body></html>", httpx.HTTPStatusError),
+        (503, "", httpx.HTTPStatusError),
+        (200, "<!DOCTYPE html><p>mantenimiento", httpx.DecodingError),
+        (200, "", httpx.DecodingError),
+    ],
+)
+def test_respuesta_que_no_es_xml_es_error_de_transporte(
+    test_config, status, cuerpo, error
+):
+    """Una página HTML de un proxy o un cuerpo vacío no dicen nada sobre lo
+    que hizo ARCA: salen como error de transporte (como un timeout), nunca
+    como ParseError ni como rechazo de ARCA."""
+    client = _client(test_config, lambda request: httpx.Response(status, text=cuerpo))
+    with pytest.raises(error):
+        client.dummy()

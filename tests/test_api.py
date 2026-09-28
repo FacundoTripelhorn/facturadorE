@@ -651,3 +651,23 @@ def test_pdf_de_factura_de_otro_perfil_rechazado(api, arca):
     _marcar_como_de_otro_perfil(api, draft["id"])
 
     assert api.get(f"/invoices/{draft['id']}/pdf").status_code == 409
+
+
+def test_authorize_con_respuesta_html_queda_a_reconciliar(api, arca, monkeypatch):
+    """Un 502 en HTML después de enviar FEXAuthorize no es un rechazo de ARCA
+    ni un 500: el resultado es desconocido y se reconcilia con FEXGetCMP."""
+    import httpx
+
+    _crear_cliente(api)
+    draft = _crear_draft(api)
+    monkeypatch.setattr(
+        arca, "_fexauthorize",
+        lambda body: httpx.Response(
+            502, text="<!DOCTYPE html><html>Bad Gateway<br></html>"
+        ),
+    )
+    r = api.post(f"/invoices/{draft['id']}/authorize?force_desync=true")
+    assert r.status_code == 200
+    factura = r.json()
+    assert factura["status"] == "unknown"
+    assert "Sin respuesta de ARCA" in factura["last_error"]

@@ -462,7 +462,23 @@ class WsfexClient:
                 "SOAPAction": f'"{FEX_NS}{method}"',
             },
         )
-        root = ET.fromstring(response.text)
+        # Una respuesta que no es SOAP (página HTML de un proxy caído, cuerpo
+        # vacío, error HTTP sin Fault) no dice nada sobre lo que hizo ARCA: es
+        # un error de transporte, igual que un timeout, no un rechazo. Solo un
+        # SOAP Fault o un FEXErr son respuestas concluyentes de ARCA.
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            if response.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    f"{method}: HTTP {response.status_code} sin respuesta SOAP",
+                    request=response.request,
+                    response=response,
+                ) from exc
+            raise httpx.DecodingError(
+                f"{method}: la respuesta no es XML válido",
+                request=response.request,
+            ) from exc
         if response.status_code >= 400:
             fault = root.find(".//{*}Fault")
             if fault is not None:
@@ -470,7 +486,12 @@ class WsfexClient:
                     fault.findtext(".//faultcode", default="?"),
                     fault.findtext(".//faultstring", default=response.text[:500]),
                 )
-            raise WsfexError(str(response.status_code), f"HTTP {response.status_code}")
+            # Error HTTP sin SOAP Fault: lo generó un intermediario, no ARCA.
+            raise httpx.HTTPStatusError(
+                f"{method}: HTTP {response.status_code} sin respuesta SOAP",
+                request=response.request,
+                response=response,
+            )
 
         result = root.find(f".//{{{FEX_NS}}}{method}Result")
         if result is None:
