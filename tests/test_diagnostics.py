@@ -2,6 +2,7 @@
 
 import dataclasses
 import datetime as dt
+import sqlite3
 
 import httpx
 import pytest
@@ -12,6 +13,7 @@ from facturador.arca.events import record_events
 from facturador.certs import load_certificate_metadata
 from facturador.constants import ArcaEnvironment
 from facturador.diagnostics import Nivel, diagnosticar_perfil
+from facturador.fiscal_identity import get_sealed_fiscal_cuit, seal_fiscal_cuit
 from facturador.profile import EnvironmentProfile
 from facturador.seed_backup import recipients_path
 from facturador.seed_backup_sync import (
@@ -292,3 +294,43 @@ def test_numeracion_con_respuesta_vacia_bloquea_sin_error_500(
     assert r.status_code == 200
     assert "Conexión con ARCA" in r.text
     assert "ARCA no respondió" in r.text
+
+
+# --- sin efectos secundarios / base dañada ---
+
+
+def test_abrir_el_diagnostico_no_sella_el_cuit(api, arca):
+    """Mirar el diagnóstico no es una operación fiscal: si el certificado
+    fuera el equivocado, tiene que poder reemplazarse sin resetear el perfil."""
+    assert get_sealed_fiscal_cuit(api.conn) is None
+    api.get("/diagnostico")
+    api.get("/diagnostico?arca=1")
+    assert get_sealed_fiscal_cuit(api.conn) is None
+
+
+def test_certificado_de_otro_cuit_que_el_sellado_bloquea(api):
+    seal_fiscal_cuit(api.conn, "20999999990")
+    cert = _chequeo(diagnosticar_perfil(_profile(api), api.conn), "Certificado")
+    assert cert.nivel is Nivel.BLOQUEA
+    assert f"El certificado es del CUIT {TEST_CUIT}" in cert.detalle
+    assert "emite con el CUIT 20999999990" in cert.detalle
+
+
+def test_base_danada_no_corta_la_pagina(api, monkeypatch):
+    """Si una tabla está dañada, los chequeos que la leen se muestran
+    bloqueados y la página responde igual (sin 500)."""
+    def roto(*args, **kwargs):
+        raise sqlite3.DatabaseError("database disk image is malformed")
+
+    monkeypatch.setattr(diagnostics.repo, "count_invoices_by_status", roto)
+    monkeypatch.setattr(diagnostics, "load_settings", roto)
+
+    r = api.get("/diagnostico")
+    assert r.status_code == 200
+    assert "No se puede emitir." in r.text
+    assert "No se pudo leer la base de datos." in r.text
+    assert "malformed" not in r.text
+
+    r = api.get("/diagnostico?arca=1")
+    assert r.status_code == 200
+    assert "No se pudo leer la base de datos." in r.text

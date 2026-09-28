@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -24,7 +25,7 @@ from .arca.wsaa import WsaaError
 from .arca.wsfex import WsfexClient, WsfexError
 from .certs import CertificateError, load_certificate_metadata
 from .constants import CBTE_TIPO_FACTURA_E, InvoiceStatus
-from .fiscal_identity import FiscalIdentityError, resolve_profile_fiscal_cuit
+from .fiscal_identity import get_sealed_fiscal_cuit
 from .migrations import current_version, latest_version
 from .profile import EnvironmentProfile
 from .seed_backup import SeedBackupError, parse_recipients, recipients_path
@@ -89,16 +90,36 @@ def diagnosticar_perfil(
 ) -> list[Chequeo]:
     """Chequeos que no llaman a ARCA. Seguros con cualquier estado de setup."""
     ahora = ahora or dt.datetime.now(dt.UTC)
+    # Con la base dañada, cada chequeo que la lee se muestra como bloqueado
+    # en vez de cortar la página; el de «Base de datos» explica el motivo.
     return [
         _ambiente(profile),
-        _certificado(profile, conn, ahora),
-        _setup(profile, conn),
-        *_emisor_y_puntos_de_venta(profile, conn),
+        *_protegido("Certificado", lambda: _certificado(profile, conn, ahora)),
+        *_protegido("Configuración inicial", lambda: _setup(profile, conn)),
+        *_protegido("Emisor", lambda: _emisor_y_puntos_de_venta(profile, conn)),
         _base_de_datos(conn),
-        _pendientes(conn),
-        _backup(profile, conn),
+        *_protegido("Comprobantes a reconciliar", lambda: _pendientes(conn)),
+        *_protegido("Backup", lambda: _backup(profile, conn)),
         _avisos_arca(profile),
     ]
+
+
+def _protegido(
+    titulo: str, chequeo: Callable[[], Chequeo | list[Chequeo]]
+) -> list[Chequeo]:
+    try:
+        resultado = chequeo()
+    except sqlite3.DatabaseError:
+        return [_sin_base(titulo)]
+    return resultado if isinstance(resultado, list) else [resultado]
+
+
+def _sin_base(titulo: str) -> Chequeo:
+    return Chequeo(
+        titulo, Nivel.BLOQUEA,
+        "No se pudo leer la base de datos.",
+        Accion("Ver el chequeo «Base de datos»."),
+    )
 
 
 def _ambiente(profile: EnvironmentProfile) -> Chequeo:
@@ -143,10 +164,17 @@ def _certificado(
             "válido, o la clave tiene permisos demasiado abiertos.",
             subir,
         )
-    try:
-        resolve_profile_fiscal_cuit(conn, profile)
-    except FiscalIdentityError as exc:
-        return Chequeo(titulo, Nivel.BLOQUEA, str(exc), subir)
+    # Solo se compara contra un sello existente: abrir el diagnóstico no
+    # sella el CUIT (eso queda para la primera operación fiscal), así un
+    # certificado equivocado se puede reemplazar sin resetear el perfil.
+    sellado = get_sealed_fiscal_cuit(conn)
+    if sellado is not None and sellado != meta.cuit:
+        return Chequeo(
+            titulo, Nivel.BLOQUEA,
+            f"El certificado es del CUIT {meta.cuit}, pero este perfil emite "
+            f"con el CUIT {sellado}.",
+            subir,
+        )
 
     dias = (vence - ahora).days
     detalle = f"CUIT {meta.cuit}. Vence el {_fecha(vence)}."
@@ -310,7 +338,12 @@ def diagnosticar_arca(
     wsfex: WsfexClient,
 ) -> list[Chequeo]:
     """FEXDummy y, por punto de venta, último número en ARCA vs. local."""
-    if evaluate_setup_state(profile, conn) is not SetupState.READY:
+    try:
+        listo = evaluate_setup_state(profile, conn) is SetupState.READY
+        puntos_venta = load_settings(conn).emisor.puntos_venta
+    except sqlite3.DatabaseError:
+        return [_sin_base("ARCA")]
+    if not listo:
         return [Chequeo(
             "ARCA", Nivel.BLOQUEA,
             "No se puede verificar hasta completar la configuración inicial.",
@@ -332,8 +365,11 @@ def diagnosticar_arca(
             Accion("Reintentar en unos minutos."),
         )]
     chequeos = [Chequeo("Conexión con ARCA", Nivel.OK, servidores)]
-    for pv in load_settings(conn).emisor.puntos_venta:
-        chequeos.append(_numeracion(conn, wsfex, pv))
+    for pv in puntos_venta:
+        try:
+            chequeos.append(_numeracion(conn, wsfex, pv))
+        except sqlite3.DatabaseError:
+            chequeos.append(_sin_base(f"Numeración PV {pv}"))
     return chequeos
 
 
