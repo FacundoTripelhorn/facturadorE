@@ -16,6 +16,8 @@ Qué incluye:
   el cliente habitual, revisión antes de enviar, listado y detalle read-only.
 - **PDF del comprobante** con QR según RG 4892 (fpdf2, Python puro, sin browser).
 - **SQLite** como única fuente de verdad local; sin servicios externos.
+- **App de Windows portable**: `FacturadorE.exe` en un zip, sin instalar
+  Python ni Docker (ver [Uso en Windows](#uso-en-windows-recomendado)).
 - **Empaquetado Docker** (misma imagen para Windows y macOS) con el puerto
   publicado solo en `127.0.0.1`, y launchers de doble click.
 - **Seed cifrado** del lado del cliente ([age](https://age-encryption.org)):
@@ -26,14 +28,17 @@ Qué incluye:
 
 ## Requisitos
 
-- **Docker Desktop** (runtime recomendado), o bien **Python ≥ 3.12** +
+- **Windows:** solo el zip de FacturadorE (Windows 10/11 de 64 bits). Ver
+  [Uso en Windows](#uso-en-windows-recomendado).
+- **macOS / desarrollo:** **Docker Desktop**, o bien **Python ≥ 3.12** +
   [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
   nada más que `uv sync`: se genera con fpdf2 en Python puro.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
-- Para backups: **[age](https://age-encryption.org)** (`winget install
-  FiloSottile.age` / `brew install age`) y, si se sube a S3, **aws CLI**.
+- Para backups: **[age](https://age-encryption.org)** (el zip de Windows ya
+  lo trae; si no, `winget install FiloSottile.age` / `brew install age`) y, si
+  se sube a S3, **aws CLI**.
 
 ## Ambientes: una sola app
 
@@ -57,7 +62,45 @@ Guías paso a paso (trámites en ARCA, certificados y verificación):
   asociación a "Facturación Electrónica de Exportación", punto de venta RECE,
   smoke test y primera factura real, más cuidados operativos.
 
-## Uso con Docker (recomendado)
+## Uso en Windows (recomendado)
+
+1. Descargar `FacturadorE-windows-<versión>.zip` del último **Release** del
+   repo. Tip: antes de descomprimir, clic derecho en el zip → Propiedades →
+   marcar **Desbloquear** → Aceptar (así Windows no avisa por cada archivo).
+2. Descomprimir en `%LOCALAPPDATA%\Programs` (o donde quieras; no hace falta
+   ser administrador). El zip trae la carpeta `FacturadorE` con
+   `FacturadorE.exe` adentro.
+3. Abrir `FacturadorE.exe`. Como el ejecutable no está firmado, la primera vez
+   SmartScreen puede mostrar "Windows protegió su PC": **Más información →
+   Ejecutar de todas formas** (una vez por versión).
+4. Clic derecho en `FacturadorE.exe` → **Anclar a Inicio** (o a la barra de
+   tareas) para abrirlo con un click.
+
+Al abrirlo aparece el selector Homologación / Producción y después la ventana
+de la app. **Cerrar la ventana cierra todo**. Abrirlo de nuevo con la app en
+marcha reabre la misma sesión, sin levantar otra copia.
+
+- **Datos:** todo vive en `%LOCALAPPDATA%\FacturadorE` (un perfil por
+  ambiente, más `launcher.log`). La carpeta del programa no guarda nada.
+- **Actualizar:** cerrar la app y reemplazar la carpeta del programa por la
+  del zip nuevo. Los datos no se tocan.
+- **Desinstalar:** borrar la carpeta del programa. `%LOCALAPPDATA%\FacturadorE`
+  tiene los certificados y la base: hacé backup antes de borrarla.
+- **Ventana:** usa Microsoft Edge WebView2, que viene con Windows 11 y con
+  Edge actualizado. Si falta, la app se abre en el navegador.
+- **Backups:** el zip trae `age` y `age-keygen` (en `_internal\bin`); no hace
+  falta instalarlos.
+- **Si algo falla al abrir:** un diálogo explica el error. El detalle queda
+  en `%LOCALAPPDATA%\FacturadorE\launcher.log` y en los logs del perfil.
+
+El zip lo arma CI en Windows al publicar un tag `v*`
+([`.github/workflows/windows.yml`](.github/workflows/windows.yml)). Para
+armarlo a mano en una PC con Windows y uv:
+`powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1`.
+Prueba manual antes de usar una versión nueva:
+[`docs/windows-smoke-test.md`](docs/windows-smoke-test.md).
+
+## Uso con Docker
 
 El directorio de datos del host (`FACTURADOR_HOME`, default `~/facturador`)
 vive fuera del repo y del contenedor. **La app crea sola** el bootstrap y el
@@ -81,6 +124,9 @@ Sin `ARCA_ENV` en ese archivo el contenedor no arranca. Para pasar a
 Producción: parar el contenedor, poner `ARCA_ENV=prod` (y el par `cert.*`
 bajo `profiles/prod/secrets/`), y volver a levantar — un reinicio, no un
 cambio en caliente.
+
+En Windows, la app portable (arriba) reemplaza a Docker como camino
+principal; Docker queda como alternativa.
 
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
 `scripts/launch.command` (macOS) — levanta el contenedor si hace falta y abre
@@ -276,6 +322,7 @@ facturador/
   pdf/          # render del comprobante + QR RG 4892
   repo/         # acceso a datos (SQLite)
   launcher/     # chooser Homologación/Producción + supervisor de proceso
+                #   (frozen.py: entrada del exe de Windows)
   profile.py    # perfiles aislados (paths de runtime por ambiente)
   service.py    # lógica de dominio: numeración, idempotencia, estados
   config.py     # arranque: ambiente inyectado, certificados del perfil
@@ -289,6 +336,7 @@ facturador/
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)
+packaging/windows/ # build del exe (PyInstaller), ícono, smoke de CI
 scripts/        # diagnóstico, flujo de homologación y launchers Docker
 tests/          # pytest (incluye ARCA falso en tests/arca_fake.py)
 docs/

@@ -447,6 +447,34 @@ def test_supervisor_falla_si_el_backend_muere_antes_de_ready(tmp_path):
     assert not supervisor.is_running
 
 
+def test_supervisor_puerto_ocupado_se_explica(tmp_path):
+    """Otro programa en el puerto: mensaje claro en vez del error de uvicorn."""
+    import socket
+
+    port = _free_port()
+    ocupante = socket.socket()
+    ocupante.bind(("127.0.0.1", port))
+    ocupante.listen()
+    try:
+        supervisor = ProcessSupervisor(
+            environment=ArcaEnvironment.HOMO,
+            port=port,
+            app_data_root=tmp_path / "appdata",
+            home=tmp_path / "home",
+            readiness_timeout=30.0,
+            open_browser=False,
+        )
+        with pytest.raises(LauncherError) as exc_info:
+            supervisor.start()
+    finally:
+        ocupante.close()
+
+    mensaje = str(exc_info.value)
+    assert f"el puerto {port} ya lo está usando otro programa" in mensaje
+    assert "Errno" not in mensaje
+    assert not supervisor.is_running
+
+
 def test_supervisor_timeout_de_readiness_es_visible(tmp_path):
     opened: list[str] = []
     # Proceso que vive pero nunca sirve /health.

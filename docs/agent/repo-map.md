@@ -52,6 +52,7 @@ flowchart TB
     EP["docker/entrypoint.sh"]
     LAUNCH_PY["facturador/launcher/<br/>process supervisor"]
     LAUNCH["scripts/launch.cmd<br/>scripts/launch.command"]
+    PKG["packaging/windows/<br/>PyInstaller exe + smoke"]
   end
 
   subgraph scripts["Local ARCA scripts"]
@@ -247,6 +248,7 @@ which one operates; PV selection when more than one is enabled. See
 | Container entrypoint (profile normalize + secrets copy) | `docker/entrypoint.sh` |
 | Process supervisor + chooser + switch | `facturador/launcher/` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
+| Windows exe (primary Windows path) | `packaging/windows/` (spec, `build.ps1`, icon, CI smoke), `facturador/launcher/frozen.py` (exe entry: backend mode, log, bundled age), `.github/workflows/windows.yml` (build, smoke, Release on `v*`) |
 | Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |
 | S3 seed adapter (`seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
 | Profile diagnostics page | `facturador/diagnostics.py`, `facturador/web/templates/diagnostico.html`, `tests/test_diagnostics.py` |

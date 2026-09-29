@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -39,6 +40,14 @@ from .window import UiEndReason, UiOpenResult, app_window_title, open_app_ui
 DEFAULT_READINESS_TIMEOUT_S = 60.0
 DEFAULT_STOP_TIMEOUT_S = 10.0
 _POLL_INTERVAL_S = 0.2
+# Error de bind de uvicorn/asyncio cuando el puerto ya está tomado:
+# "[Errno N] error while attempting to bind ..." con N = 98 (Linux), 48
+# (macOS) o 10048 (Windows, WSAEADDRINUSE; el texto del SO puede venir
+# traducido, el número no).
+_PUERTO_OCUPADO = re.compile(
+    r"\[(?:Errno|WinError) (?:98|48|10048)\]|address already in use",
+    re.IGNORECASE,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -90,6 +99,8 @@ class ProcessSupervisor:
     )
     _ready: bool = field(default=False, init=False, repr=False)
     _output_chunks: list[bytes] = field(default_factory=list, init=False, repr=False)
+    # Salida completa del último drain (el mensaje de error usa solo la cola).
+    _last_output: str = field(default="", init=False, repr=False)
     _output_thread: threading.Thread | None = field(
         default=None, init=False, repr=False
     )
@@ -353,7 +364,11 @@ class ProcessSupervisor:
         }
         if sys.platform == "win32":
             # CREATE_NEW_PROCESS_GROUP permite señalizar sin matar al launcher.
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            # CREATE_NO_WINDOW: el backend nunca abre una consola propia (el
+            # exe empaquetado no tiene consola; su salida va a la pipe).
+            kwargs["creationflags"] = (
+                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+            )
         else:
             kwargs["start_new_session"] = True
         try:
@@ -394,6 +409,13 @@ class ProcessSupervisor:
             code = self._process.poll()
             if code is not None:
                 detail = self._drain_output()
+                if _PUERTO_OCUPADO.search(self._last_output):
+                    raise LauncherError(
+                        f"No se pudo abrir {plan.profile.display_name}: el "
+                        f"puerto {plan.port} ya lo está usando otro programa. "
+                        "Cerrá ese programa (o reiniciá la PC) y volvé a abrir "
+                        "FacturadorE."
+                    )
                 raise LauncherError(
                     f"El backend de {plan.profile.display_name} terminó antes "
                     f"de quedar listo (código {code}). {detail}"
@@ -491,9 +513,11 @@ class ProcessSupervisor:
             self._output_thread.join(timeout=1.0)
             self._output_thread = None
         if not self._output_chunks:
+            self._last_output = ""
             return ""
         text = b"".join(self._output_chunks).decode("utf-8", errors="replace").strip()
         self._output_chunks = []
+        self._last_output = text
         # Últimas líneas: útiles en el mensaje de error; el log del perfil
         # guarda el detalle completo.
         lines = [line for line in text.splitlines() if line.strip()]

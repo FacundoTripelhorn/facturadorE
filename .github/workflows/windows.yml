@@ -1,0 +1,75 @@
+# Build del ejecutable de Windows (PyInstaller) + smoke headless.
+#
+# PRs y master: construye la carpeta portable, corre el smoke sin pantalla
+# (packaging/windows/smoke_ci.py) y sube el zip como artifact.
+# Tag v*: además publica FacturadorE-windows-<tag>.zip en un GitHub Release.
+# El chooser, la ventana, el cambio de ambiente y el cierre se prueban a
+# mano en la PC (docs/windows-smoke-test.md).
+name: Windows
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "facturador/**"
+      - "packaging/windows/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          # Misma versión que el resto del proyecto: el build no depende de
+          # qué Python traiga el runner.
+          python-version: "3.12"
+      - name: Versión
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" }
+          else { $v = "dev-" + "${{ github.sha }}".Substring(0, 7) }
+          "value=$v" >> $env:GITHUB_OUTPUT
+      - name: Build
+        shell: pwsh
+        run: packaging/windows/build.ps1 -Version ${{ steps.version.outputs.value }}
+      - name: Smoke headless
+        shell: pwsh
+        run: uv run python packaging/windows/smoke_ci.py packaging/windows/dist/FacturadorE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FacturadorE-windows-${{ steps.version.outputs.value }}
+          path: packaging/windows/dist/FacturadorE-windows-${{ steps.version.outputs.value }}.zip
+          if-no-files-found: error
+
+  release:
+    # Solo este job puede escribir en el repo (crear el Release).
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FacturadorE-windows-${{ needs.build.outputs.version }}
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          "FacturadorE-windows-${{ github.ref_name }}.zip"
+          --repo "${{ github.repository }}"
+          --title "FacturadorE ${{ github.ref_name }}"
+          --generate-notes
