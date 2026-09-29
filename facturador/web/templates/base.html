@@ -86,6 +86,48 @@
     color: #fff;
   }
 
+  /* ---- avisos de ARCA: campana y desplegable ---- */
+  .avisos-arca { position: relative; }
+  .avisos-arca > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center;
+    gap: .25rem; color: rgba(255,255,255,.75); padding: .35rem .15rem;
+  }
+  .avisos-arca > summary::-webkit-details-marker { display: none; }
+  .avisos-arca > summary:hover, .avisos-arca[open] > summary { color: #fff; }
+  .avisos-arca .contador {
+    background: var(--aviso); color: #fff; border-radius: 999px; font-size: .7rem;
+    font-weight: 750; min-width: 1.15rem; padding: 0 .3rem; text-align: center;
+    line-height: 1.15rem;
+  }
+  .avisos-arca .desplegable {
+    position: absolute; right: 0; top: calc(100% + .35rem); z-index: 10;
+    width: 22rem; max-width: calc(100vw - 2rem);
+    background: var(--superficie); color: var(--tinta);
+    border: 1px solid var(--borde); border-radius: var(--radio);
+    box-shadow: 0 12px 32px -12px rgba(16, 24, 40, .35);
+    max-height: 70vh; overflow-y: auto;
+  }
+  .avisos-arca .desplegable h2 {
+    margin: 0; padding: .7rem 1rem; font-size: .85rem; font-weight: 700;
+    border-bottom: 1px solid var(--borde); background: #fafbfd;
+  }
+  .avisos-arca .item { padding: .7rem 1rem; border-bottom: 1px solid var(--borde);
+                       font-size: .88rem; }
+  .avisos-arca .item:last-child { border-bottom: 0; }
+  .avisos-arca .item.no-leido { background: #eff4ff; }
+  .avisos-arca .item .meta { font-size: .75rem; color: var(--tinta-suave);
+                             font-weight: 600; }
+  .avisos-arca .item .leido { font-size: .75rem; color: var(--tinta-suave); }
+  .avisos-arca .sin-avisos { margin: 0; padding: 1rem; font-size: .88rem;
+                             color: var(--tinta-suave); }
+  form.marcar-leido { margin: .3rem 0 0; }
+  form.marcar-leido button {
+    background: none; box-shadow: none; border: 0; padding: 0; margin: 0;
+    color: var(--acento); font-size: .8rem; font-weight: 650;
+    text-decoration: underline;
+  }
+  form.marcar-leido button:hover { background: none; color: var(--acento-hover); }
+
   main { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
 
   /* ---- cards ---- */
@@ -243,6 +285,11 @@
     .card .cuerpo { padding: 1rem; }
     th, td { padding-left: 1rem; padding-right: 1rem; }
     .oculta-movil { display: none; }
+    /* El menú puede bajar de línea y dejar la campana a la izquierda:
+       el desplegable se ancla al header, a todo el ancho, en vez de salirse. */
+    header .adentro { position: relative; }
+    .avisos-arca { position: static; }
+    .avisos-arca .desplegable { left: 0; right: 0; top: 100%; width: auto; max-width: none; }
   }
 </style>
 </head>
@@ -256,6 +303,37 @@
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
     <a href="/diagnostico" {% if request.url.path == "/diagnostico" %}aria-current="page"{% endif %}>Diagnóstico</a>
+    {% set sin_leer = avisos_arca_no_leidos | length %}
+    <details class="avisos-arca">
+      <summary title="Avisos de ARCA"
+               aria-label="Avisos de ARCA{% if sin_leer %}: {{ sin_leer }} sin leer{% endif %}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+        </svg>
+        {% if sin_leer %}<span class="contador">{{ sin_leer }}</span>{% endif %}
+      </summary>
+      <div class="desplegable">
+        <h2>Avisos de ARCA</h2>
+        {% for aviso in avisos_arca %}
+        <div class="item{% if not aviso.read %} no-leido{% endif %}">
+          <div class="meta">Código {{ aviso.code }}{% if aviso.first_seen %} · desde el {{ aviso.first_seen.astimezone().strftime("%d/%m/%Y %H:%M") }}{% endif %}</div>
+          <div>{{ aviso.msg }}</div>
+          {% if aviso.read %}
+          <div class="leido">Leído</div>
+          {% else %}
+          <form class="marcar-leido" method="post" action="/ui/avisos-arca/{{ aviso.id }}/leido">
+            {% include "_csrf_field.html" %}
+            <button type="submit">Marcar como leído</button>
+          </form>
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="sin-avisos">Sin avisos de ARCA.</p>
+        {% endfor %}
+      </div>
+    </details>
     <span class="badge-env {{ env }}" data-env="{{ env }}">
       {% if env == "prod" %}{{ env_label }} — validez fiscal{% else %}{{ env_label }} — sin valor fiscal{% endif %}
     </span>
@@ -270,11 +348,15 @@
   </div>
 </header>
 <main>
-{% for aviso in avisos_arca %}
+{% for aviso in avisos_arca_no_leidos %}
 <div class="panel info aviso-arca" role="status">
   <div>
     <strong>Aviso de ARCA (código {{ aviso.code }}):</strong> {{ aviso.msg }}
-    {% if avisos_arca_visto %}<span class="visto">— recibido el {{ avisos_arca_visto.astimezone().strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}
+    {% if aviso.first_seen %}<span class="visto">— recibido el {{ aviso.first_seen.astimezone().strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}
+    <form class="marcar-leido" method="post" action="/ui/avisos-arca/{{ aviso.id }}/leido">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Marcar como leído</button>
+    </form>
   </div>
 </div>
 {% endfor %}
