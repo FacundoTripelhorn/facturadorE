@@ -40,7 +40,10 @@
   }
   header .adentro {
     max-width: 980px; margin: 0 auto; display: flex; align-items: center;
-    gap: 1.5rem; height: 3.4rem;
+    /* En ventanas angostas el menú baja a una segunda línea en vez de
+       cortarse contra el borde. */
+    flex-wrap: wrap; column-gap: 1.25rem; row-gap: .15rem;
+    min-height: 3.4rem; padding: .35rem 0;
   }
   header .titulo {
     font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em;
@@ -50,6 +53,7 @@
   header a {
     color: rgba(255,255,255,.75); text-decoration: none; font-weight: 600;
     font-size: .92rem; padding: .35rem .1rem; border-bottom: 2px solid transparent;
+    white-space: nowrap;
   }
   header a:hover { color: #fff; }
   header a[aria-current="page"] { color: #fff; border-bottom-color: #8fb0ff; }
@@ -251,6 +255,7 @@
     <a href="/constatacion" {% if request.url.path.startswith("/constatacion") %}aria-current="page"{% endif %}>Constatación de CAE</a>
     <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
     <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
+    <a href="/diagnostico" {% if request.url.path == "/diagnostico" %}aria-current="page"{% endif %}>Diagnóstico</a>
     <span class="badge-env {{ env }}" data-env="{{ env }}">
       {% if env == "prod" %}{{ env_label }} — validez fiscal{% else %}{{ env_label }} — sin valor fiscal{% endif %}
     </span>

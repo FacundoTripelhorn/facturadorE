@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if nivel == "bloquea" %}
+<div class="panel error"><div><strong>No se puede emitir.</strong>
+  Resolver lo marcado como «Bloquea».</div></div>
+{% elif nivel == "aviso" %}
+<div class="panel aviso"><div><strong>Se puede emitir,</strong> con avisos para revisar.</div></div>
+{% else %}
+<div class="panel ok"><div><strong>Listo para emitir.</strong></div></div>
+{% endif %}
+{% if not arca_verificado %}
+<p class="nota">ARCA todavía no se verificó: el resultado cubre solo lo local.</p>
+{% endif %}
+
+{% macro tabla(chequeos) %}
+<table class="diagnostico">
+  <tbody>
+    {% for c in chequeos %}
+    <tr>
+      <th scope="row">{{ c.titulo }}</th>
+      <td><span class="nivel {{ c.nivel }}">{{ NIVELES[c.nivel] }}</span></td>
+      <td>
+        {{ c.detalle }}
+        {% if c.accion %}
+        <div class="accion">
+          {% if c.accion.post %}
+          <form method="post" action="{{ c.accion.post }}">
+            {% include "_csrf_field.html" %}
+            <button type="submit" class="secundario">{{ c.accion.texto }}</button>
+          </form>
+          {% elif c.accion.enlace %}
+          <a href="{{ c.accion.enlace }}">{{ c.accion.texto }}</a>
+          {% else %}
+          {{ c.accion.texto }}
+          {% endif %}
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+<section class="card">
+  <h2>Perfil <span class="sub">sin consultar ARCA</span></h2>
+  <div class="cuerpo">{{ tabla(locales) }}</div>
+</section>
+
+<section class="card">
+  <h2>ARCA <span class="sub">conexión y numeración por punto de venta</span></h2>
+  <div class="cuerpo">
+    {% if remotos is not none %}{{ tabla(remotos) }}{% endif %}
+    <form class="acciones-arca" method="get" action="/diagnostico">
+      <input type="hidden" name="arca" value="1">
+      <button type="submit">
+        {% if remotos is none %}Verificar ARCA{% else %}Volver a verificar{% endif %}</button>
+    </form>
+  </div>
+</section>
+
+<style>
+  table.diagnostico th { text-align: left; font-weight: 600; white-space: nowrap; width: 1%; }
+  table.diagnostico td:nth-child(2) { width: 1%; white-space: nowrap; }
+  table.diagnostico .accion { margin-top: .35rem; font-size: .92rem; }
+  table.diagnostico .accion form { display: inline; }
+  .nivel { display: inline-block; border-radius: 999px; padding: .1rem .6rem;
+           font-size: .8rem; font-weight: 650; }
+  .nivel.ok { background: var(--ok-fondo); color: var(--ok); }
+  .nivel.aviso { background: var(--aviso-fondo); color: var(--aviso); }
+  .nivel.bloquea { background: var(--error-fondo); color: var(--error); }
+  .acciones-arca { margin: 1rem 0 0; }
+</style>
+
+{% endblock %}

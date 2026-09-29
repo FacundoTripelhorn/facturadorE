@@ -5,7 +5,8 @@ factura y las que tocan ARCA quedan bloqueadas. Las rutas HTML de la UI
 redirigen a ``/setup`` para que el usuario vea el paso pendiente;
 las APIs JSON siguen respondiendo 503 con ``setup_state``. Quedan libres el
 liveness (``GET /health``), las rutas de setup (``/setup``), estáticos,
-configuración de emisor y clientes (CRUD offline con params cacheados).
+configuración de emisor, clientes (CRUD offline con params cacheados) y el
+diagnóstico del perfil.
 """
 
 from __future__ import annotations
@@ -41,6 +42,10 @@ def is_setup_exempt(method: str, path: str) -> bool:
     if path == "/clientes" or path.startswith("/clientes/"):
         return True
     if path.startswith("/ui/clientes"):
+        return True
+    # Diagnóstico: justamente explica qué falta; los chequeos de ARCA se
+    # cortan solos si el perfil no está listo.
+    if path == "/diagnostico":
         return True
     # Seed backup status / manual trigger: no depende de ARCA.
     if path == "/backup" or path.startswith("/backup/"):

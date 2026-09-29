@@ -208,6 +208,9 @@ class AuthResult:
     events: list[tuple[str, str]] = field(default_factory=list)
 
 
+_SERVIDORES_DUMMY = ("appserver", "dbserver", "authserver")
+
+
 def _dec(
     value: Decimal, formato: FormatoImporte, *, permite_cero: bool = False
 ) -> str:
@@ -459,7 +462,23 @@ class WsfexClient:
                 "SOAPAction": f'"{FEX_NS}{method}"',
             },
         )
-        root = ET.fromstring(response.text)
+        # Una respuesta que no es SOAP (página HTML de un proxy caído, cuerpo
+        # vacío, error HTTP sin Fault) no dice nada sobre lo que hizo ARCA: es
+        # un error de transporte, igual que un timeout, no un rechazo. Solo un
+        # SOAP Fault o un FEXErr son respuestas concluyentes de ARCA.
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            if response.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    f"{method}: HTTP {response.status_code} sin respuesta SOAP",
+                    request=response.request,
+                    response=response,
+                ) from exc
+            raise httpx.DecodingError(
+                f"{method}: la respuesta no es XML válido",
+                request=response.request,
+            ) from exc
         if response.status_code >= 400:
             fault = root.find(".//{*}Fault")
             if fault is not None:
@@ -467,7 +486,12 @@ class WsfexClient:
                     fault.findtext(".//faultcode", default="?"),
                     fault.findtext(".//faultstring", default=response.text[:500]),
                 )
-            raise WsfexError(str(response.status_code), f"HTTP {response.status_code}")
+            # Error HTTP sin SOAP Fault: lo generó un intermediario, no ARCA.
+            raise httpx.HTTPStatusError(
+                f"{method}: HTTP {response.status_code} sin respuesta SOAP",
+                request=response.request,
+                response=response,
+            )
 
         result = root.find(f".//{{{FEX_NS}}}{method}Result")
         if result is None:
@@ -506,11 +530,16 @@ class WsfexClient:
     # --- métodos de negocio ---
 
     def dummy(self) -> dict[str, str]:
-        """FEXDummy: estado de appserver/dbserver/authserver (sin TA)."""
+        """FEXDummy: estado de appserver/dbserver/authserver (sin TA).
+
+        Solo esos tres campos: una respuesta exitosa puede traer además
+        ``FEXEvents`` (avisos), que no es un estado de servidor.
+        """
         result = self.call("FEXDummy")
         return {
-            _local(child.tag).lower(): (child.text or "").strip()
+            nombre: (child.text or "").strip()
             for child in result
+            if (nombre := _local(child.tag).lower()) in _SERVIDORES_DUMMY
         }
 
     def get_param(self, kind: str) -> list[ParamRecord]:
