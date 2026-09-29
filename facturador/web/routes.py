@@ -38,7 +38,7 @@ from ..api.csrf import (
     enforce_csrf,
 )
 from ..api.deps import ServiceDep
-from ..arca.events import load_events
+from ..arca.events import load_events, mark_read
 from ..arca.wsfex import WsfexError
 from ..certs import (
     CertificateError,
@@ -112,12 +112,13 @@ def _csrf_en_contexto(request: Request) -> dict[str, object]:
 
 
 def _avisos_arca_en_contexto(request: Request) -> dict[str, object]:
-    """Último aviso de ARCA (``FEXEvents``) para el banner de toda la UI."""
+    """Avisos de ARCA (``FEXEvents``) vigentes: los no leídos van al banner de
+    toda la UI; todos, al desplegable del header."""
     profile = getattr(request.app.state, "profile", None)
     if profile is None:
-        return {"avisos_arca": [], "avisos_arca_visto": None}
+        return {"avisos_arca": [], "avisos_arca_no_leidos": []}
     avisos = load_events(profile.paths.arca_events)
-    return {"avisos_arca": avisos.events, "avisos_arca_visto": avisos.seen_at}
+    return {"avisos_arca": avisos.events, "avisos_arca_no_leidos": avisos.unread}
 
 
 templates = Jinja2Templates(
@@ -137,20 +138,27 @@ def csrf_recovery_href(request: Request) -> str:
     con el token viejo. Preferimos el ``Referer`` same-origin (si no es
     ``/ui/``) y, si falta, un mapeo estático del path del POST.
     """
+    return _pagina_de_origen(request) or _recovery_from_ui_path(request.url.path)
+
+
+def _pagina_de_origen(request: Request) -> str | None:
+    """Página same-origin desde la que vino el POST (``Referer``), si es
+    una página y no otro ``/ui/``."""
     referer = request.headers.get("referer")
-    if referer:
-        parsed = urlparse(referer)
-        if (
-            parsed.scheme in ("", "http")
-            and parsed.path
-            and not parsed.path.startswith("/ui/")
-            and parsed.netloc in ("", request.url.netloc)
-        ):
-            href = parsed.path
-            if parsed.query:
-                href = f"{href}?{parsed.query}"
-            return href
-    return _recovery_from_ui_path(request.url.path)
+    if not referer:
+        return None
+    parsed = urlparse(referer)
+    if (
+        parsed.scheme in ("", "http")
+        and parsed.path
+        and not parsed.path.startswith("/ui/")
+        and parsed.netloc in ("", request.url.netloc)
+    ):
+        href = parsed.path
+        if parsed.query:
+            href = f"{href}?{parsed.query}"
+        return href
+    return None
 
 
 def _recovery_from_ui_path(path: str) -> str:
@@ -1409,6 +1417,19 @@ def guardar_backup(
         )
     service.update_backup_settings(payload)
     return RedirectResponse("/configuracion?aviso=backup", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Avisos de ARCA
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ui/avisos-arca/{event_id}/leido")
+def marcar_aviso_arca_leido(request: Request, event_id: str):
+    """Oculta el aviso del banner; sigue en el desplegable mientras ARCA lo
+    mande. Vuelve a la página desde la que se marcó."""
+    mark_read(request.app.state.profile.paths.arca_events, event_id)
+    return RedirectResponse(_pagina_de_origen(request) or "/", status_code=303)
 
 
 # ---------------------------------------------------------------------------
