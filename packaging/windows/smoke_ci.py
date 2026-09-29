@@ -3,8 +3,9 @@
 Cubre lo que no necesita ventana: el exe arranca el backend de
 Homologación en un app-data temporal, ``/health`` responde, un segundo
 launch reusa la sesión sin crear otro backend, el launcher deja su log
-(el exe no tiene consola) y age viaja en el bundle. El chooser, la ventana,
-el cambio de ambiente y el cierre se prueban a mano:
+(el exe no tiene consola), age viaja en el bundle y un puerto ocupado da el
+mensaje claro (la salida del backend llega a la pipe del supervisor). El
+chooser, la ventana, el cambio de ambiente y el cierre se prueban a mano:
 docs/windows-smoke-test.md.
 
 Uso: ``python packaging/windows/smoke_ci.py packaging/windows/dist/FacturadorE``
@@ -16,6 +17,7 @@ import csv
 import io
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -25,6 +27,7 @@ import urllib.request
 from pathlib import Path
 
 PORT = 8411
+PORT_OCUPADO = 8412
 EXE_NAME = "FacturadorE.exe"
 
 
@@ -53,6 +56,36 @@ def _procesos(nombre: str) -> int:
     return sum(1 for fila in csv.reader(io.StringIO(salida)) if fila[:1] == [nombre])
 
 
+def _puerto_ocupado(exe: Path) -> None:
+    """Otro programa en el puerto: el launcher sale con el mensaje claro.
+
+    Prueba el camino real del exe: el backend (mismo exe, modo --backend,
+    sin consola) escribe el error de bind en la pipe que lee el supervisor.
+    """
+    ocupante = socket.socket()
+    ocupante.bind(("127.0.0.1", PORT_OCUPADO))
+    ocupante.listen()
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            env = dict(
+                os.environ, FACTURADOR_APP_DATA=tmp, FACTURADOR_NO_DIALOGS="1"
+            )
+            argv = [
+                str(exe), "--env", "homo", "--no-browser",
+                "--port", str(PORT_OCUPADO), "--timeout", "60",
+            ]
+            resultado = subprocess.run(argv, env=env, timeout=120)
+            assert resultado.returncode != 0, resultado.returncode
+            texto = (Path(tmp) / "launcher.log").read_text(encoding="utf-8")
+            esperado = f"el puerto {PORT_OCUPADO} ya lo está usando otro programa"
+            assert esperado in texto, texto
+    finally:
+        ocupante.close()
+    time.sleep(1)
+    assert _procesos(EXE_NAME) == 0, "quedó un proceso tras el puerto ocupado"
+    print("puerto ocupado: mensaje claro")
+
+
 def main(carpeta: Path) -> int:
     exe = carpeta / EXE_NAME
     assert exe.is_file(), f"no está {exe}"
@@ -67,8 +100,10 @@ def main(carpeta: Path) -> int:
         )
         print(f"{herramienta}: {version.stdout.strip()}")
 
+    _puerto_ocupado(exe)
+
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        env = dict(os.environ, FACTURADOR_APP_DATA=tmp)
+        env = dict(os.environ, FACTURADOR_APP_DATA=tmp, FACTURADOR_NO_DIALOGS="1")
         argv = [str(exe), "--env", "homo", "--no-browser", "--port", str(PORT)]
         launcher = subprocess.Popen(argv, env=env)
         try:
