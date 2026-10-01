@@ -1,0 +1,20 @@
+# gitleaks: reglas por defecto + falsos positivos conocidos, acotados por
+# regla. Agregar acá solo hallazgos revisados a mano, con el porqué.
+title = "FacturadorE"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Claves age PÚBLICAS de ejemplo usadas como fixtures de tests (age1… es la clave pública; no habilita a descifrar nada)."
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p''',
+  '''age1ygutdp4klvvdvxqzk68e37ndy2n4ctsjvmdngm359e9qmjsjtqcspwltdk''',
+]
+
+[[allowlists]]
+description = "seed_backup.py lista encabezados PEM para RECHAZAR material privado: son marcadores, no claves. Acotado a esta regla y este archivo."
+targetRules = ["private-key"]
+paths = ['''^facturador/seed_backup\.py$''']

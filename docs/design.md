@@ -25,7 +25,7 @@ Implicancias de diseño que salen del flujo real:
 - **Deel (pasos 1–2) queda fuera de alcance:** el monto se ingresa a mano. El PDF de Deel es parseable a futuro, pero no justifica complejidad ahora.
 - **Numeración al pasar a producción:** el punto de venta webservice nuevo arranca en 0001-00000001. Las facturas históricas de Comprobantes en Línea viven en otro punto de venta; tener dos series es normal y esperado, no se migran ni se mezclan.
 
-**Paridad con Comprobantes en Línea:** se analizó un comprobante real del usuario (Factura E autorizada, exportación de servicios a Uruguay). El mapeo campo por campo y el layout objetivo del PDF salen de ahí (ver §0.1). Los datos reales (CUIT emisor, domicilios, cliente) NO van en este documento ni en el repo: viven en la configuración local / seed de la DB.
+**Paridad con Comprobantes en Línea:** se analizó una Factura E real autorizada por exportación de servicios. El mapeo campo por campo y el layout objetivo del PDF salen de ahí (ver §0.1). Los datos reales (CUIT emisor, domicilios, cliente) NO van en este documento ni en el repo: viven en la configuración local / seed de la DB.
 
 ### 0.1 Mapeo del comprobante real → FEXAuthorize
 
@@ -39,7 +39,7 @@ Estructura observada en el comprobante de ejemplo (valores anonimizados):
 | Fecha de Pago | `Fecha_pago` | **Confirmado presente y puede diferir de la emisión** (en el ejemplo es el día siguiente). Default = fecha_cbte, editable |
 | Cliente (razón social) | `Cliente` | De la entidad `clients` |
 | Domicilio cliente | `Domicilio_cliente` | Snapshot al autorizar |
-| CUIT País (p.ej. Uruguay persona jurídica) | `Cuit_pais_cliente` | De tabla `FEXGetPARAM_DST_CUIT` (genérico por país+tipo de persona, no es dato sensible) |
+| CUIT País (genérico por país de destino y tipo de persona) | `Cuit_pais_cliente` | De tabla `FEXGetPARAM_DST_CUIT` (genérico por país+tipo de persona, no es dato sensible) |
 | ID Impositivo | `Id_impositivo` | Tax ID del cliente en su país (RUT en el ejemplo) |
 | Destino del comprobante | `Dst_cmp` | Código ARCA de país (`FEXGetPARAM_DST_pais`) |
 | Divisa USD | `Moneda_Id = "DOL"` | |
