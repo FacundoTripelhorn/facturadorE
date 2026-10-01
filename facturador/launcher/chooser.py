@@ -7,11 +7,11 @@ Tras un error de arranque el caller puede volver a mostrar el chooser.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from ..constants import ArcaEnvironment
+from .frozen import set_window_icon, stdin_is_tty
 
 # Títulos = EnvironmentProfile.display_name (Homologación / Producción).
 _HOMO_DESCRIPTION = (
@@ -79,7 +79,7 @@ def choose_environment(
     try:
         return gui(choices)
     except ChooserUnavailable:
-        if sys.stdin.isatty():
+        if stdin_is_tty():
             return tty(choices)
         raise
 
@@ -137,6 +137,7 @@ def prompt_environment_gui(
         root = tkinter.Tk()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
+    set_window_icon(root)
 
     root.title("FacturadorE")
     root.resizable(False, False)

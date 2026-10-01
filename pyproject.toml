@@ -25,6 +25,9 @@ dev = [
     "mypy>=1.13",
     "pypdf>=5",
 ]
+packaging = [
+    "pyinstaller>=6.10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

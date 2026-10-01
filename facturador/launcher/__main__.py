@@ -32,6 +32,7 @@ from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
 from .chooser import ChooserUnavailable, choose_environment
 from .command import resolve_launch_environment
+from .frozen import set_window_icon, stdin_is_tty
 from .production_ack import ensure_production_acknowledged
 from .supervisor import LauncherError, ProcessSupervisor
 from .window import UiEndReason
@@ -598,13 +599,16 @@ def _handle_change_environment_request(
 def _report_failure(message: str) -> None:
     """Falla visible: stderr siempre; diálogo nativo si no hay TTY.
 
-    Sin diálogo bajo pytest (``PYTEST_CURRENT_TEST``) para no bloquear la suite
-    con un messagebox modal en el display del agente.
+    Sin diálogo bajo pytest (``PYTEST_CURRENT_TEST``) ni con
+    ``FACTURADOR_NO_DIALOGS`` (smoke del exe en CI): un messagebox modal sin
+    nadie que lo cierre colgaría el proceso.
     """
     print(f"ERROR: {message}", file=sys.stderr, flush=True)
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get(
+        "FACTURADOR_NO_DIALOGS"
+    ):
         return
-    if sys.stdin.isatty() and sys.stderr.isatty():
+    if _is_interactive_terminal():
         return
     try:
         import tkinter
@@ -614,10 +618,21 @@ def _report_failure(message: str) -> None:
     try:
         root = tkinter.Tk()
         root.withdraw()
+        set_window_icon(root)
         messagebox.showerror("FacturadorE", message)
         root.destroy()
     except Exception:
         return
+
+
+def _is_interactive_terminal() -> bool:
+    """True si hay terminal para leer el error. El exe de ventana no tiene
+    stdin/stderr (``None``) o los tiene redirigidos a un archivo."""
+    stderr = sys.stderr
+    try:
+        return stdin_is_tty() and bool(stderr is not None and stderr.isatty())
+    except (AttributeError, ValueError):
+        return False
 
 
 if __name__ == "__main__":

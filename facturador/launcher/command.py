@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile, ProfileError, parse_environment
+from .frozen import BACKEND_FLAG, is_frozen
 from .switch import mark_launcher_supervised
 
 
@@ -58,7 +59,13 @@ def resolve_launch_profile(
 
 
 def build_backend_command(*, python: str | None = None) -> list[str]:
-    """Argv para el backend de un solo perfil: ``python -m facturador``."""
+    """Argv para el backend de un solo perfil: ``python -m facturador``.
+
+    En el ejecutable empaquetado no hay intérprete aparte: se relanza el
+    mismo exe en modo backend (``frozen.BACKEND_FLAG``).
+    """
+    if python is None and is_frozen():
+        return [sys.executable, BACKEND_FLAG]
     return [python or sys.executable, "-m", "facturador"]
 
 

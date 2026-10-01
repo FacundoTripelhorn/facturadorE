@@ -7,7 +7,6 @@ usa el backend/Docker). Acá solo está el flujo interactivo del launcher.
 from __future__ import annotations
 
 import os
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from ..production_ack import (
 )
 from ..profile import EnvironmentProfile
 from .chooser import ChooserUnavailable
+from .frozen import set_window_icon, stdin_is_tty
 
 _CONFIRM_TITLE = "Producción — confirmación"
 _CONFIRM_BODY = (
@@ -96,7 +96,7 @@ def confirm_production_first_use(
     try:
         return gui()
     except ChooserUnavailable:
-        if sys.stdin.isatty():
+        if stdin_is_tty():
             return tty()
         raise
 
@@ -140,6 +140,7 @@ def prompt_production_confirm_gui() -> bool:
         root = tkinter.Tk()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
+    set_window_icon(root)
 
     root.title("FacturadorE")
     root.resizable(False, False)
