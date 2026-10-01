@@ -7,6 +7,9 @@
 # mano en la PC (docs/windows-smoke-test.md).
 name: Windows
 
+# Sin permisos por defecto: cada job declara los suyos.
+permissions: {}
+
 on:
   push:
     branches: [master]
@@ -28,8 +31,8 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           # Misma versión que el resto del proyecto: el build no depende de
           # qué Python traiga el runner.
@@ -47,23 +50,33 @@ jobs:
       - name: Smoke headless
         shell: pwsh
         run: uv run python packaging/windows/smoke_ci.py packaging/windows/dist/FacturadorE
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: FacturadorE-windows-${{ steps.version.outputs.value }}
           path: packaging/windows/dist/FacturadorE-windows-${{ steps.version.outputs.value }}.zip
           if-no-files-found: error
 
   release:
-    # Solo este job puede escribir en el repo (crear el Release).
+    # Solo este job puede escribir en el repo (crear el Release) y firmar
+    # la atestación de procedencia del zip.
     if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: FacturadorE-windows-${{ needs.build.outputs.version }}
+      # Prueba verificable de que el zip salió de este workflow y este
+      # commit: gh attestation verify <zip> --repo <owner>/<repo>.
+      # GitHub solo emite atestaciones en repos públicos (o Enterprise).
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: ${{ !github.event.repository.private }}
+        with:
+          subject-path: FacturadorE-windows-${{ github.ref_name }}.zip
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}

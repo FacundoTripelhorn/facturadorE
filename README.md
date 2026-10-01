@@ -356,6 +356,15 @@ docs/
   ambiente inmutable; URLs y certificados salen del mismo perfil.
 - El seed se cifra del lado del cliente con `age` (recipients por máquina)
   **antes** de salir; DB, PDFs y la clave fiscal **no** viajan en el bundle.
+- **Usá tu propio certificado** y empezá en **Homologación**: la app emite
+  comprobantes fiscales reales en Producción. Se distribuye sin garantía
+  (ver [Licencia](#licencia)).
+- **Verificá el zip de Windows** antes de usarlo: cada Release publica una
+  atestación de procedencia que prueba que salió del CI de este repo.
+  Con la [CLI de GitHub](https://cli.github.com/):
+  `gh attestation verify FacturadorE-windows-<versión>.zip --repo FacundoTripelhorn/facturadorE`.
+- Vulnerabilidades: **no** abras un issue público; ver
+  [`SECURITY.md`](SECURITY.md).
 
 ## Licencia
 
