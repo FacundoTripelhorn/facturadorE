@@ -219,6 +219,19 @@ templates.env.globals["NIVELES"] = {
     Nivel.AVISO: "Aviso",
     Nivel.BLOQUEA: "Bloquea",
 }
+# Variante del badge compartido (ok / aviso / error / neutro) por estado.
+templates.env.globals["STATUS_BADGE"] = {
+    InvoiceStatus.DRAFT: "neutro",
+    InvoiceStatus.SUBMITTING: "neutro",
+    InvoiceStatus.AUTHORIZED: "ok",
+    InvoiceStatus.REJECTED: "error",
+    InvoiceStatus.UNKNOWN: "aviso",
+}
+templates.env.globals["NIVEL_BADGE"] = {
+    Nivel.OK: "ok",
+    Nivel.AVISO: "aviso",
+    Nivel.BLOQUEA: "error",
+}
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN

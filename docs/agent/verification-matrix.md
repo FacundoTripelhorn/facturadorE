@@ -47,7 +47,8 @@ finishing.
 | Localhost Host/Origin policy | `facturador/api/localhost_policy.py`, `facturador/api/app.py` | `uv run pytest tests/test_localhost_policy.py` |
 | CSRF browser forms | `facturador/api/csrf.py`, `facturador/web/` | `uv run pytest tests/test_csrf.py tests/test_web.py` |
 | ARCA clients (WSAA / WSFEX) | `facturador/arca/` | `uv run pytest tests/test_wsaa.py tests/test_wsfex.py` |
-| HTMX / HTML UI | `facturador/web/` | `uv run pytest tests/test_web.py` |
+| HTMX / HTML UI | `facturador/web/` | `uv run pytest tests/test_web.py tests/test_estilos.py` |
+| Styles | `facturador/web/static/app.css` | `uv run pytest tests/test_estilos.py`; compare before/after screenshots of the affected pages |
 | PDF layout / QR | `facturador/pdf/` | `uv run pytest tests/test_pdf.py` (fpdf2, pure Python; nothing to install beyond `uv sync`) |
 | Row ↔ SOAP mapping | `facturador/mappers.py`, `facturador/constants.py` | `uv run pytest tests/test_mappers.py tests/test_constants.py` |
 | Bootstrap config / certs / profiles | `facturador/config.py`, `facturador/profile.py` | `uv run pytest tests/test_config.py tests/test_profile.py` |

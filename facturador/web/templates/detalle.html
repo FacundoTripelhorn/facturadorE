@@ -40,25 +40,6 @@
   </div>
 </dialog>
 
-<style>
-  .acciones-pdf { display: flex; gap: 1rem; align-items: center; }
-  .modal-pdf {
-    width: min(960px, 94vw); height: 90vh; padding: 0; border: none;
-    border-radius: var(--radio); display: none; flex-direction: column;
-  }
-  .modal-pdf[open] { display: flex; }
-  .modal-pdf::backdrop { background: rgba(16, 28, 61, .55); }
-  /* ``.panel`` y otras clases fijan ``display``: ``hidden`` tiene que ganar. */
-  .modal-pdf [hidden] { display: none !important; }
-  .modal-pdf-barra {
-    display: flex; align-items: center; gap: 1rem; padding: .6rem 1rem;
-    border-bottom: 1px solid var(--borde);
-  }
-  .modal-pdf-barra strong { margin-right: auto; }
-  .modal-pdf-cuerpo { flex: 1; display: flex; flex-direction: column; padding: 1rem; }
-  .modal-pdf-cuerpo iframe { flex: 1; width: 100%; border: 1px solid var(--borde); }
-</style>
-
 <script>
 (function () {
   var pdfUrl = "/invoices/{{ f['id'] }}/pdf";
