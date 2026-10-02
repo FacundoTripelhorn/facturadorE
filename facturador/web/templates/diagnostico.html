@@ -19,7 +19,7 @@
     {% for c in chequeos %}
     <tr>
       <th scope="row">{{ c.titulo }}</th>
-      <td><span class="nivel {{ c.nivel }}">{{ NIVELES[c.nivel] }}</span></td>
+      <td><span class="badge {{ NIVEL_BADGE[c.nivel] }}">{{ NIVELES[c.nivel] }}</span></td>
       <td>
         {{ c.detalle }}
         {% if c.accion %}
@@ -59,18 +59,5 @@
     </form>
   </div>
 </section>
-
-<style>
-  table.diagnostico th { text-align: left; font-weight: 600; white-space: nowrap; width: 1%; }
-  table.diagnostico td:nth-child(2) { width: 1%; white-space: nowrap; }
-  table.diagnostico .accion { margin-top: .35rem; font-size: .92rem; }
-  table.diagnostico .accion form { display: inline; }
-  .nivel { display: inline-block; border-radius: 999px; padding: .1rem .6rem;
-           font-size: .8rem; font-weight: 650; }
-  .nivel.ok { background: var(--ok-fondo); color: var(--ok); }
-  .nivel.aviso { background: var(--aviso-fondo); color: var(--aviso); }
-  .nivel.bloquea { background: var(--error-fondo); color: var(--error); }
-  .acciones-arca { margin: 1rem 0 0; }
-</style>
 
 {% endblock %}

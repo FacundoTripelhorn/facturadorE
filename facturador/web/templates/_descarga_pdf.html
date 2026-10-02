@@ -4,14 +4,6 @@
    arriba de la página en lugar de guardar la respuesta de error como
    archivo. Sin JavaScript el link sigue descargando directo. Incluir una
    vez por página. #}
-<style>
-  .aviso-descarga-pdf > div { flex: 1; }
-  .aviso-descarga-pdf .cerrar-aviso {
-    background: transparent; color: inherit; border: none; padding: 0 .2rem;
-    font-size: 1.2rem; line-height: 1; font-weight: 700; cursor: pointer;
-  }
-  .aviso-descarga-pdf .cerrar-aviso:hover { background: transparent; opacity: .7; }
-</style>
 <script>
 (function () {
   if (window.__descargaPdfLista) { return; }

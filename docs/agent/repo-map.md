@@ -43,7 +43,7 @@ flowchart TB
 
   subgraph ui["UI assets"]
     TPL["facturador/web/templates/"]
-    STATIC["facturador/web/static/htmx.min.js"]
+    STATIC["facturador/web/static/<br/>htmx.min.js, app.css"]
   end
 
   subgraph deploy["Docker & launchers"]
@@ -174,12 +174,14 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 | All HTML routes (thin handlers) | `facturador/web/routes.py` |
 | Page templates | `facturador/web/templates/` |
 | HTMX (vendored, no CDN) | `facturador/web/static/htmx.min.js` |
+| Styles (single stylesheet: tokens, base, components, page tweaks; no `<style>` in templates) | `facturador/web/static/app.css` |
 | Invoice flow partials | `_datos_factura.html`, `revisar.html`, `detalle.html` |
 | Clients page | `clients.html` |
 | Settings page | `configuracion.html` |
 | Invoice list | `comprobantes.html`, `_listado.html` |
 | Base layout | `base.html`, `home.html` |
 | Frontend tests | `tests/test_web.py` |
+| Style guard (no `<style>`, no colors outside tokens) | `tests/test_estilos.py` |
 
 UI routes use the prefix `/ui/…` for mutating POSTs (Post/Redirect/Get). Domain errors render in partials, not via the JSON exception handlers in `api/app.py`.
 
@@ -289,6 +291,7 @@ in-process hot-switch).
 | API contract | `tests/test_api.py` |
 | Authorize / state machine | `tests/test_authorize.py` |
 | Web / HTMX flows | `tests/test_web.py` |
+| CSS guard | `tests/test_estilos.py` |
 | WSAA | `tests/test_wsaa.py` |
 | WSFEX client | `tests/test_wsfex.py` |
 | PDF | `tests/test_pdf.py` |
