@@ -5,7 +5,7 @@
 {# Con observaciones el CAE es igual de válido: amarillo, no rojo. #}
 <div class="panel {{ 'aviso' if motivos_obs else 'ok' }}">
   <div>
-    <span class="cae-grande num">Factura E {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} autorizada{% if motivos_obs %} con observaciones{% endif %}</span><br>
+    <span class="cae-grande">Factura E <span class="num">{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}</span> autorizada{% if motivos_obs %} con observaciones{% endif %}</span><br>
     CAE <span class="num">{{ f["cae"] }}</span>
     (vence {{ f["cae_fch_vto"] | fecha }})
     {% if motivos_obs %}
