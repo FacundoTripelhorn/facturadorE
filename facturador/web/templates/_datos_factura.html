@@ -23,4 +23,4 @@
     {% endfor %}
   </tbody>
 </table>
-<p class="total-revisar num">Total: {{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</p>
+<p class="total-revisar">Total: <span class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</span></p>

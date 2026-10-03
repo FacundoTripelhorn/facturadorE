@@ -4,7 +4,8 @@ Las plantillas no traen ``<style>`` ni colores en atributos ``style=``, y en
 ``app.css`` los colores (hex, ``rgb()``/``rgba()``, ``hsl()``) solo aparecen
 en el bloque de tokens, delimitado por ``/* tokens:inicio */`` y
 ``/* tokens:fin */``. El resto del archivo usa ``var(--…)``: un color nuevo
-pasa primero por un token con nombre.
+pasa primero por un token con nombre, definido en el tema claro y en el
+oscuro, y los pares de texto/fondo que usa la UI cumplen contraste AA.
 """
 
 from __future__ import annotations
@@ -77,16 +78,110 @@ def test_app_css_sin_colores_fuera_de_tokens():
     assert not sueltos, f"colores fuera del bloque de tokens: {sueltos}"
 
 
-def test_bloque_de_tokens_solo_declara_variables():
+_TEMA_OSCURO = "@media (prefers-color-scheme: dark)"
+
+
+def _declaraciones(bloque: str) -> dict[str, str]:
+    """``{propiedad: valor}`` de un bloque ``:root { … }`` sin las llaves."""
+    pares = [d.split(":", 1) for d in bloque.split(";") if d.strip()]
+    assert all(len(p) == 2 for p in pares), f"declaración inválida en: {bloque!r}"
+    return {k.strip(): v.strip() for k, v in pares}
+
+
+def _temas() -> tuple[dict[str, str], dict[str, str]]:
+    """Tokens del tema claro y del oscuro, como ``{--token: valor}``.
+
+    Forma esperada del bloque: ``:root { … }`` y después
+    ``@media (prefers-color-scheme: dark) { :root { … } }``, nada más."""
     tokens, _ = _partes_de_app_css()
-    cuerpo = _sin_comentarios(tokens).strip()
-    assert cuerpo.startswith(":root {") and cuerpo.endswith("}")
-    declaraciones = [
-        d.strip() for d in cuerpo[len(":root {") : -1].split(";") if d.strip()
-    ]
-    assert declaraciones
-    no_variables = [d for d in declaraciones if not d.startswith("--")]
+    patron = (
+        r"^:root\s*\{([^{}]*)\}\s*"
+        + re.escape(_TEMA_OSCURO)
+        + r"\s*\{\s*:root\s*\{([^{}]*)\}\s*\}$"
+    )
+    m = re.match(patron, _sin_comentarios(tokens).strip())
+    assert m, "el bloque de tokens debe ser :root { … } y su versión oscura"
+    return _declaraciones(m.group(1)), _declaraciones(m.group(2))
+
+
+def test_bloque_de_tokens_solo_declara_variables():
+    claro, oscuro = _temas()
+    assert claro.pop("color-scheme", None) == "light dark"
+    no_variables = [k for k in [*claro, *oscuro] if not k.startswith("--")]
     assert not no_variables, f"en los tokens solo van variables: {no_variables}"
+
+
+def test_cada_color_se_define_en_ambos_temas():
+    claro, oscuro = _temas()
+    colores = {k for k, v in claro.items() if _COLOR.search(v)}
+    assert colores
+    assert set(oscuro) == colores, (
+        f"faltan en oscuro: {sorted(colores - set(oscuro))}; "
+        f"sobran en oscuro: {sorted(set(oscuro) - colores)}"
+    )
+
+
+def _luminancia(hex_color: str) -> float:
+    h = hex_color.lstrip("#")
+    assert len(h) == 6, f"se espera #RRGGBB: {hex_color}"
+    canales = [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+    lineal = [
+        c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in canales
+    ]
+    return 0.2126 * lineal[0] + 0.7152 * lineal[1] + 0.0722 * lineal[2]
+
+
+def _contraste(a: str, b: str) -> float:
+    la, lb = sorted((_luminancia(a), _luminancia(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+# Texto (izquierda) sobre fondo (derecha) que la UI combina de verdad.
+_FONDOS_NEUTROS = (
+    "--fondo",
+    "--superficie",
+    "--superficie-sutil",
+    "--superficie-hover",
+    "--neutro-fondo",
+)
+_SEMANTICOS = ("ok", "aviso", "error")
+_PARES_DE_TEXTO = [
+    *[("--tinta", f) for f in (*_FONDOS_NEUTROS, "--input-fondo")],
+    *[("--tinta-suave", f) for f in _FONDOS_NEUTROS],
+    ("--acento", "--superficie"),
+    ("--acento", "--fondo"),
+    ("--acento", "--superficie-sutil"),
+    ("--acento", "--acento-tinte"),
+    ("--sobre-acento", "--acento"),
+    ("--sobre-acento", "--acento-hover"),
+    *[(f"--{s}", f"--{s}-fondo") for s in _SEMANTICOS],
+    *[(f"--{s}-tinta", f"--{s}-fondo") for s in _SEMANTICOS],
+    *[("--sobre-semantico", f"--{s}") for s in _SEMANTICOS],
+    ("--sobre-semantico", "--tinta-suave"),
+]
+
+
+def _valores(tema: str) -> dict[str, str]:
+    claro, oscuro = _temas()
+    return claro if tema == "claro" else {**claro, **oscuro}
+
+
+@pytest.mark.parametrize("tema", ["claro", "oscuro"])
+@pytest.mark.parametrize(("texto", "fondo"), _PARES_DE_TEXTO)
+def test_contraste_aa(tema: str, texto: str, fondo: str):
+    valores = _valores(tema)
+    ratio = _contraste(valores[texto], valores[fondo])
+    assert ratio >= 4.5, f"{tema}: {texto} sobre {fondo} = {ratio:.2f}:1 (< 4.5)"
+
+
+# Borde de los campos de formulario contra su relleno y lo que los rodea:
+# contraste de componentes no textuales (WCAG 1.4.11), mínimo 3:1.
+@pytest.mark.parametrize("tema", ["claro", "oscuro"])
+@pytest.mark.parametrize("fondo", ["--input-fondo", *_FONDOS_NEUTROS])
+def test_borde_de_campos_contraste_3_a_1(tema: str, fondo: str):
+    valores = _valores(tema)
+    ratio = _contraste(valores["--borde-control"], valores[fondo])
+    assert ratio >= 3, f"{tema}: --borde-control sobre {fondo} = {ratio:.2f}:1 (< 3)"
 
 
 def test_tokens_usados_estan_definidos():
@@ -115,6 +210,7 @@ def test_detector_de_colores():
 def test_base_enlaza_app_css(api):
     r = api.get("/clientes")
     assert '<link rel="stylesheet" href="/static/app.css">' in r.text
+    assert '<meta name="color-scheme" content="light dark">' in r.text
     css = api.get("/static/app.css")
     assert css.status_code == 200
     assert css.headers["content-type"].startswith("text/css")

@@ -1,5 +1,5 @@
 /* Estilos de toda la UI. Único archivo de CSS: las plantillas no traen
-   <style> propios.
+   <style> propios. Tema claro y oscuro según el sistema.
 
    Orden: tokens → base → componentes → ajustes por página.
    Los colores (hex, rgb/rgba, sombras) viven solo en el bloque de tokens;
@@ -7,70 +7,97 @@
    controla. Si un estilo existe dos veces, es un bug. */
 
 /* tokens:inicio */
+/* Paleta P5 «carbón y lila»: base neutra, un único acento (violeta) para
+   acciones, foco, links e ítems activos; semánticos aparte. El tema sigue
+   al sistema: cada color se define en claro y otra vez en oscuro. */
 :root {
-  /* Marca y superficies */
-  --marino: #101c3d;
-  --marino-2: #1b2b5e;
-  --fondo: #eef1f6;
-  --superficie: #ffffff;
-  --superficie-tenue: #fafbfd;
-  --superficie-hover: #f7f9fc;
-  --tinta: #182033;
-  --tinta-suave: #5b6474;
-  --sobre-color: #ffffff;
-  --borde: #e2e6ee;
-  --borde-fuerte: #b8c0cf;
-  --acento: #2452e0;
-  --acento-hover: #1c42b8;
-  --foco: rgba(36, 82, 224, .14);
+  color-scheme: light dark;
 
-  /* Semánticos */
-  --ok: #117a3d;
-  --ok-fondo: #e9f9f0;
-  --ok-borde: #a9e8c3;
-  --ok-tinta: #05502e;
-  --error: #b42318;
-  --error-fondo: #fef3f2;
-  --error-borde: #fecdca;
-  --error-tinta: #7a271a;
-  --aviso: #b54708;
-  --aviso-fondo: #fff7e6;
-  --aviso-borde: #fedf89;
-  --aviso-tinta: #7a2e0e;
-  --neutro-fondo: #eef1f6;
-  --neutro-panel-fondo: #f4f6fa;
-  --info-fondo: #eff4ff;
-  --info-borde: #c7d4f8;
-  --info-tinta: #1b2b5e;
+  /* Superficies y texto */
+  --fondo: #F5F5F7;
+  --superficie: #FFFFFF;
+  --superficie-sutil: #FAFAFB;
+  --superficie-hover: #F5F5F8;
+  --neutro-fondo: #F0F0F3;
+  --input-fondo: #FFFFFF;
+  --borde: #E3E3E8;
+  --borde-fuerte: #C6C7CF;
+  /* Borde de campos de formulario: ≥ 3:1 contra los fondos (WCAG 1.4.11). */
+  --borde-control: #868892;
+  --tinta: #1B1C21;
+  --tinta-suave: #5F616B;
 
-  /* Paso de revisión y tabs */
-  --revisar-cabecera: #f0f4ff;
-  --conteo-fondo: #e8ecf3;
-  --conteo-activo-fondo: #e3eaff;
+  /* Acento */
+  --acento: #5B44BE;
+  --acento-hover: #4B37A3;
+  --sobre-acento: #FFFFFF;
+  --acento-tinte: #EEECF8;
+  --anillo-foco: rgba(91, 68, 190, .16);
 
-  /* Header */
-  --header-tinta: #ffffff;
-  --header-tinta-suave: rgba(255, 255, 255, .75);
-  --header-destacado: #8fb0ff;
-  --header-boton-tinta: rgba(255, 255, 255, .9);
-  --header-boton-borde: rgba(255, 255, 255, .35);
-  --header-boton-borde-hover: rgba(255, 255, 255, .55);
-  --header-boton-fondo-hover: rgba(255, 255, 255, .1);
-  --env-homo-fondo: rgba(255, 205, 90, .15);
-  --env-homo-tinta: #ffd76e;
-  --env-homo-borde: rgba(255, 205, 90, .45);
-  --env-prod-fondo: rgba(255, 255, 255, .12);
-  --env-prod-tinta: #d7e4ff;
-  --env-prod-borde: rgba(215, 228, 255, .4);
+  /* Semánticos: color (íconos, badges), fondo, borde y texto de panel */
+  --ok: #117A3D;
+  --ok-fondo: #E9F9F0;
+  --ok-borde: #A9E8C3;
+  --ok-tinta: #05502E;
+  --aviso: #B54708;
+  --aviso-fondo: #FFF7E6;
+  --aviso-borde: #FEDF89;
+  --aviso-tinta: #7A2E0E;
+  --error: #B42318;
+  --error-fondo: #FEF3F2;
+  --error-borde: #FECDCA;
+  --error-tinta: #7A271A;
+  /* Texto e íconos sobre un relleno semántico o neutro sólido */
+  --sobre-semantico: #FFFFFF;
 
   /* Sombras y velos */
-  --sombra-card: 0 1px 3px rgba(16, 24, 40, .06), 0 8px 24px -18px rgba(16, 24, 40, .25);
-  --sombra-desplegable: 0 12px 32px -12px rgba(16, 24, 40, .35);
-  --sombra-boton: 0 1px 2px rgba(16, 24, 40, .15);
-  --spinner-pista: rgba(255, 255, 255, .4);
-  --velo-modal: rgba(16, 28, 61, .55);
+  --sombra-card: 0 1px 3px rgba(20, 21, 25, .06), 0 8px 24px -18px rgba(20, 21, 25, .25);
+  --sombra-desplegable: 0 12px 32px -12px rgba(20, 21, 25, .35);
+  --sombra-boton: 0 1px 2px rgba(20, 21, 25, .15);
+  --velo-modal: rgba(20, 21, 25, .55);
 
+  --fuente-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
   --radio: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #141519;
+    --superficie: #1C1E24;
+    --superficie-sutil: #202229;
+    --superficie-hover: #24262E;
+    --neutro-fondo: #22242B;
+    --input-fondo: #16181D;
+    --borde: #2E313A;
+    --borde-fuerte: #474B57;
+    --borde-control: #70747F;
+    --tinta: #ECEDF0;
+    --tinta-suave: #A1A5AF;
+
+    --acento: #B6A8F2;
+    --acento-hover: #C8BEF6;
+    --sobre-acento: #1A1433;
+    --acento-tinte: #2C2842;
+    --anillo-foco: rgba(182, 168, 242, .25);
+
+    --ok: #6FD69B;
+    --ok-fondo: #11301F;
+    --ok-borde: #1F5236;
+    --ok-tinta: #A9EBC4;
+    --aviso: #F2B35B;
+    --aviso-fondo: #33250F;
+    --aviso-borde: #5C4316;
+    --aviso-tinta: #F7D29E;
+    --error: #F28B82;
+    --error-fondo: #3A1714;
+    --error-borde: #64261F;
+    --error-tinta: #F8BDB7;
+    --sobre-semantico: #141519;
+
+    --sombra-card: 0 1px 2px rgba(0, 0, 0, .35);
+    --sombra-desplegable: 0 12px 32px -12px rgba(0, 0, 0, .7);
+    --sombra-boton: 0 1px 2px rgba(0, 0, 0, .4);
+    --velo-modal: rgba(0, 0, 0, .65);
+  }
 }
 /* tokens:fin */
 
@@ -82,7 +109,10 @@ body {
   background: var(--fondo); color: var(--tinta);
   line-height: 1.5; font-size: 15px;
 }
+/* Importes, CAE, números de comprobante y demás datos numéricos; los
+   encabezados de columna numérica (th.num) solo se alinean. */
 .num { font-variant-numeric: tabular-nums; }
+.num:not(th) { font-family: var(--fuente-mono); }
 a { color: var(--acento); font-weight: 550; }
 
 main { max-width: 980px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
@@ -96,12 +126,13 @@ label { display: block; margin: .9rem 0 .3rem; font-size: .78rem;
         letter-spacing: .04em; }
 input, select, textarea {
   width: 100%; padding: .6rem .75rem; font: inherit; color: inherit;
-  border: 1px solid var(--borde); border-radius: 8px; background: var(--superficie);
+  border: 1px solid var(--borde-control); border-radius: 8px;
+  background: var(--input-fondo);
   transition: border-color .1s, box-shadow .1s;
 }
 input:focus, select:focus {
   outline: none; border-color: var(--acento);
-  box-shadow: 0 0 0 3px var(--foco);
+  box-shadow: 0 0 0 3px var(--anillo-foco);
 }
 .fila { display: flex; gap: 1.1rem; flex-wrap: wrap; align-items: end; }
 .fila > div { flex: 1; min-width: 190px; }
@@ -117,8 +148,8 @@ input:focus, select:focus {
 
 /* ---- barra superior ---- */
 header {
-  background: linear-gradient(90deg, var(--marino), var(--marino-2));
-  color: var(--header-tinta); padding: 0 1.25rem;
+  background: var(--superficie); color: var(--tinta);
+  border-bottom: 1px solid var(--borde); padding: 0 1.25rem;
 }
 header .adentro {
   max-width: 980px; margin: 0 auto; display: flex; align-items: center;
@@ -131,15 +162,15 @@ header .titulo {
   font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em;
   margin-right: auto;
 }
-header .titulo span { color: var(--header-destacado); }
+header .titulo span { color: var(--acento); }
 header a {
-  color: var(--header-tinta-suave); text-decoration: none; font-weight: 600;
+  color: var(--tinta-suave); text-decoration: none; font-weight: 600;
   font-size: .92rem; padding: .35rem .1rem; border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
-header a:hover { color: var(--header-tinta); }
+header a:hover { color: var(--tinta); }
 header a[aria-current="page"] {
-  color: var(--header-tinta); border-bottom-color: var(--header-destacado);
+  color: var(--tinta); border-bottom-color: var(--acento);
 }
 .badge-env {
   border-radius: 999px;
@@ -148,27 +179,26 @@ header a[aria-current="page"] {
 }
 /* Homologación: aviso visible. */
 .badge-env.homo {
-  background: var(--env-homo-fondo); color: var(--env-homo-tinta);
-  border: 1px solid var(--env-homo-borde);
+  background: var(--aviso-fondo); color: var(--aviso);
+  border: 1px solid var(--aviso-borde);
 }
 /* Producción: distinta pero calmada — no grita, sí identifica. */
 .badge-env.prod {
-  background: var(--env-prod-fondo); color: var(--env-prod-tinta);
-  border: 1px solid var(--env-prod-borde);
+  background: var(--neutro-fondo); color: var(--tinta);
+  border: 1px solid var(--borde-fuerte);
 }
 .cambiar-ambiente {
   margin: 0; display: inline;
 }
 .cambiar-ambiente button {
-  background: transparent; border: 1px solid var(--header-boton-borde);
-  color: var(--header-boton-tinta); font: inherit; font-size: .75rem;
+  background: transparent; border: 1px solid var(--borde);
+  color: var(--tinta-suave); font: inherit; font-size: .75rem;
   font-weight: 650; padding: .18rem .65rem; border-radius: 999px;
   cursor: pointer; letter-spacing: .01em; white-space: nowrap;
 }
 .cambiar-ambiente button:hover {
-  background: var(--header-boton-fondo-hover);
-  border-color: var(--header-boton-borde-hover);
-  color: var(--header-tinta);
+  background: var(--superficie-hover); border-color: var(--borde-fuerte);
+  color: var(--tinta);
 }
 
 /* ---- menú desplegable (details/summary) ----
@@ -177,11 +207,11 @@ header a[aria-current="page"] {
 .menu-desplegable { position: relative; }
 .menu-desplegable > summary {
   list-style: none; cursor: pointer; display: flex; align-items: center;
-  gap: .25rem; color: var(--header-tinta-suave); padding: .35rem .15rem;
+  gap: .25rem; color: var(--tinta-suave); padding: .35rem .15rem;
 }
 .menu-desplegable > summary::-webkit-details-marker { display: none; }
 .menu-desplegable > summary:hover,
-.menu-desplegable[open] > summary { color: var(--header-tinta); }
+.menu-desplegable[open] > summary { color: var(--tinta); }
 .menu-desplegable .desplegable {
   position: absolute; right: 0; top: calc(100% + .35rem); z-index: 10;
   width: 22rem; max-width: calc(100vw - 2rem);
@@ -192,7 +222,7 @@ header a[aria-current="page"] {
 }
 .menu-desplegable .desplegable h2 {
   margin: 0; padding: .7rem 1rem; font-size: .85rem; font-weight: 700;
-  border-bottom: 1px solid var(--borde); background: var(--superficie-tenue);
+  border-bottom: 1px solid var(--borde); background: var(--superficie-sutil);
 }
 .menu-desplegable .item { padding: .7rem 1rem; border-bottom: 1px solid var(--borde);
                           font-size: .88rem; }
@@ -216,7 +246,7 @@ header a[aria-current="page"] {
 }
 .card > h2 {
   margin: 0; padding: 1rem 1.5rem; font-size: .95rem; font-weight: 700;
-  border-bottom: 1px solid var(--borde); background: var(--superficie-tenue);
+  border-bottom: 1px solid var(--borde); background: var(--superficie-sutil);
   display: flex; align-items: baseline; gap: .6rem;
 }
 .card > h2 .sub { color: var(--tinta-suave); font-weight: 450; font-size: .85rem; }
@@ -228,7 +258,7 @@ header a[aria-current="page"] {
 /* ---- botones: primario (por defecto) y secundario ---- */
 button {
   padding: .65rem 1.6rem; border: 0; border-radius: 8px; font: inherit;
-  font-weight: 650; background: var(--acento); color: var(--sobre-color);
+  font-weight: 650; background: var(--acento); color: var(--sobre-acento);
   cursor: pointer; margin-top: 1.2rem; box-shadow: var(--sombra-boton);
   transition: background .1s, transform .05s;
 }
@@ -244,7 +274,7 @@ button.secundario:hover {
 }
 
 .spinner { display: none; width: 1em; height: 1em; vertical-align: -.15em;
-           border: 2px solid var(--spinner-pista); border-top-color: var(--sobre-color);
+           border: 2px solid var(--borde-fuerte); border-top-color: var(--sobre-acento);
            border-radius: 50%; animation: girar .7s linear infinite; }
 .htmx-request .spinner, .spinner.htmx-request { display: inline-block; }
 .htmx-request button[type=submit] { opacity: .7; pointer-events: none; }
@@ -257,7 +287,7 @@ th {
   text-align: left; padding: .55rem .9rem; color: var(--tinta-suave);
   font-size: .7rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .06em; border-bottom: 1px solid var(--borde);
-  background: var(--superficie-tenue);
+  background: var(--superficie-sutil);
 }
 th:first-child, td:first-child { padding-left: 1.5rem; }
 th:last-child, td:last-child { padding-right: 1.5rem; }
@@ -283,14 +313,14 @@ td.num { white-space: nowrap; }
 .badge.error { background: var(--error-fondo); color: var(--error); }
 .badge.neutro { background: var(--neutro-fondo); color: var(--tinta-suave); }
 
-/* ---- paneles: ok / error / aviso / neutro / info ---- */
+/* ---- paneles: ok / error / aviso / neutro ---- */
 .panel { border-radius: var(--radio); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
          border: 1px solid; font-size: .95rem; display: flex; gap: .9rem;
          align-items: flex-start; }
 .panel::before {
   font-size: 1rem; font-weight: 800; width: 1.7rem; height: 1.7rem;
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; margin-top: .1rem; color: var(--sobre-color);
+  flex-shrink: 0; margin-top: .1rem; color: var(--sobre-semantico);
 }
 .panel.ok { background: var(--ok-fondo); border-color: var(--ok-borde); color: var(--ok-tinta); }
 .panel.ok::before { content: "✓"; background: var(--ok); }
@@ -303,13 +333,9 @@ td.num { white-space: nowrap; }
 }
 .panel.aviso::before { content: "!"; background: var(--aviso); }
 .panel.neutro {
-  background: var(--neutro-panel-fondo); border-color: var(--borde); color: var(--tinta-suave);
+  background: var(--neutro-fondo); border-color: var(--borde); color: var(--tinta-suave);
 }
 .panel.neutro::before { content: "i"; background: var(--tinta-suave); }
-.panel.info {
-  background: var(--info-fondo); border-color: var(--info-borde); color: var(--info-tinta);
-}
-.panel.info::before { content: "i"; background: var(--acento); }
 .panel .cae-grande { font-size: 1.1rem; font-weight: 750; }
 .panel a { color: inherit; font-weight: 700; }
 .panel p { margin: .4rem 0 0; }
@@ -317,7 +343,7 @@ td.num { white-space: nowrap; }
 
 /* ---- tabs ---- */
 .tabs { display: flex; gap: .25rem; padding: .6rem 1rem 0;
-        background: var(--superficie-tenue); border-bottom: 1px solid var(--borde); }
+        background: var(--superficie-sutil); border-bottom: 1px solid var(--borde); }
 .tabs a {
   text-decoration: none; color: var(--tinta-suave); font-weight: 600;
   font-size: .88rem; padding: .45rem .85rem .55rem;
@@ -326,11 +352,11 @@ td.num { white-space: nowrap; }
 .tabs a:hover { color: var(--tinta); }
 .tabs a[aria-current="page"] { color: var(--acento); border-bottom-color: var(--acento); }
 .tabs .conteo {
-  background: var(--conteo-fondo); color: var(--tinta-suave); border-radius: 999px;
+  background: var(--neutro-fondo); color: var(--tinta-suave); border-radius: 999px;
   padding: .05rem .45rem; font-size: .72rem; font-weight: 650;
   margin-left: .15rem;
 }
-.tabs a[aria-current="page"] .conteo { background: var(--conteo-activo-fondo); color: var(--acento); }
+.tabs a[aria-current="page"] .conteo { background: var(--acento-tinte); color: var(--acento); }
 
 /* ---- grilla de datos (revisión y constatación) ---- */
 .revisar-grid {
@@ -345,11 +371,11 @@ td.num { white-space: nowrap; }
 
 /* ---- header: avisos de ARCA en la campana ---- */
 .avisos-arca .contador {
-  background: var(--aviso); color: var(--sobre-color); border-radius: 999px;
+  background: var(--aviso); color: var(--sobre-semantico); border-radius: 999px;
   font-size: .7rem; font-weight: 750; min-width: 1.15rem; padding: 0 .3rem;
   text-align: center; line-height: 1.15rem;
 }
-.avisos-arca .item.no-leido { background: var(--info-fondo); }
+.avisos-arca .item.no-leido { background: var(--neutro-fondo); }
 .avisos-arca .item .meta { font-size: .75rem; color: var(--tinta-suave);
                            font-weight: 600; }
 .avisos-arca .item .leido { font-size: .75rem; color: var(--tinta-suave); }
@@ -364,11 +390,13 @@ form.marcar-leido button {
 form.marcar-leido button:hover { background: none; color: var(--acento-hover); }
 
 /* ---- emitir: importe destacado ---- */
-#imp_total { font-size: 1.55rem; font-weight: 650; padding: .45rem .75rem; }
+#imp_total {
+  font-size: 1.55rem; font-weight: 650; padding: .45rem .75rem;
+  font-family: var(--fuente-mono); font-variant-numeric: tabular-nums;
+}
 
 /* ---- paso de revisión (dos fases) ---- */
-.revisar { border-color: var(--info-borde); }
-.revisar > h2 { background: var(--revisar-cabecera); border-bottom-color: var(--info-borde); }
+.revisar > h2 { background: var(--neutro-fondo); }
 table.items-revisar th, table.items-revisar td { padding: .45rem .6rem; }
 table.items-revisar th:first-child, table.items-revisar td:first-child { padding-left: .6rem; }
 table.items-revisar th:last-child, table.items-revisar td:last-child { padding-right: .6rem; }
@@ -382,6 +410,7 @@ table.items-revisar th:last-child, table.items-revisar td:last-child { padding-r
 .modal-pdf {
   width: min(960px, 94vw); height: 90vh; padding: 0; border: none;
   border-radius: var(--radio); display: none; flex-direction: column;
+  background: var(--superficie); color: var(--tinta);
 }
 .modal-pdf[open] { display: flex; }
 .modal-pdf::backdrop { background: var(--velo-modal); }

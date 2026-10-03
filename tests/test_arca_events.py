@@ -100,7 +100,7 @@ def test_marcar_leido_que_no_se_puede_guardar_devuelve_false(tmp_path, monkeypat
 
 
 def _banner(html: str) -> list[str]:
-    return re.findall(r'<div class="panel info aviso-arca"', html)
+    return re.findall(r'<div class="panel neutro aviso-arca"', html)
 
 
 def _marcar_leido(api, aviso_id: str, referer: str = "/comprobantes"):

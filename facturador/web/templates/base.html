@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>facturador — {{ env_label }}</title>
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js"></script>
@@ -63,7 +64,7 @@
 </header>
 <main>
 {% for aviso in avisos_arca_no_leidos %}
-<div class="panel info aviso-arca" role="status">
+<div class="panel neutro aviso-arca" role="status">
   <div>
     <strong>Aviso de ARCA (código {{ aviso.code }}):</strong> {{ aviso.msg }}
     {% if aviso.first_seen %}<span class="visto">— recibido el {{ aviso.first_seen.astimezone().strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}
