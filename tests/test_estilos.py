@@ -161,13 +161,27 @@ _PARES_DE_TEXTO = [
 ]
 
 
+def _valores(tema: str) -> dict[str, str]:
+    claro, oscuro = _temas()
+    return claro if tema == "claro" else {**claro, **oscuro}
+
+
 @pytest.mark.parametrize("tema", ["claro", "oscuro"])
 @pytest.mark.parametrize(("texto", "fondo"), _PARES_DE_TEXTO)
 def test_contraste_aa(tema: str, texto: str, fondo: str):
-    claro, oscuro = _temas()
-    valores = claro if tema == "claro" else {**claro, **oscuro}
+    valores = _valores(tema)
     ratio = _contraste(valores[texto], valores[fondo])
     assert ratio >= 4.5, f"{tema}: {texto} sobre {fondo} = {ratio:.2f}:1 (< 4.5)"
+
+
+# Borde de los campos de formulario contra su relleno y lo que los rodea:
+# contraste de componentes no textuales (WCAG 1.4.11), mínimo 3:1.
+@pytest.mark.parametrize("tema", ["claro", "oscuro"])
+@pytest.mark.parametrize("fondo", ["--input-fondo", *_FONDOS_NEUTROS])
+def test_borde_de_campos_contraste_3_a_1(tema: str, fondo: str):
+    valores = _valores(tema)
+    ratio = _contraste(valores["--borde-control"], valores[fondo])
+    assert ratio >= 3, f"{tema}: --borde-control sobre {fondo} = {ratio:.2f}:1 (< 3)"
 
 
 def test_tokens_usados_estan_definidos():

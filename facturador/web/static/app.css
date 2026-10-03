@@ -22,6 +22,8 @@
   --input-fondo: #FFFFFF;
   --borde: #E3E3E8;
   --borde-fuerte: #C6C7CF;
+  /* Borde de campos de formulario: ≥ 3:1 contra los fondos (WCAG 1.4.11). */
+  --borde-control: #868892;
   --tinta: #1B1C21;
   --tinta-suave: #5F616B;
 
@@ -67,6 +69,7 @@
     --input-fondo: #16181D;
     --borde: #2E313A;
     --borde-fuerte: #474B57;
+    --borde-control: #70747F;
     --tinta: #ECEDF0;
     --tinta-suave: #A1A5AF;
 
@@ -123,7 +126,8 @@ label { display: block; margin: .9rem 0 .3rem; font-size: .78rem;
         letter-spacing: .04em; }
 input, select, textarea {
   width: 100%; padding: .6rem .75rem; font: inherit; color: inherit;
-  border: 1px solid var(--borde); border-radius: 8px; background: var(--input-fondo);
+  border: 1px solid var(--borde-control); border-radius: 8px;
+  background: var(--input-fondo);
   transition: border-color .1s, box-shadow .1s;
 }
 input:focus, select:focus {
