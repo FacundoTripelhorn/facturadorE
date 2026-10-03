@@ -9,15 +9,19 @@
 <script src="/static/htmx.min.js"></script>
 </head>
 <body>
+{% if env != "prod" %}
+<div class="franja-homologacion" role="note">
+  Homologación — los comprobantes que emitas acá no tienen validez fiscal
+</div>
+{% endif %}
 <header>
   <div class="adentro">
     <span class="titulo">factura<span>dor</span></span>
-    <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
-    <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
-    <a href="/constatacion" {% if request.url.path.startswith("/constatacion") %}aria-current="page"{% endif %}>Constatación de CAE</a>
-    <a href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
-    <a href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
-    <a href="/diagnostico" {% if request.url.path == "/diagnostico" %}aria-current="page"{% endif %}>Diagnóstico</a>
+    <nav class="principal" aria-label="Principal">
+      <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
+      <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
+      <a href="/constatacion" {% if request.url.path.startswith("/constatacion") %}aria-current="page"{% endif %}>Constatar CAE</a>
+    </nav>
     {% set sin_leer = avisos_arca_no_leidos | length %}
     <details class="menu-desplegable avisos-arca">
       <summary title="Avisos de ARCA"
@@ -49,16 +53,38 @@
         {% endfor %}
       </div>
     </details>
-    <span class="badge-env {{ env }}" data-env="{{ env }}">
-      {% if env == "prod" %}{{ env_label }} — validez fiscal{% else %}{{ env_label }} — sin valor fiscal{% endif %}
-    </span>
+    {% set en_engranaje = request.url.path in ("/clientes", "/configuracion", "/diagnostico") %}
+    <details class="menu-desplegable engranaje">
+      <summary title="Más opciones" aria-label="Más opciones"
+               {% if en_engranaje %}class="activo"{% endif %}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </summary>
+      <div class="desplegable">
+        <a class="item" href="/clientes" {% if request.url.path == "/clientes" %}aria-current="page"{% endif %}>Clientes</a>
+        <a class="item" href="/configuracion" {% if request.url.path == "/configuracion" %}aria-current="page"{% endif %}>Configuración</a>
+        <a class="item" href="/diagnostico" {% if request.url.path == "/diagnostico" %}aria-current="page"{% endif %}>Diagnóstico</a>
+      </div>
+    </details>
     {% if launcher_supervised %}
     <form class="cambiar-ambiente" method="post" action="/ui/cambiar-ambiente">
       {% include "_csrf_field.html" %}
-      <button type="submit" title="Cierra esta sesión y abre el selector de ambiente">
-        Cambiar ambiente
+      <button type="submit" class="pildora-env {{ env }}" data-env="{{ env }}"
+              title="Cambiar ambiente (cierra esta sesión)">
+        <span class="punto" aria-hidden="true"></span>{{ env_label }}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 16V4"/><path d="M3 8l4-4 4 4"/><path d="M17 8v12"/><path d="M21 16l-4 4-4-4"/>
+        </svg>
       </button>
     </form>
+    {% else %}
+    <span class="pildora-env {{ env }}" data-env="{{ env }}">
+      <span class="punto" aria-hidden="true"></span>{{ env_label }}
+    </span>
     {% endif %}
   </div>
 </header>

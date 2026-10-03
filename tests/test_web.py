@@ -895,7 +895,32 @@ def test_nav_incluye_configuracion(api):
 def test_nav_incluye_constatacion_de_cae(api):
     html = api.get("/").text
     assert 'href="/constatacion"' in html
-    assert "Constatación de CAE" in html
+    assert ">Constatar CAE</a>" in html
+
+
+def _engranaje(html: str) -> str:
+    inicio = html.index('<details class="menu-desplegable engranaje">')
+    return html[inicio : html.index("</details>", inicio)]
+
+
+def test_nav_tres_items_y_el_resto_bajo_el_engranaje(api):
+    html = api.get("/").text
+    nav = html[html.index('<nav class="principal"') : html.index("</nav>")]
+    for ruta in ("/", "/comprobantes", "/constatacion"):
+        assert f'href="{ruta}"' in nav
+    engranaje = _engranaje(html)
+    assert 'aria-label="Más opciones"' in engranaje
+    for ruta in ("/clientes", "/configuracion", "/diagnostico"):
+        assert f'href="{ruta}"' not in nav
+        assert f'href="{ruta}"' in engranaje
+    assert 'class="activo"' not in engranaje
+
+
+@pytest.mark.parametrize("ruta", ["/clientes", "/configuracion", "/diagnostico"])
+def test_engranaje_activo_en_sus_paginas(api, ruta):
+    engranaje = _engranaje(api.get(ruta).text)
+    assert 'class="activo"' in engranaje
+    assert f'href="{ruta}" aria-current="page"' in engranaje
 
 
 EMISOR_FORM_SEGUNDO = {
@@ -1055,17 +1080,21 @@ def _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca):
     return TestClient(app, base_url=loopback_base_url()), profile
 
 
+_FRANJA_HOMO = "Homologación — los comprobantes que emitas acá no tienen validez fiscal"
+
+
 @pytest.mark.parametrize(
-    ("environment", "label", "badge_extra"),
+    ("environment", "label"),
     [
-        (ArcaEnvironment.HOMO, "Homologación", "sin valor fiscal"),
-        (ArcaEnvironment.PROD, "Producción", "validez fiscal"),
+        (ArcaEnvironment.HOMO, "Homologación"),
+        (ArcaEnvironment.PROD, "Producción"),
     ],
 )
 def test_paginas_muestran_identidad_de_ambiente(
-    environment, label, badge_extra, tmp_path, test_cert_and_key, arca
+    environment, label, tmp_path, test_cert_and_key, arca
 ):
-    """Badge + título en lenguaje de negocio; sin paths ni secretos."""
+    """Píldora + título en lenguaje de negocio; franja solo en homologación;
+    sin paths ni secretos."""
     client, profile = _api_para_ambiente(
         environment, tmp_path, test_cert_and_key, arca
     )
@@ -1075,13 +1104,12 @@ def test_paginas_muestran_identidad_de_ambiente(
         assert r.status_code == 200, path
         assert f"<title>{titulo}</title>" in r.text
         assert f'data-env="{environment.value}"' in r.text
-        assert f'class="badge-env {environment.value}"' in r.text
+        assert f'class="pildora-env {environment.value}"' in r.text
         assert label in r.text
-        assert badge_extra in r.text
         if environment is ArcaEnvironment.PROD:
-            assert "sin valor fiscal" not in r.text
+            assert "franja-homologacion" not in r.text
         else:
-            assert "validez fiscal" not in r.text
+            assert _FRANJA_HOMO in r.text
         # Diagnóstico seguro: nada de raíces de perfil ni certificados.
         assert str(profile.paths.root) not in r.text
         assert "cert.crt" not in r.text
@@ -1098,7 +1126,8 @@ def test_produccion_muestra_avisos_de_seguridad_fiscal(
     for path in ("/", "/configuracion"):
         r = prod.get(path)
         assert r.status_code == 200, path
-        assert "validez fiscal" in r.text.lower()
+        # El copy puede partir la frase en dos líneas del template.
+        assert "validez fiscal" in " ".join(r.text.lower().split())
 
     _crear_cliente_por_form(prod)
     invoice_id = _generar_borrador(prod)
@@ -1563,6 +1592,8 @@ def test_cambiar_ambiente_solo_con_launcher(monkeypatch, api):
     assert home.status_code == 200
     assert "Cambiar ambiente" not in home.text
     assert 'action="/ui/cambiar-ambiente"' not in home.text
+    # Sin launcher la píldora es informativa: un span, sin botón.
+    assert '<span class="pildora-env homo" data-env="homo">' in home.text
 
     r = api.post("/ui/cambiar-ambiente", data=with_csrf(api))
     assert r.status_code == 422
@@ -1588,6 +1619,11 @@ def test_cambiar_ambiente_con_launcher_escribe_pedido_sin_hot_switch(
     assert home.status_code == 200
     assert "Cambiar ambiente" in home.text
     assert 'action="/ui/cambiar-ambiente"' in home.text
+    # La píldora de ambiente es el botón: un solo elemento, no dos.
+    form = home.text[home.text.index('action="/ui/cambiar-ambiente"') :]
+    form = form[: form.index("</form>")]
+    assert 'class="pildora-env homo"' in form
+    assert 'title="Cambiar ambiente (cierra esta sesión)"' in form
 
     before = client.app.state.profile.environment
     before_cfg = client.app.state.service.config.env
