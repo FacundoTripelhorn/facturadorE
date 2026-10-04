@@ -206,7 +206,8 @@ nav.principal a[aria-current="page"] {
 }
 form.cambiar-ambiente { margin: 0; display: inline-flex; }
 button.pildora-env { margin: 0; box-shadow: none; cursor: pointer; }
-button.pildora-env:hover { opacity: .85; }
+/* Hover sin opacidad: atenuar texto y fondo juntos bajaría el contraste. */
+button.pildora-env:hover { box-shadow: 0 0 0 2px var(--borde-fuerte); }
 button.pildora-env:focus-visible {
   outline: 2px solid var(--acento); outline-offset: 2px;
 }
