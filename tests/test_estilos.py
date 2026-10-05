@@ -158,6 +158,7 @@ _PARES_DE_TEXTO = [
     *[(f"--{s}-tinta", f"--{s}-fondo") for s in _SEMANTICOS],
     *[("--sobre-semantico", f"--{s}") for s in _SEMANTICOS],
     ("--sobre-semantico", "--tinta-suave"),
+    ("--prod-texto", "--prod-fondo"),
 ]
 
 

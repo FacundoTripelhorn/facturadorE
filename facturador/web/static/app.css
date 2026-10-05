@@ -49,6 +49,9 @@
   --error-tinta: #7A271A;
   /* Texto e íconos sobre un relleno semántico o neutro sólido */
   --sobre-semantico: #FFFFFF;
+  /* Píldora de producción: roja y sólida */
+  --prod-fondo: #B42318;
+  --prod-texto: #FFFFFF;
 
   /* Sombras y velos */
   --sombra-card: 0 1px 3px rgba(20, 21, 25, .06), 0 8px 24px -18px rgba(20, 21, 25, .25);
@@ -92,6 +95,8 @@
     --error-borde: #64261F;
     --error-tinta: #F8BDB7;
     --sobre-semantico: #141519;
+    --prod-fondo: #F28B82;
+    --prod-texto: #3A1714;
 
     --sombra-card: 0 1px 2px rgba(0, 0, 0, .35);
     --sombra-desplegable: 0 12px 32px -12px rgba(0, 0, 0, .7);
@@ -146,7 +151,15 @@ input:focus, select:focus {
 
 /* ==== componentes ==== */
 
-/* ---- barra superior ---- */
+/* ---- franja de homologación (arriba del header) ---- */
+.franja-homologacion {
+  background: var(--aviso-fondo); color: var(--aviso);
+  border-bottom: 1px solid var(--aviso-borde);
+  text-align: center; font-size: .78rem; font-weight: 650;
+  padding: .3rem 1.25rem;
+}
+
+/* ---- barra superior: wordmark · navegación · campana · engranaje · ambiente ---- */
 header {
   background: var(--superficie); color: var(--tinta);
   border-bottom: 1px solid var(--borde); padding: 0 1.25rem;
@@ -155,50 +168,48 @@ header .adentro {
   max-width: 980px; margin: 0 auto; display: flex; align-items: center;
   /* En ventanas angostas el menú baja a una segunda línea en vez de
      cortarse contra el borde. */
-  flex-wrap: wrap; column-gap: 1.25rem; row-gap: .15rem;
+  flex-wrap: wrap; column-gap: 1.1rem; row-gap: .15rem;
   min-height: 3.4rem; padding: .35rem 0;
 }
-header .titulo {
-  font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em;
-  margin-right: auto;
-}
+header .titulo { font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em; }
 header .titulo span { color: var(--acento); }
-header a {
+nav.principal {
+  display: flex; flex-wrap: wrap; column-gap: 1.25rem; margin-right: auto;
+}
+nav.principal a {
   color: var(--tinta-suave); text-decoration: none; font-weight: 600;
   font-size: .92rem; padding: .35rem .1rem; border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
-header a:hover { color: var(--tinta); }
-header a[aria-current="page"] {
+nav.principal a:hover { color: var(--tinta); }
+nav.principal a[aria-current="page"] {
   color: var(--tinta); border-bottom-color: var(--acento);
 }
-.badge-env {
-  border-radius: 999px;
-  padding: .18rem .75rem; font-size: .75rem; font-weight: 650;
-  letter-spacing: .02em; white-space: nowrap;
+
+/* ---- píldora de ambiente: punto + nombre (+ ícono si cambia de ambiente) ---- */
+.pildora-env {
+  display: inline-flex; align-items: center; gap: .45rem;
+  border-radius: 999px; border: 1px solid; padding: .2rem .7rem;
+  font: inherit; font-size: .75rem; font-weight: 650; line-height: 1.4;
+  white-space: nowrap;
 }
-/* Homologación: aviso visible. */
-.badge-env.homo {
-  background: var(--aviso-fondo); color: var(--aviso);
-  border: 1px solid var(--aviso-borde);
+.pildora-env .punto {
+  width: .5rem; height: .5rem; border-radius: 50%; background: currentColor;
 }
-/* Producción: distinta pero calmada — no grita, sí identifica. */
-.badge-env.prod {
-  background: var(--neutro-fondo); color: var(--tinta);
-  border: 1px solid var(--borde-fuerte);
+/* Homologación: ámbar tintado. */
+.pildora-env.homo {
+  background: var(--aviso-fondo); color: var(--aviso); border-color: var(--aviso-borde);
 }
-.cambiar-ambiente {
-  margin: 0; display: inline;
+/* Producción: rojo sólido, para no confundirla con un badge de error tintado. */
+.pildora-env.prod {
+  background: var(--prod-fondo); color: var(--prod-texto); border-color: var(--prod-fondo);
 }
-.cambiar-ambiente button {
-  background: transparent; border: 1px solid var(--borde);
-  color: var(--tinta-suave); font: inherit; font-size: .75rem;
-  font-weight: 650; padding: .18rem .65rem; border-radius: 999px;
-  cursor: pointer; letter-spacing: .01em; white-space: nowrap;
-}
-.cambiar-ambiente button:hover {
-  background: var(--superficie-hover); border-color: var(--borde-fuerte);
-  color: var(--tinta);
+form.cambiar-ambiente { margin: 0; display: inline-flex; }
+button.pildora-env { margin: 0; box-shadow: none; cursor: pointer; }
+/* Hover sin opacidad: atenuar texto y fondo juntos bajaría el contraste. */
+button.pildora-env:hover { box-shadow: 0 0 0 2px var(--borde-fuerte); }
+button.pildora-env:focus-visible {
+  outline: 2px solid var(--acento); outline-offset: 2px;
 }
 
 /* ---- menú desplegable (details/summary) ----
@@ -208,10 +219,13 @@ header a[aria-current="page"] {
 .menu-desplegable > summary {
   list-style: none; cursor: pointer; display: flex; align-items: center;
   gap: .25rem; color: var(--tinta-suave); padding: .35rem .15rem;
+  border-bottom: 2px solid transparent;
 }
 .menu-desplegable > summary::-webkit-details-marker { display: none; }
 .menu-desplegable > summary:hover,
 .menu-desplegable[open] > summary { color: var(--tinta); }
+/* Activo como un ítem de la navegación (p. ej. el engranaje en Clientes). */
+.menu-desplegable > summary.activo { color: var(--tinta); border-bottom-color: var(--acento); }
 .menu-desplegable .desplegable {
   position: absolute; right: 0; top: calc(100% + .35rem); z-index: 10;
   width: 22rem; max-width: calc(100vw - 2rem);
@@ -227,6 +241,13 @@ header a[aria-current="page"] {
 .menu-desplegable .item { padding: .7rem 1rem; border-bottom: 1px solid var(--borde);
                           font-size: .88rem; }
 .menu-desplegable .item:last-child { border-bottom: 0; }
+.menu-desplegable a.item {
+  display: block; color: var(--tinta); text-decoration: none; font-weight: 550;
+}
+.menu-desplegable a.item:hover { background: var(--superficie-hover); }
+.menu-desplegable a.item[aria-current="page"] { color: var(--acento); font-weight: 650; }
+/* El engranaje solo lista tres páginas: un desplegable angosto. */
+.engranaje .desplegable { width: 14rem; }
 @media (max-width: 640px) {
   /* El menú puede bajar de línea y dejar el desplegable a la izquierda:
      se ancla al header, a todo el ancho, en vez de salirse. */
