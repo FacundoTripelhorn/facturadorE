@@ -40,14 +40,18 @@ def test_evento_codigo_cero_es_sin_novedades(api, arca, test_config):
     assert "Aviso de ARCA" not in api.get("/comprobantes").text
 
 
-def test_evento_de_arca_se_muestra_en_toda_la_ui(api, arca):
+def test_evento_de_arca_se_muestra_en_la_campana_de_toda_la_ui(api, arca):
     arca.events = [("39", "A partir del 01/12 se exigira un campo nuevo")]
     invoice_id = _emitir(api)
 
-    for url in ("/comprobantes", f"/facturas/{invoice_id}"):
+    for url in ("/", "/comprobantes", f"/facturas/{invoice_id}"):
         html = api.get(url).text
-        assert "Aviso de ARCA (código 39):" in html
-        assert "A partir del 01/12 se exigira un campo nuevo" in html
+        campana = _campana(html)
+        assert "Código 39" in campana
+        assert "A partir del 01/12 se exigira un campo nuevo" in campana
+        assert '<span class="contador">1</span>' in html
+        # La campana es el único lugar: no hay paneles de avisos en la página.
+        assert html.count("A partir del 01/12 se exigira un campo nuevo") == 1
 
 
 def test_el_aviso_desaparece_cuando_arca_deja_de_mandarlo(api, arca):
@@ -99,8 +103,20 @@ def test_marcar_leido_que_no_se_puede_guardar_devuelve_false(tmp_path, monkeypat
 # --- leídos: banner, campana y desplegable ---
 
 
-def _banner(html: str) -> list[str]:
-    return re.findall(r'<div class="panel neutro aviso-arca"', html)
+def _campana(html: str) -> str:
+    inicio = html.index('<details class="menu-desplegable avisos-arca">')
+    return html[inicio : html.index("</details>", inicio)]
+
+
+def _linea_emitir(html: str) -> str | None:
+    """Texto del recordatorio compacto de Emitir, o None si no está."""
+    m = re.search(
+        r'<div class="panel neutro compacto avisos-pendientes" role="status">'
+        r"\s*<div>(.*?)</div>",
+        html,
+        re.DOTALL,
+    )
+    return m.group(1) if m else None
 
 
 def _marcar_leido(api, aviso_id: str, referer: str = "/comprobantes"):
@@ -122,9 +138,14 @@ def test_aviso_nuevo_banner_y_contador(api, arca):
     _llamada_wsfex(api)
 
     html = api.get("/comprobantes").text
-    assert len(_banner(html)) == 2
+    assert _linea_emitir(html) is None  # el recordatorio es solo de Emitir
     assert '<span class="contador">2</span>' in html
     assert 'aria-label="Avisos de ARCA: 2 sin leer"' in html
+
+    emitir = api.get("/").text
+    assert _linea_emitir(emitir) == (
+        "2 avisos de ARCA sin leer — revisalos en la campana antes de emitir."
+    )
 
 
 def test_marcar_leido_saca_el_banner_y_queda_en_el_desplegable(
@@ -138,10 +159,17 @@ def test_marcar_leido_saca_el_banner_y_queda_en_el_desplegable(
     assert r.headers["location"] == "/clientes?x=1"
 
     html = api.get("/comprobantes").text
-    assert len(_banner(html)) == 1
-    assert "Aviso de ARCA (código 39)" not in html  # sin banner
-    assert "Mantenimiento el sabado" in html  # sigue en el desplegable
+    assert "Mantenimiento el sabado" in _campana(html)  # sigue en el desplegable
     assert '<span class="contador">1</span>' in html
+    assert _linea_emitir(api.get("/").text) == (
+        "1 aviso de ARCA sin leer — revisalo en la campana antes de emitir."
+    )
+
+    # Con el último leído, el recordatorio de Emitir desaparece.
+    _marcar_leido(api, _id(test_config, "40"), referer="/")
+    emitir = api.get("/").text
+    assert _linea_emitir(emitir) is None
+    assert 'class="contador"' not in emitir
 
 
 def test_leido_sobrevive_a_nuevas_respuestas_y_a_reiniciar(api, arca, test_config):
@@ -154,10 +182,10 @@ def test_leido_sobrevive_a_nuevas_respuestas_y_a_reiniciar(api, arca, test_confi
     # Lo que se lee de disco es lo que vería la app al reiniciar.
     (aviso,) = load_events(test_config.paths.arca_events).events
     assert aviso.read
-    html = api.get("/comprobantes").text
-    assert _banner(html) == []
+    html = api.get("/").text
+    assert _linea_emitir(html) is None
     assert 'class="contador"' not in html
-    assert "Leído" in html
+    assert "Leído" in _campana(html)
 
 
 def test_mismo_codigo_con_otro_texto_vuelve_a_no_leido(api, arca, test_config):
@@ -169,7 +197,9 @@ def test_mismo_codigo_con_otro_texto_vuelve_a_no_leido(api, arca, test_config):
     _llamada_wsfex(api)
 
     html = api.get("/comprobantes").text
-    assert "Aviso de ARCA (código 39):</strong> Mantenimiento pasado al domingo" in html
+    campana = _campana(html)
+    assert 'class="item no-leido"' in campana
+    assert "Mantenimiento pasado al domingo" in campana
     assert "Mantenimiento el sabado" not in html
 
 
@@ -186,8 +216,8 @@ def test_aviso_que_arca_deja_de_mandar_vuelve_como_nuevo(api, arca, test_config)
 
     arca.events = [("39", "Mantenimiento el sabado")]
     _llamada_wsfex(api)
-    html = api.get("/comprobantes").text
-    assert len(_banner(html)) == 1
+    html = api.get("/").text
+    assert _linea_emitir(html) is not None
     assert '<span class="contador">1</span>' in html
 
 
@@ -315,7 +345,7 @@ def test_fecha_fuera_de_rango_no_rompe_la_pagina(api, arca, test_config):
 
     r = api.get("/comprobantes")
     assert r.status_code == 200
-    assert "Aviso de ARCA (código 39):" in r.text
+    assert "Código 39" in _campana(r.text)  # el desplegable formatea la fecha
 
 
 def test_sin_avisos_la_campana_no_tiene_contador(api, arca):

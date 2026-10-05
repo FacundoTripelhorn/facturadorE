@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% set sin_leer = avisos_arca_no_leidos | length %}
+{% if sin_leer %}
+{# Los avisos se leen en la campana; acá solo se recuerdan antes de emitir. #}
+<div class="panel neutro compacto avisos-pendientes" role="status">
+  <div>{% if sin_leer == 1 %}1 aviso de ARCA sin leer — revisalo{% else %}{{ sin_leer }} avisos de ARCA sin leer — revisalos{% endif %} en la campana antes de emitir.</div>
+</div>
+{% endif %}
+
 {% if aviso %}
 <div class="panel neutro"><div>{{ aviso }}</div></div>
 {% endif %}

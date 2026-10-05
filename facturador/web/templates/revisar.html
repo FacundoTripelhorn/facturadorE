@@ -21,6 +21,11 @@
 </div>
 {% endif %}
 
+{# Solo UI: no va al PDF ni a ARCA. #}
+<p class="linea-ambiente {{ env }}" data-env="{{ env }}">
+  <span class="punto" aria-hidden="true"></span>
+  {% if env == "prod" %}{{ env_label }} — este comprobante tiene validez fiscal{% else %}{{ env_label }} — sin validez fiscal{% endif %}
+</p>
 <section class="card revisar">
   <h2>Revisar antes de enviar
     <span class="sub">borrador — nada viajó a ARCA todavía</span>

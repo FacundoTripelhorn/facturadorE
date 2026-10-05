@@ -89,18 +89,6 @@
   </div>
 </header>
 <main>
-{% for aviso in avisos_arca_no_leidos %}
-<div class="panel neutro aviso-arca" role="status">
-  <div>
-    <strong>Aviso de ARCA (código {{ aviso.code }}):</strong> {{ aviso.msg }}
-    {% if aviso.first_seen %}<span class="visto">— recibido el {{ aviso.first_seen.astimezone().strftime("%d/%m/%Y %H:%M") }}</span>{% endif %}
-    <form class="marcar-leido" method="post" action="/ui/avisos-arca/{{ aviso.id }}/leido">
-      {% include "_csrf_field.html" %}
-      <button type="submit">Marcar como leído</button>
-    </form>
-  </div>
-</div>
-{% endfor %}
 {% block content %}{% endblock %}
 </main>
 </body>
