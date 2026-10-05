@@ -24,6 +24,8 @@ from typing import TextIO
 BACKEND_FLAG = "--backend"
 LAUNCHER_LOG = "launcher.log"
 ICON_NAME = "facturadore.ico"
+# La escribe build.ps1: el tag del release o dev-<sha>.
+VERSION_NAME = "version.txt"
 # El log del launcher se recorta al abrir si pasó este tamaño.
 _LOG_MAX_BYTES = 1_000_000
 
@@ -66,6 +68,18 @@ def app_icon_path() -> Path | None:
         return None
     icon = base / ICON_NAME
     return icon if icon.is_file() else None
+
+
+def build_version() -> str | None:
+    """Versión con la que se armó el exe; None fuera del exe o si falta."""
+    base = bundle_dir()
+    if base is None:
+        return None
+    try:
+        version = (base / VERSION_NAME).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    return version or None
 
 
 def set_window_icon(root: object) -> None:

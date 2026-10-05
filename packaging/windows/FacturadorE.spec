@@ -7,19 +7,15 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import (
-    collect_data_files,
-    collect_submodules,
-    copy_metadata,
-)
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 HERE = Path(SPECPATH)
 BUILD = HERE / "build"
 
 datas = collect_data_files("facturador")  # templates, static, fonts, schema.sql
-# Versión de la app en "Copiar detalle técnico" de la ventana de error.
-datas += copy_metadata("facturador")
 datas += [(str(BUILD / "facturadore.ico"), ".")]
+# Versión del build (la escribe build.ps1) para la ventana de error.
+datas += [(str(BUILD / "version.txt"), ".")]
 datas += [(str(p), "bin") for p in sorted((BUILD / "bin").iterdir())]
 
 hiddenimports = collect_submodules("uvicorn") + [

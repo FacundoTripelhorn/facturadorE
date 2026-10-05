@@ -21,7 +21,7 @@ from enum import StrEnum
 from importlib import metadata
 
 from ..constants import ArcaEnvironment
-from .frozen import has_interactive_terminal
+from .frozen import build_version, has_interactive_terminal
 from .theme import MARGEN
 
 _log = logging.getLogger(__name__)
@@ -55,6 +55,11 @@ def dialogs_enabled() -> bool:
 
 
 def app_version() -> str:
+    """En el exe, la versión del build (tag o dev-<sha>); desde el código,
+    la del paquete."""
+    bundled = build_version()
+    if bundled:
+        return bundled
     try:
         return metadata.version("facturador")
     except metadata.PackageNotFoundError:

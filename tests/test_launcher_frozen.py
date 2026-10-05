@@ -30,6 +30,23 @@ def congelado(monkeypatch, tmp_path):
     return bundle
 
 
+def test_version_del_build_en_el_exe(congelado):
+    from facturador.launcher.failure_window import app_version
+
+    (congelado / frozen.VERSION_NAME).write_text("dev-ee54723", encoding="utf-8")
+    assert frozen.build_version() == "dev-ee54723"
+    assert app_version() == "dev-ee54723"
+
+
+def test_version_sin_archivo_usa_la_del_paquete(congelado):
+    from importlib import metadata
+
+    from facturador.launcher.failure_window import app_version
+
+    assert frozen.build_version() is None
+    assert app_version() == metadata.version("facturador")
+
+
 def test_backend_fuera_del_exe_usa_python_m_facturador():
     assert build_backend_command() == [sys.executable, "-m", "facturador"]
 

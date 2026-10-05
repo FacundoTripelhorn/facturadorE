@@ -42,6 +42,10 @@ try {
     Copy-Item (Join-Path $AgeDir "age-keygen.exe") (Join-Path $Build "bin")
     Copy-Item (Join-Path $AgeDir "LICENSE") (Join-Path $Build "bin\age-LICENSE.txt")
 
+    # Versión del build (tag o dev-<sha>): la muestra "Copiar detalle
+    # técnico" en la ventana de error. pyproject.toml no la sigue.
+    Set-Content -Path (Join-Path $Build "version.txt") -Value $Version -Encoding ascii -NoNewline
+
     uv run pyinstaller --noconfirm --clean `
         --distpath $Dist `
         --workpath (Join-Path $Build "pyinstaller") `
