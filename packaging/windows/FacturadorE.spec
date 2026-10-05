@@ -14,12 +14,15 @@ BUILD = HERE / "build"
 
 datas = collect_data_files("facturador")  # templates, static, fonts, schema.sql
 datas += [(str(BUILD / "facturadore.ico"), ".")]
+# Versión del build (la escribe build.ps1) para la ventana de error.
+datas += [(str(BUILD / "version.txt"), ".")]
 datas += [(str(p), "bin") for p in sorted((BUILD / "bin").iterdir())]
 
 hiddenimports = collect_submodules("uvicorn") + [
     "tkinter",
-    "tkinter.ttk",
-    "tkinter.messagebox",
+    "tkinter.font",
+    # Ventanas del launcher: formas y marca dibujadas con Pillow.
+    "PIL.ImageTk",
 ]
 
 a = Analysis(

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 
 from ..constants import ArcaEnvironment
-from .frozen import set_window_icon, stdin_is_tty
+from .frozen import stdin_is_tty
+from .theme import MARGEN
 
 # Títulos = EnvironmentProfile.display_name (Homologación / Producción).
 _HOMO_DESCRIPTION = (
@@ -60,17 +62,22 @@ def choose_environment(
     prompt_tty: Callable[[Sequence[EnvironmentOption]], ArcaEnvironment | None]
     | None = None,
     force_tty: bool = False,
+    current: ArcaEnvironment | None = None,
 ) -> ArcaEnvironment | None:
     """Pide Homologación o Producción; ``None`` si el usuario cancela.
 
     La pantalla gráfica es el camino principal; el menú TTY es respaldo
     cuando no hay toolkit/display (o con ``force_tty=True`` en tests).
+
+    ``current`` es el ambiente en uso cuando el pedido viene de "Cambiar
+    ambiente": la ventana preselecciona el otro. Si no, preselecciona el
+    último que abrió bien (o Homologación).
     """
     choices = tuple(options) if options is not None else ENVIRONMENT_OPTIONS
     if not choices:
         raise ValueError("El chooser necesita al menos una opción de ambiente.")
 
-    gui = prompt_gui or prompt_environment_gui
+    gui = prompt_gui or _default_gui(choices, current)
     tty = prompt_tty or prompt_environment_tty
 
     if force_tty:
@@ -82,6 +89,31 @@ def choose_environment(
         if stdin_is_tty():
             return tty(choices)
         raise
+
+
+def _default_gui(
+    choices: Sequence[EnvironmentOption],
+    current: ArcaEnvironment | None,
+) -> Callable[[Sequence[EnvironmentOption]], ArcaEnvironment | None]:
+    """La ventana con la preselección resuelta."""
+    from .last_environment import read_last_environment
+
+    environments = [o.environment for o in choices]
+    if current is not None:
+        others = [e for e in environments if e is not current]
+        return partial(
+            prompt_environment_gui,
+            selected=others[0] if others else current,
+            current=current,
+        )
+    last_used = read_last_environment()
+    if last_used not in environments:
+        last_used = None
+    return partial(
+        prompt_environment_gui,
+        selected=last_used or ArcaEnvironment.HOMO,
+        last_used=last_used,
+    )
 
 
 class ChooserUnavailable(RuntimeError):
@@ -123,82 +155,101 @@ def prompt_environment_tty(
 
 def prompt_environment_gui(
     options: Sequence[EnvironmentOption],
+    *,
+    selected: ArcaEnvironment | None = None,
+    current: ArcaEnvironment | None = None,
+    last_used: ArcaEnvironment | None = None,
 ) -> ArcaEnvironment | None:
-    """Ventana nativa: dos opciones de negocio; cerrar cancela."""
-    try:
-        import tkinter
-        from tkinter import ttk
-    except Exception as exc:
-        raise ChooserUnavailable("tkinter no disponible") from exc
+    """Ventana del selector: tarjetas seleccionables y un botón "Abrir …".
 
-    selection: list[ArcaEnvironment | None] = [None]
-
+    ``selected`` es la tarjeta preseleccionada (por defecto, la primera).
+    En un cambio de ambiente, ``current`` marca el actual con "Actual"; si
+    no, ``last_used`` marca el último que abrió bien con "Último usado".
+    Click selecciona; doble click o Enter abre; ↑/↓ cambian la selección;
+    Esc, "Cancelar" o la X cancelan.
+    """
     try:
-        root = tkinter.Tk()
+        from .widgets import PUNTO, Boton, Tarjeta, Ventana
+
+        ventana = Ventana()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
-    set_window_icon(root)
 
-    root.title("FacturadorE")
-    root.resizable(False, False)
+    opciones = list(options)
+    elegidas = [o.environment for o in opciones]
+    indice = [elegidas.index(selected) if selected in elegidas else 0]
+    resultado: list[ArcaEnvironment | None] = [None]
+    v = ventana
 
-    frame = ttk.Frame(root, padding=20)
-    frame.grid(row=0, column=0, sticky="nsew")
+    def _abrir() -> None:
+        resultado[0] = opciones[indice[0]].environment
+        v.cerrar()
 
-    ttk.Label(
-        frame,
-        text="FacturadorE",
-        font=("Segoe UI", 16, "bold"),
-    ).grid(row=0, column=0, sticky="w", pady=(0, 4))
-    ttk.Label(
-        frame,
-        text="Elegí el ambiente",
-        font=("Segoe UI", 11),
-    ).grid(row=1, column=0, sticky="w", pady=(0, 16))
+    def _seleccionar(i: int) -> None:
+        indice[0] = i
+        for j, tarjeta in enumerate(tarjetas):
+            tarjeta.seleccionar(j == i)
+        abrir.cambiar_texto(f"Abrir {opciones[i].title}")
 
-    def _select(environment: ArcaEnvironment) -> None:
-        selection[0] = environment
-        root.destroy()
+    def _etiqueta(environment: ArcaEnvironment) -> str | None:
+        if current is not None:
+            return "Actual" if environment is current else None
+        return "Último usado" if environment is last_used else None
 
-    def _bind_select(environment: ArcaEnvironment) -> Callable[[], None]:
-        def _on_click() -> None:
-            _select(environment)
-
-        return _on_click
-
-    for row, option in enumerate(options, start=2):
-        card = ttk.Frame(frame, padding=12, relief="solid", borderwidth=1)
-        card.grid(row=row, column=0, sticky="ew", pady=6)
-        ttk.Label(
-            card,
-            text=option.title,
-            font=("Segoe UI", 12, "bold"),
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            card,
-            text=option.description,
-            wraplength=420,
-            justify="left",
-        ).grid(row=1, column=0, sticky="w", pady=(6, 10))
-        ttk.Button(
-            card,
-            text=f"Abrir {option.title}",
-            command=_bind_select(option.environment),
-        ).grid(row=2, column=0, sticky="w")
-
-    ttk.Button(frame, text="Cancelar", command=root.destroy).grid(
-        row=2 + len(options), column=0, sticky="e", pady=(12, 0)
+    v.texto(v.contenido, "Elegí el ambiente", tamanio=17, negrita=True).pack(
+        side="top", anchor="w", padx=v.px(MARGEN), pady=(0, v.px(14 - MARGEN))
     )
 
-    root.protocol("WM_DELETE_WINDOW", root.destroy)
-    # Centrar de forma aproximada sin exponer paths ni metadatos internos.
-    root.update_idletasks()
-    width = root.winfo_reqwidth()
-    height = root.winfo_reqheight()
-    screen_w = root.winfo_screenwidth()
-    screen_h = root.winfo_screenheight()
-    root.geometry(
-        f"+{(screen_w - width) // 2}+{(screen_h - height) // 2}"
-    )
-    root.mainloop()
-    return selection[0]
+    def _al_click(i: int) -> Callable[[], None]:
+        return lambda: _seleccionar(i)
+
+    def _al_doble_click(i: int) -> Callable[[], None]:
+        def _abrir_esta() -> None:
+            _seleccionar(i)
+            _abrir()
+
+        return _abrir_esta
+
+    tarjetas: list[Tarjeta] = []
+    for i, option in enumerate(opciones):
+        tarjeta = Tarjeta(
+            v,
+            v.contenido,
+            titulo=option.title,
+            descripcion=option.description,
+            punto=PUNTO[option.environment],
+            etiqueta=_etiqueta(option.environment),
+            command=_al_click(i),
+            al_abrir=_al_doble_click(i),
+        )
+        tarjeta.pack(side="top", anchor="w", pady=(0, v.px(10 - 2 * MARGEN)))
+        tarjetas.append(tarjeta)
+
+    # Creados en el orden de Tab: tarjetas, Cancelar, Abrir. Los botones se
+    # empaquetan antes que la ayuda: si falta lugar, se recorta la ayuda.
+    cancelar = Boton(v, v.pie, "Cancelar", command=v.cerrar)
+    abrir = Boton(v, v.pie, "Abrir", variante="primario", command=_abrir)
+    abrir.pack(side="right")
+    cancelar.pack(side="right", padx=(0, v.px(8 - 2 * MARGEN)))
+    v.texto(
+        v.pie, "↑↓ cambia · Enter abre", tamanio=11, token="tinta-suave", mono=True
+    ).pack(side="left", padx=v.px(MARGEN))
+
+    def _mover(paso: int) -> str:
+        nuevo = max(0, min(len(tarjetas) - 1, indice[0] + paso))
+        _seleccionar(nuevo)
+        tarjetas[nuevo].focus_set()
+        return "break"
+
+    v.root.bind("<Up>", lambda _e: _mover(-1))
+    v.root.bind("<Down>", lambda _e: _mover(1))
+    # Enter sobre un botón lo activa el botón; en el resto, abre.
+    v.root.bind("<Return>", lambda _e: _abrir())
+    v.root.bind("<KP_Enter>", lambda _e: _abrir())
+    v.root.bind("<Escape>", lambda _e: v.cerrar())
+    v.root.protocol("WM_DELETE_WINDOW", v.cerrar)
+
+    _seleccionar(indice[0])
+    v.foco_inicial = tarjetas[indice[0]]
+    v.ejecutar()
+    return resultado[0]
