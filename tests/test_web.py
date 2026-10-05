@@ -1641,3 +1641,23 @@ def test_cambiar_ambiente_con_launcher_escribe_pedido_sin_hot_switch(
     assert req is not None
     assert req.from_environment is ArcaEnvironment.HOMO
     assert str(profile.paths.root) not in r.text
+
+
+@pytest.mark.parametrize(
+    ("environment", "texto"),
+    [
+        (ArcaEnvironment.HOMO, "Homologación — sin validez fiscal"),
+        (ArcaEnvironment.PROD, "Producción — este comprobante tiene validez fiscal"),
+    ],
+)
+def test_revision_muestra_linea_de_ambiente(
+    environment, texto, tmp_path, test_cert_and_key, arca
+):
+    """Línea de ambiente arriba de la tarjeta de revisión (solo UI)."""
+    client, _ = _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca)
+    _crear_cliente_por_form(client)
+    invoice_id = _generar_borrador(client)
+    html = client.get(f"/facturas/{invoice_id}/revisar").text
+    linea = html.index(f'<p class="linea-ambiente {environment.value}"')
+    assert linea < html.index('<section class="card revisar">')
+    assert texto in " ".join(html[linea:].split())
