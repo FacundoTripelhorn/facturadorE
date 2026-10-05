@@ -32,7 +32,9 @@ from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import ProfileError
 from .chooser import ChooserUnavailable, choose_environment
 from .command import resolve_launch_environment
-from .frozen import set_window_icon, stdin_is_tty
+from .failure_window import FailureAction, prompt_failure
+from .frozen import has_interactive_terminal
+from .last_environment import save_last_environment
 from .production_ack import ensure_production_acknowledged
 from .supervisor import LauncherError, ProcessSupervisor
 from .window import UiEndReason
@@ -41,6 +43,11 @@ from .window import UiEndReason
 _ChooseFn = Callable[..., ArcaEnvironment | None]
 # Inyectable en tests: confirmación de primer uso de Producción.
 _ConfirmProdFn = Callable[[], bool]
+# Inyectable en tests: ventana de error (mensaje, ambiente, si puede volver
+# al chooser) → qué eligió el usuario, o None si no se mostró.
+_FailurePromptFn = Callable[..., FailureAction | None]
+# Inyectable en tests: recordar el ambiente que abrió bien.
+_RememberFn = Callable[[ArcaEnvironment], None]
 
 
 @dataclass(frozen=True)
@@ -53,6 +60,13 @@ class SwitchTo:
 @dataclass(frozen=True)
 class ReturnToChooser:
     """Volver al chooser sin error (canceló confirmación de Producción)."""
+
+
+@dataclass(frozen=True)
+class Retry:
+    """El usuario pidió "Reintentar" en la ventana de error."""
+
+    environment: ArcaEnvironment
 
 
 def _parse_port(value: str) -> int:
@@ -134,11 +148,20 @@ def main(
     confirm_production: _ConfirmProdFn | None = None,
     supervisor_factory: Callable[..., ProcessSupervisor] | None = None,
     report_failure: Callable[[str], None] | None = None,
+    failure_prompt: _FailurePromptFn | None = None,
+    remember_environment: _RememberFn | None = None,
 ) -> int:
     args = _build_parser().parse_args(argv)
     factory = supervisor_factory or ProcessSupervisor
     chooser = choose or choose_environment
-    fail = report_failure or _report_failure
+    report = report_failure or _report_failure
+    prompt = failure_prompt or prompt_failure
+    remember = remember_environment or _remember_last_environment
+
+    def fail(message: str) -> None:
+        # Errores sin ambiente: solo "Cerrar".
+        report(message)
+        prompt(message, environment=None, can_choose=False)
 
     if args.restore:
         if args.env is None:
@@ -198,9 +221,15 @@ def main(
             factory=factory,
             choose=chooser,
             confirm_production=confirm_production,
-            report_failure=fail,
+            report_failure=report,
+            failure_prompt=prompt,
+            remember_environment=remember,
             return_to_chooser_on_startup_error=allow_chooser_retry,
         )
+        if isinstance(outcome, Retry):
+            # "Reintentar" en la ventana de error: el mismo ambiente.
+            pending = outcome.environment
+            continue
         if isinstance(outcome, SwitchTo):
             # Ya confirmado en el chooser del cambio: arrancar el destino.
             # Vuelve a pedir ack solo si el perfil prod aún no lo tiene.
@@ -227,8 +256,10 @@ def _run_session(
     choose: _ChooseFn,
     confirm_production: _ConfirmProdFn | None,
     report_failure: Callable[[str], None],
+    failure_prompt: _FailurePromptFn | None = None,
+    remember_environment: _RememberFn | None = None,
     return_to_chooser_on_startup_error: bool = False,
-) -> int | None | SwitchTo | ReturnToChooser:
+) -> int | None | SwitchTo | ReturnToChooser | Retry:
     """Supervisa una sesión.
 
     Retornos:
@@ -237,28 +268,41 @@ def _run_session(
     - ``ReturnToChooser``: canceló ack de Producción; sin error.
     - ``SwitchTo``: el usuario eligió otro ambiente; el backend actual ya
       está detenido.
+    - ``Retry``: el usuario pidió reintentar tras un error.
     """
+    prompt = failure_prompt or prompt_failure
+    remember = remember_environment or _remember_last_environment
+
+    def failed(message: str, code: int) -> int | None | Retry:
+        return _session_failed(
+            message,
+            environment,
+            report_failure=report_failure,
+            failure_prompt=prompt,
+            can_choose=return_to_chooser_on_startup_error,
+            code=code,
+        )
+
     try:
         acknowledged = ensure_production_acknowledged(
             environment,
             confirm=confirm_production,
         )
     except ChooserUnavailable as exc:
-        report_failure(
+        return failed(
             "No se pudo mostrar la confirmación de Producción. "
-            f"{exc}"
+            f"{exc}",
+            2,
         )
-        return None if return_to_chooser_on_startup_error else 2
     except ProfileError as exc:
         # Misma ruta que supervisor.start(): p.ej. FACTURADOR_APP_DATA inválida.
-        report_failure(str(exc))
-        return None if return_to_chooser_on_startup_error else 2
+        return failed(str(exc), 2)
     except OSError as exc:
-        report_failure(
+        return failed(
             "No se pudo guardar la confirmación de Producción: "
-            f"{exc}"
+            f"{exc}",
+            2,
         )
-        return None if return_to_chooser_on_startup_error else 2
     if not acknowledged:
         print(
             "Apertura de Producción cancelada. "
@@ -279,16 +323,17 @@ def _run_session(
     try:
         result = supervisor.start()
     except LauncherError as exc:
-        report_failure(str(exc))
-        return None if return_to_chooser_on_startup_error else 1
+        return failed(str(exc), 1)
     except ProfileError as exc:
         # Cinturón por si el plan falla fuera del parser (p.ej. puerto vía API).
-        report_failure(str(exc))
-        return None if return_to_chooser_on_startup_error else 2
+        return failed(str(exc), 2)
     except KeyboardInterrupt:
         # start() ya apagó el hijo; no dejar traceback al usuario.
         print("\nDeteniendo…", flush=True)
         return 0
+
+    # /health respondió: es el ambiente a preseleccionar la próxima vez.
+    remember(environment)
 
     # Tras readiness: habilitar UI según CLI (fakes pueden ignorar el kwargs).
     try:
@@ -335,6 +380,7 @@ def _run_session(
                 choose=choose,
                 confirm_production=confirm_production,
                 report_failure=report_failure,
+                failure_prompt=prompt,
                 return_to_chooser_on_startup_error=return_to_chooser_on_startup_error,
                 initial_reason=ui_reason,
             )
@@ -360,12 +406,12 @@ def _run_session(
             if supervisor.process is not None
             else 1
         )
-        report_failure(
-            f"El backend de {plan.profile.display_name} se detuvo solo "
-            f"(código {code})."
-        )
         # Caída post-arranque: desde el chooser se puede elegir de nuevo.
-        return None if return_to_chooser_on_startup_error else 1
+        return failed(
+            f"El backend de {plan.profile.display_name} se detuvo solo "
+            f"(código {code}).",
+            1,
+        )
     except KeyboardInterrupt:
         print("\nDeteniendo…", flush=True)
         supervisor.stop()
@@ -381,23 +427,33 @@ def _after_native_ui_session(
     report_failure: Callable[[str], None],
     return_to_chooser_on_startup_error: bool,
     initial_reason: UiEndReason,
-) -> int | None | SwitchTo | ReturnToChooser:
+    failure_prompt: _FailurePromptFn | None = None,
+) -> int | None | SwitchTo | ReturnToChooser | Retry:
     """Ciclo post-webview: cerrar = apagar backend; interrupt = cambio de
     ambiente / muerte."""
+    prompt = failure_prompt or prompt_failure
+
+    def died() -> int | None | Retry:
+        code = (
+            supervisor.process.returncode
+            if supervisor.process is not None
+            else 1
+        )
+        return _session_failed(
+            f"El backend de {supervisor.plan.profile.display_name} "
+            f"se detuvo solo (código {code}).",
+            environment,
+            report_failure=report_failure,
+            failure_prompt=prompt,
+            can_choose=return_to_chooser_on_startup_error,
+            code=1,
+        )
+
     reason = initial_reason
     try:
         while True:
             if not supervisor.is_running:
-                code = (
-                    supervisor.process.returncode
-                    if supervisor.process is not None
-                    else 1
-                )
-                report_failure(
-                    f"El backend de {supervisor.plan.profile.display_name} "
-                    f"se detuvo solo (código {code})."
-                )
-                return None if return_to_chooser_on_startup_error else 1
+                return died()
 
             if reason is UiEndReason.INTERRUPTED:
                 switch = _handle_change_environment_request(
@@ -450,16 +506,7 @@ def _after_native_ui_session(
                 supervisor.process.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 continue
-        code = (
-            supervisor.process.returncode
-            if supervisor.process is not None
-            else 1
-        )
-        report_failure(
-            f"El backend de {supervisor.plan.profile.display_name} "
-            f"se detuvo solo (código {code})."
-        )
-        return None if return_to_chooser_on_startup_error else 1
+        return died()
     except KeyboardInterrupt:
         print("\nDeteniendo…", flush=True)
         supervisor.stop()
@@ -520,7 +567,7 @@ def _handle_change_environment_request(
         flush=True,
     )
     try:
-        selected = choose()
+        selected = _choose_for_switch(choose, current)
     except ChooserUnavailable as exc:
         # Sin chooser no se puede cambiar: limpiar pedido y seguir.
         supervisor.clear_change_environment_request()
@@ -596,43 +643,66 @@ def _handle_change_environment_request(
     return SwitchTo(selected)
 
 
-def _report_failure(message: str) -> None:
-    """Falla visible: stderr siempre; diálogo nativo si no hay TTY.
+def _choose_for_switch(
+    choose: _ChooseFn, current: ArcaEnvironment
+) -> ArcaEnvironment | None:
+    """El chooser de un cambio de ambiente: el por defecto preselecciona el
+    otro y marca el actual; uno inyectado (tests) se llama sin argumentos."""
+    if choose is choose_environment:
+        return choose_environment(current=current)
+    return choose()
 
-    Sin diálogo bajo pytest (``PYTEST_CURRENT_TEST``) ni con
-    ``FACTURADOR_NO_DIALOGS`` (smoke del exe en CI): un messagebox modal sin
-    nadie que lo cierre colgaría el proceso.
+
+def _session_failed(
+    message: str,
+    environment: ArcaEnvironment,
+    *,
+    report_failure: Callable[[str], None],
+    failure_prompt: _FailurePromptFn,
+    can_choose: bool,
+    code: int,
+) -> int | None | Retry:
+    """Informa un error de la sesión y resuelve qué sigue.
+
+    ``Retry`` si el usuario pidió reintentar; si no, ``None`` (volver al
+    chooser) cuando se llegó desde el chooser, o ``code``.
+    """
+    report_failure(message)
+    action = failure_prompt(
+        message, environment=environment, can_choose=can_choose
+    )
+    if action is FailureAction.RETRY:
+        return Retry(environment)
+    return None if can_choose else code
+
+
+def _remember_last_environment(environment: ArcaEnvironment) -> None:
+    """Guarda el ambiente que abrió bien; un fallo no corta la sesión.
+
+    Bajo pytest no toca el app-data real del usuario (los tests inyectan
+    ``remember_environment``).
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        save_last_environment(environment)
+    except (OSError, ProfileError) as exc:
+        print(
+            f"No se pudo guardar el último ambiente usado ({exc}).",
+            flush=True,
+        )
+
+
+def _report_failure(message: str) -> None:
+    """Falla visible en stderr (o en launcher.log en el exe de ventana).
+
+    La ventana de error es aparte (``failure_window.prompt_failure``).
     """
     print(f"ERROR: {message}", file=sys.stderr, flush=True)
-    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get(
-        "FACTURADOR_NO_DIALOGS"
-    ):
-        return
-    if _is_interactive_terminal():
-        return
-    try:
-        import tkinter
-        from tkinter import messagebox
-    except Exception:
-        return
-    try:
-        root = tkinter.Tk()
-        root.withdraw()
-        set_window_icon(root)
-        messagebox.showerror("FacturadorE", message)
-        root.destroy()
-    except Exception:
-        return
 
 
 def _is_interactive_terminal() -> bool:
-    """True si hay terminal para leer el error. El exe de ventana no tiene
-    stdin/stderr (``None``) o los tiene redirigidos a un archivo."""
-    stderr = sys.stderr
-    try:
-        return stdin_is_tty() and bool(stderr is not None and stderr.isatty())
-    except (AttributeError, ValueError):
-        return False
+    return has_interactive_terminal()
 
 
 if __name__ == "__main__":

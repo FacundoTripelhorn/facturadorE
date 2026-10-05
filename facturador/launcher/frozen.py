@@ -38,6 +38,16 @@ def stdin_is_tty() -> bool:
         return False
 
 
+def has_interactive_terminal() -> bool:
+    """True si hay terminal para leer un error. El exe de ventana no tiene
+    stdin/stderr (``None``) o los tiene redirigidos a un archivo."""
+    stderr = sys.stderr
+    try:
+        return stdin_is_tty() and bool(stderr is not None and stderr.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
 def is_frozen() -> bool:
     """True dentro del ejecutable de PyInstaller."""
     return bool(getattr(sys, "frozen", False))

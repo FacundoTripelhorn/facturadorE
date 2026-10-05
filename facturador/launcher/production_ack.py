@@ -17,16 +17,23 @@ from ..production_ack import (
 )
 from ..profile import EnvironmentProfile
 from .chooser import ChooserUnavailable
-from .frozen import set_window_icon, stdin_is_tty
+from .frozen import stdin_is_tty
+from .theme import MARGEN
 
 _CONFIRM_TITLE = "Producción — confirmación"
-_CONFIRM_BODY = (
-    "Estás por abrir el ambiente de Producción por primera vez.\n\n"
+_CONFIRM_CONSEQUENCES = (
     "Los comprobantes que autorices tendrán validez fiscal real y "
     "numeración definitiva en ARCA. Esta acción no se puede deshacer "
-    "después de autorizar.\n\n"
-    "¿Continuar con Producción?"
+    "después de autorizar."
 )
+_CONFIRM_QUESTION = "¿Continuar con Producción?"
+_CONFIRM_BODY = (
+    "Estás por abrir el ambiente de Producción por primera vez.\n\n"
+    f"{_CONFIRM_CONSEQUENCES}\n\n"
+    f"{_CONFIRM_QUESTION}"
+)
+# Título de la ventana (el menú de texto usa _CONFIRM_BODY completo).
+_CONFIRM_HEADING = "Estás por abrir Producción por primera vez"
 _CONFIRM_OK = "Entiendo: abrir Producción"
 _CONFIRM_CANCEL = "Cancelar"
 
@@ -127,62 +134,48 @@ def prompt_production_confirm_tty(
 
 
 def prompt_production_confirm_gui() -> bool:
-    """Ventana nativa de confirmación; cerrar = cancelar."""
-    try:
-        import tkinter
-        from tkinter import ttk
-    except Exception as exc:
-        raise ChooserUnavailable("tkinter no disponible") from exc
+    """Ventana de confirmación con el tema; cerrar o Esc = cancelar.
 
-    selection: list[bool] = [False]
-
+    El foco arranca en "Cancelar": un Enter apurado no abre Producción.
+    """
     try:
-        root = tkinter.Tk()
+        from .widgets import Boton, Ventana, panel_error, pildora
+
+        ventana = Ventana()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
-    set_window_icon(root)
 
-    root.title("FacturadorE")
-    root.resizable(False, False)
-
-    frame = ttk.Frame(root, padding=20)
-    frame.grid(row=0, column=0, sticky="nsew")
-
-    ttk.Label(
-        frame,
-        text=_CONFIRM_TITLE,
-        font=("Segoe UI", 14, "bold"),
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-    ttk.Label(
-        frame,
-        text=_CONFIRM_BODY,
-        wraplength=440,
-        justify="left",
-    ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 16))
+    v = ventana
+    selection: list[bool] = [False]
 
     def _ok() -> None:
         selection[0] = True
-        root.destroy()
+        v.cerrar()
 
     def _cancel() -> None:
         selection[0] = False
-        root.destroy()
+        v.cerrar()
 
-    ttk.Button(frame, text=_CONFIRM_CANCEL, command=_cancel).grid(
-        row=2, column=0, sticky="w"
+    margen = v.px(MARGEN)
+    pildora(v, v.contenido, ArcaEnvironment.PROD, "Producción").pack(
+        side="top", anchor="w", padx=margen
     )
-    ttk.Button(frame, text=_CONFIRM_OK, command=_ok).grid(
-        row=2, column=1, sticky="e"
+    v.texto(v.contenido, _CONFIRM_HEADING, tamanio=17, negrita=True).pack(
+        side="top", anchor="w", padx=margen, pady=(v.px(16), v.px(12))
     )
+    panel_error(v, v.contenido, _CONFIRM_CONSEQUENCES).pack(
+        side="top", anchor="w", padx=margen
+    )
+    v.texto(v.contenido, _CONFIRM_QUESTION, token="tinta-suave").pack(
+        side="top", anchor="w", padx=margen, pady=(v.px(12), 0)
+    )
+    cancelar = Boton(v, v.pie, _CONFIRM_CANCEL, command=_cancel)
+    confirmar = Boton(v, v.pie, _CONFIRM_OK, variante="peligro", command=_ok)
+    confirmar.pack(side="right")
+    cancelar.pack(side="right", padx=(0, v.px(8 - 2 * MARGEN)))
 
-    root.protocol("WM_DELETE_WINDOW", _cancel)
-    root.update_idletasks()
-    width = root.winfo_reqwidth()
-    height = root.winfo_reqheight()
-    screen_w = root.winfo_screenwidth()
-    screen_h = root.winfo_screenheight()
-    root.geometry(
-        f"+{(screen_w - width) // 2}+{(screen_h - height) // 2}"
-    )
-    root.mainloop()
+    v.root.bind("<Escape>", lambda _e: _cancel())
+    v.root.protocol("WM_DELETE_WINDOW", _cancel)
+    v.foco_inicial = cancelar
+    v.ejecutar()
     return selection[0]

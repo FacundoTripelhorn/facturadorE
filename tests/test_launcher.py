@@ -252,43 +252,6 @@ def test_choose_environment_force_tty_usa_prompt_tty():
     assert called == [ENVIRONMENT_OPTIONS]
 
 
-def test_prompt_environment_gui_selecciona_homologacion(monkeypatch):
-    """Humo de la ventana: programa un click y verifica el ambiente elegido."""
-    pytest.importorskip("tkinter")
-    import tkinter
-    from tkinter import ttk
-
-    from facturador.launcher.chooser import prompt_environment_gui
-
-    original_mainloop = tkinter.Tk.mainloop
-
-    def _auto_select(self: tkinter.Tk) -> None:
-        def _walk(widget: tkinter.Misc):
-            yield widget
-            for child in widget.winfo_children():
-                yield from _walk(child)
-
-        def _click() -> None:
-            for widget in _walk(self):
-                if isinstance(widget, ttk.Button):
-                    text = str(widget.cget("text"))
-                    if text.startswith("Abrir Homologación"):
-                        widget.invoke()
-                        return
-
-        self.after(50, _click)
-        original_mainloop(self)
-
-    monkeypatch.setattr(tkinter.Tk, "mainloop", _auto_select)
-    try:
-        root_probe = tkinter.Tk()
-        root_probe.destroy()
-    except tkinter.TclError as exc:
-        pytest.skip(f"display no disponible para tkinter: {exc}")
-
-    assert prompt_environment_gui(ENVIRONMENT_OPTIONS) is ArcaEnvironment.HOMO
-
-
 def test_main_sin_env_usa_chooser_y_arranca_solo_ese_perfil():
     from facturador.launcher.__main__ import main
 

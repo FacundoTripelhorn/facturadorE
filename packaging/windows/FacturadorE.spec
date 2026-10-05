@@ -7,19 +7,26 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_submodules,
+    copy_metadata,
+)
 
 HERE = Path(SPECPATH)
 BUILD = HERE / "build"
 
 datas = collect_data_files("facturador")  # templates, static, fonts, schema.sql
+# Versión de la app en "Copiar detalle técnico" de la ventana de error.
+datas += copy_metadata("facturador")
 datas += [(str(BUILD / "facturadore.ico"), ".")]
 datas += [(str(p), "bin") for p in sorted((BUILD / "bin").iterdir())]
 
 hiddenimports = collect_submodules("uvicorn") + [
     "tkinter",
-    "tkinter.ttk",
-    "tkinter.messagebox",
+    "tkinter.font",
+    # Ventanas del launcher: formas y marca dibujadas con Pillow.
+    "PIL.ImageTk",
 ]
 
 a = Analysis(
