@@ -171,8 +171,21 @@ header .adentro {
   flex-wrap: wrap; column-gap: 1.1rem; row-gap: .15rem;
   min-height: 3.4rem; padding: .35rem 0;
 }
-header .titulo { font-weight: 800; font-size: 1.1rem; letter-spacing: -.02em; }
-header .titulo span { color: var(--acento); }
+/* Marca: ícono (colores propios, como <img>) + wordmark en línea, que toma
+   el tema: el trazo con la tinta y la E con el acento. */
+header .marca { display: inline-flex; align-items: center; gap: .55rem; }
+header .marca img { display: block; }
+.wordmark { display: block; height: 20px; width: auto; color: var(--tinta); }
+.wordmark .wordmark-e { fill: var(--acento); }
+/* Entre 641 y 880 px el wordmark completo haría bajar el header a dos
+   líneas: queda solo el ícono, y el nombre sigue disponible para lectores
+   de pantalla. Debajo de 640 px el header ya puede partirse. */
+@media (min-width: 641px) and (max-width: 880px) {
+  .wordmark {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+}
 nav.principal {
   display: flex; flex-wrap: wrap; column-gap: 1.25rem; margin-right: auto;
 }

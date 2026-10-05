@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>facturador — {{ env_label }}</title>
+<link rel="icon" type="image/svg+xml" href="/static/brand/icon.svg">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js"></script>
 </head>
@@ -16,7 +17,10 @@
 {% endif %}
 <header>
   <div class="adentro">
-    <span class="titulo">factura<span>dor</span></span>
+    <span class="marca">
+      <img src="/static/brand/icon.svg" width="28" height="28" alt="">
+      {% include "_wordmark.html" %}
+    </span>
     <nav class="principal" aria-label="Principal">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
       <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
