@@ -8,8 +8,10 @@ el progreso: "Iniciando <ambiente>" o, en un cambio, "Cambiando a
 Tk sigue en el hilo principal y anima la barra con ``after()``.
 
 "Cancelar" (o Esc, o la X) detiene el backend que se estaba levantando:
-``stop()``, esperar al hilo y ``stop()`` otra vez, por si el hijo arrancó
-justo después del primero. Así no quedan procesos huérfanos.
+mientras el hilo de arranque sigue vivo se reintenta el apagado, que solo
+actúa cuando el hijo ya existe, así el hijo muere apenas aparece y el
+arranque termina enseguida; al final, un último intento. Así no quedan
+procesos huérfanos ni se suelta el lock del perfil antes de tiempo.
 
 Sin ventana (con terminal y sin selector gráfico, bajo pytest, con
 ``FACTURADOR_NO_DIALOGS`` o con ``--no-browser``) todo corre igual que
@@ -42,6 +44,8 @@ _VIGILAR_MS = 50
 _CUADRO_MS = 16
 # Una pasada de la barra indeterminada, en segundos.
 _PASADA_S = 1.4
+# Cada cuánto se reintenta apagar el arranque cancelado.
+_REINTENTO_S = 0.1
 
 
 class StartupCancelled(Exception):
@@ -342,11 +346,12 @@ class _VistaProgreso:
 class _Arranque[R]:
     """Una tarea lenta en un hilo, con cancelación sin carreras.
 
-    Con ``cancelar`` (arranque), cancelar es: ``cancelar()``, esperar al
-    hilo y ``cancelar()`` otra vez, por si el hijo arrancó justo después
-    del primero; corre en otro hilo para no trabar la ventana. Sin
-    ``cancelar`` (cierre del ambiente actual), la tarea termina igual y solo
-    se informa el pedido.
+    Con ``cancelar`` (arranque), cancelar es llamar a ``cancelar()`` cada
+    ``_REINTENTO_S`` mientras el hilo siga vivo, y una vez más al final;
+    corre en otro hilo para no trabar la ventana. ``cancelar`` tiene que
+    poder llamarse muchas veces y no hacer nada si todavía no hay qué
+    apagar. Sin ``cancelar`` (cierre del ambiente actual), la tarea termina
+    igual y solo se informa el pedido.
     """
 
     def __init__(
@@ -388,10 +393,13 @@ class _Arranque[R]:
     def detener(self) -> None:
         """Apaga lo que se estaba levantando y espera al hilo."""
         try:
-            if self._cancelar is not None:
-                _intentar(self._cancelar)
-            self._hilo.join()
-            # Si el hijo arrancó después del primer cancelar(), este lo apaga.
+            # Si el hijo todavía no existe, cancelar() no hace nada y se
+            # vuelve a intentar: apenas aparece, muere, y start() termina en
+            # vez de esperar el timeout de /health.
+            while self._hilo.is_alive():
+                if self._cancelar is not None:
+                    _intentar(self._cancelar)
+                self._hilo.join(_REINTENTO_S)
             if self._cancelar is not None:
                 _intentar(self._cancelar)
         finally:

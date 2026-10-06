@@ -368,7 +368,7 @@ def _run_session(
         result = progress.start(
             environment,
             supervisor.start,
-            lambda: supervisor.stop(),
+            lambda: _stop_spawned(supervisor),
             switching_from=switching_from,
         )
     except StartupCancelled:
@@ -743,6 +743,18 @@ def _decide_change_environment(
         )
         return ReturnToChooser()
     return SwitchTo(selected, from_environment=current)
+
+
+def _stop_spawned(supervisor: ProcessSupervisor) -> None:
+    """Cancelar un arranque en curso: apaga el backend si el hijo ya existe.
+
+    Sin hijo no hace nada: start() todavía tiene el lock del perfil y lo
+    suelta solo si falla; soltarlo antes dejaría a otro launcher tomar el
+    mismo perfil mientras este sigue arrancando. La ventana de progreso lo
+    reintenta mientras start() siga corriendo.
+    """
+    if getattr(supervisor, "process", None) is not None:
+        supervisor.stop()
 
 
 def _display_name(environment: ArcaEnvironment) -> str:

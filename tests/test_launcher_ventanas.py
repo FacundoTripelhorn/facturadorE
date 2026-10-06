@@ -197,7 +197,8 @@ def test_progreso_esc_cancela_y_apaga(programar):
     programar(lambda root: root.event_generate("<Escape>"))
     with pytest.raises(StartupCancelled):
         _ConVentana().start(ArcaEnvironment.HOMO, _start, _stop)
-    assert detenidos == ["stop", "stop"]
+    # Se reintenta mientras el arranque sigue y una vez más al final.
+    assert len(detenidos) >= 2 and set(detenidos) == {"stop"}
 
 
 def test_progreso_relanza_el_error_del_arranque(programar):

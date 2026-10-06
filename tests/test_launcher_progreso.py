@@ -105,30 +105,35 @@ def test_arranque_devuelve_el_resultado_y_relanza_errores():
         mal.resultado()
 
 
-def test_cancelar_apaga_tambien_lo_que_arranco_despues_del_primer_stop():
-    """El primer stop() puede llegar antes de que exista el hijo: el
-    segundo, después de esperar al hilo, lo apaga."""
+def test_cancelar_antes_del_hijo_lo_apaga_apenas_aparece():
+    """Cancelar antes de que exista el hijo: el apagado se reintenta y actúa
+    cuando el hijo aparece, sin esperar a que start() termine solo."""
     hijo_vivo = threading.Event()
-    soltar = threading.Event()
-    vistos: list[bool] = []
+    muerto = threading.Event()
+    llamadas: list[bool] = []
 
     def _start():
-        soltar.wait(5)
-        hijo_vivo.set()  # el hijo aparece después del primer stop()
-        return "listo"
+        time.sleep(0.3)
+        hijo_vivo.set()  # el hijo aparece después del pedido de cancelar
+        # Como _wait_until_ready: espera /health hasta que matan al hijo.
+        if not muerto.wait(30):
+            raise AssertionError("nadie apagó al hijo")
+        raise LauncherError("terminó antes de quedar listo")
 
-    def _stop():
-        vistos.append(hijo_vivo.is_set())
-        if not hijo_vivo.is_set():
-            soltar.set()
+    def _stop_si_hay_hijo():
+        llamadas.append(hijo_vivo.is_set())
+        if hijo_vivo.is_set():
+            muerto.set()
 
-    arranque = _Arranque(_start, _stop)
+    arranque = _Arranque(_start, _stop_si_hay_hijo)
     arranque.iniciar()
     assert arranque.pedir_cancelar()
     assert not arranque.pedir_cancelar()  # un solo pedido
+    inicio = time.monotonic()
     assert arranque.esperar(5)
+    assert time.monotonic() - inicio < 2
     assert arranque.resultado() == (None, True)
-    assert vistos == [False, True]
+    assert llamadas[0] is False and llamadas[-1] is True
 
 
 def test_cancelar_el_cierre_no_lo_interrumpe():
@@ -148,9 +153,8 @@ def test_cancelar_el_cierre_no_lo_interrumpe():
     assert arranque.resultado() == (None, True)
 
 
-def test_cancelar_durante_el_arranque_no_deja_huerfanos(tmp_path):
-    """Con un supervisor real: el hijo que espera /health muere al cancelar."""
-    supervisor = ProcessSupervisor(
+def _supervisor_lento(tmp_path):
+    return ProcessSupervisor(
         environment=HOMO,
         port=_free_port(),
         app_data_root=tmp_path / "appdata",
@@ -159,7 +163,26 @@ def test_cancelar_durante_el_arranque_no_deja_huerfanos(tmp_path):
         open_browser=False,
         command_override=[sys.executable, "-c", "import time; time.sleep(60)"],
     )
-    arranque = _Arranque(supervisor.start, supervisor.stop)
+
+
+def _lock_libre(supervisor: ProcessSupervisor) -> bool:
+    from facturador.launcher.lock import ProfileLock, ProfileLockHeld
+
+    lock = ProfileLock(supervisor.plan.profile.paths.launcher_lock)
+    try:
+        lock.acquire(port=supervisor.port, environment="homo")
+    except ProfileLockHeld:
+        return False
+    lock.release()
+    return True
+
+
+def test_cancelar_durante_el_arranque_no_deja_huerfanos(tmp_path):
+    """Con un supervisor real: el hijo que espera /health muere al cancelar."""
+    from facturador.launcher.__main__ import _stop_spawned
+
+    supervisor = _supervisor_lento(tmp_path)
+    arranque = _Arranque(supervisor.start, lambda: _stop_spawned(supervisor))
     arranque.iniciar()
     limite = time.monotonic() + 10
     while supervisor.process is None and time.monotonic() < limite:
@@ -172,13 +195,48 @@ def test_cancelar_durante_el_arranque_no_deja_huerfanos(tmp_path):
     assert arranque.resultado()[1] is True
     assert hijo.poll() is not None  # el hijo terminó
     assert not supervisor.is_running
-    # El lock del perfil quedó libre: otro arranque puede tomarlo.
-    supervisor.command_override = None
-    from facturador.launcher.lock import ProfileLock
+    assert _lock_libre(supervisor)
 
-    lock = ProfileLock(supervisor.plan.profile.paths.launcher_lock)
-    lock.acquire(port=supervisor.port, environment="homo")
-    lock.release()
+
+def test_cancelar_antes_de_lanzar_el_hijo_no_suelta_el_lock_ni_espera(
+    tmp_path, monkeypatch
+):
+    """Cancelar con el lock tomado y el hijo todavía sin lanzar: el lock no
+    se suelta antes de tiempo (otro launcher podría tomar el mismo perfil) y
+    el hijo muere apenas aparece, sin esperar el timeout de /health."""
+    from facturador.launcher.__main__ import _stop_spawned
+
+    supervisor = _supervisor_lento(tmp_path)
+    pedido = threading.Event()
+    lock_libre_antes_del_hijo: list[bool] = []
+    lanzar = supervisor._spawn
+
+    def _spawn_demorado(plan):
+        pedido.wait(5)
+        time.sleep(0.3)  # el pedido de cancelar ya se reintentó varias veces
+        lock_libre_antes_del_hijo.append(_lock_libre(supervisor))
+        return lanzar(plan)
+
+    monkeypatch.setattr(supervisor, "_spawn", _spawn_demorado)
+    hijos: list[subprocess.Popen[bytes]] = []
+
+    def _cancelar() -> None:
+        if supervisor.process is not None:
+            hijos.append(supervisor.process)
+        _stop_spawned(supervisor)
+
+    arranque = _Arranque(supervisor.start, _cancelar)
+    arranque.iniciar()
+    arranque.pedir_cancelar()
+    pedido.set()
+    inicio = time.monotonic()
+    assert arranque.esperar(10)
+    assert time.monotonic() - inicio < 5  # no esperó los 30 s de readiness
+    assert arranque.resultado()[1] is True
+    assert lock_libre_antes_del_hijo == [False]
+    assert hijos and all(h.poll() is not None for h in hijos)
+    assert not supervisor.is_running
+    assert _lock_libre(supervisor)
 
 
 # --- flujo de main con un doble de la ventana --------------------------------
