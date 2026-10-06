@@ -1,10 +1,13 @@
 """Ventana y controles del launcher en Tk, con el tema de la app.
 
-``Ventana`` arma lo común a las tres pantallas (selector, confirmación de
-Producción y error): fondo del tema, ícono + wordmark arriba, un área de
-contenido y un pie para los botones. Los controles se dibujan con Pillow
-(``theme``) sobre un ``Canvas`` y llevan el anillo de foco de ``--acento``
-cuando tienen el foco del teclado.
+El launcher tiene una sola ventana, de la elección hasta que abre la app:
+el selector, la confirmación de Producción, el progreso y el error son
+vistas que se montan en ella (``ventana()``), así nunca hay un momento sin
+ventana. Arriba lleva ícono + wordmark; abajo, el contenido de la vista y un
+pie para los botones. ``cerrar_ventana()`` la cierra antes de abrir la app.
+
+Los controles se dibujan con Pillow (``theme``) sobre un ``Canvas`` y
+llevan el anillo de foco de ``--acento`` cuando tienen el foco del teclado.
 
 Importa ``tkinter`` al cargarse: los callers lo importan dentro de un
 ``try`` y, si falla, caen al menú de texto o al stderr.
@@ -15,7 +18,7 @@ from __future__ import annotations
 import tkinter as tk
 import tkinter.font as tkfont
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from PIL import Image, ImageTk
 
@@ -55,8 +58,37 @@ _PILDORA = {
 PUNTO = {ArcaEnvironment.HOMO: "aviso", ArcaEnvironment.PROD: "error"}
 
 
+_abierta: Ventana | None = None
+
+
+def ventana(*, oscuro: bool | None = None) -> Ventana:
+    """La ventana del launcher lista para montar una vista: la que ya está
+    abierta (vaciada) o una nueva."""
+    global _abierta
+    if _abierta is not None and _abierta.viva():
+        _abierta.limpiar()
+        return _abierta
+    _abierta = Ventana(oscuro=oscuro)
+    return _abierta
+
+
+def hay_ventana() -> bool:
+    """True si la ventana del launcher está abierta."""
+    return _abierta is not None and _abierta.viva()
+
+
+def cerrar_ventana() -> None:
+    """Cierra la ventana del launcher (antes de abrir la app o al salir)."""
+    global _abierta
+    if _abierta is not None:
+        _abierta.destruir()
+        _abierta = None
+
+
 class Ventana:
-    """Una ventana del launcher. ``ejecutar`` bloquea hasta ``cerrar``."""
+    """La ventana del launcher. Cada vista se monta con ``ventana()`` y
+    ``ejecutar`` bloquea hasta que la vista llama a ``terminar``; la ventana
+    sigue visible para la vista siguiente."""
 
     def __init__(self, *, oscuro: bool | None = None) -> None:
         self.paleta: Paleta = cargar_paleta(
@@ -68,7 +100,7 @@ class Ventana:
         except Exception:
             # Que no quede una ventana oculta viva si el caller cae al menú
             # de texto.
-            self.cerrar()
+            self.destruir()
             raise
 
     def _armar(self) -> None:
@@ -84,6 +116,10 @@ class Ventana:
         )
         self._fuentes: dict[tuple[float, bool, bool, bool], tkfont.Font] = {}
         self._fotos: list[ImageTk.PhotoImage] = []
+        self._fotos_marca: list[ImageTk.PhotoImage] = []
+        self._teclas: list[str] = []
+        self._pendientes: list[str] = []
+        self._visible = False
         self.foco_inicial: tk.Misc | None = None
 
         fondo = self.color("fondo")
@@ -151,9 +187,11 @@ class Ventana:
             colores={"wordmark-e": self.paleta.pil("acento")},
         )
         for imagen, separacion in ((icono, 0), (wordmark, self.px(10))):
+            foto = ImageTk.PhotoImage(imagen, master=self.root)
+            self._fotos_marca.append(foto)
             tk.Label(
                 fila,
-                image=self.foto(imagen),
+                image=foto,
                 bg=self.color("fondo"),
                 bd=0,
                 highlightthickness=0,
@@ -187,29 +225,89 @@ class Ventana:
 
     # ---- ciclo de vida ----
 
-    def ejecutar(self) -> None:
-        """Centra, aplica la barra de título del tema y muestra la ventana."""
+    def tecla(self, secuencia: str, accion: Callable[[Any], object]) -> None:
+        """Atajo de teclado de la vista actual (se suelta al cambiar de vista)."""
+        self.root.bind(secuencia, accion)
+        self._teclas.append(secuencia)
+
+    def despues(self, ms: int, accion: Callable[[], object]) -> None:
+        """``after()`` de la vista actual: se cancela al cambiar de vista o al
+        cerrar la ventana (si no, Tk llamaría a widgets que ya no existen)."""
+        self._pendientes = [
+            p for p in self._pendientes if p in self.root.tk.call("after", "info")
+        ]
+        self._pendientes.append(self.root.after(ms, accion))
+
+    def _cancelar_pendientes(self) -> None:
+        for pendiente in self._pendientes:
+            try:
+                self.root.after_cancel(pendiente)
+            except tk.TclError:
+                pass
+        self._pendientes = []
+
+    def mostrar(self) -> None:
+        """Muestra la vista montada sin esperar: la primera vez centra la
+        ventana y aplica la barra de título del tema; después solo ajusta el
+        alto y deja la ventana donde está."""
         root = self.root
         root.update_idletasks()
         ancho = self.px(ANCHO_VENTANA)
         alto = max(self.px(ALTO_MINIMO), root.winfo_reqheight())
-        x = max(0, (root.winfo_screenwidth() - ancho) // 2)
-        y = max(0, (root.winfo_screenheight() - alto) // 2)
-        root.geometry(f"{ancho}x{alto}+{x}+{y}")
-        if self.paleta.oscuro:
-            barra_de_titulo_oscura(root)
-        root.deiconify()
-        root.lift()
-        try:
-            root.focus_force()
-        except tk.TclError:
-            pass
+        if self._visible:
+            root.geometry(f"{ancho}x{alto}")
+        else:
+            x = max(0, (root.winfo_screenwidth() - ancho) // 2)
+            y = max(0, (root.winfo_screenheight() - alto) // 2)
+            root.geometry(f"{ancho}x{alto}+{x}+{y}")
+            if self.paleta.oscuro:
+                barra_de_titulo_oscura(root)
+            root.deiconify()
+            root.lift()
+            try:
+                root.focus_force()
+            except tk.TclError:
+                pass
+            self._visible = True
         if self.foco_inicial is not None:
             self.foco_inicial.focus_set()
-        root.mainloop()
+        root.update_idletasks()
 
-    def cerrar(self) -> None:
+    def ejecutar(self) -> None:
+        """Muestra la vista y bloquea hasta que llama a ``terminar``."""
+        self.mostrar()
+        self.root.mainloop()
+
+    def terminar(self) -> None:
+        """Termina la vista actual; la ventana queda abierta."""
         try:
+            self.root.quit()
+        except tk.TclError:
+            pass
+
+    def limpiar(self) -> None:
+        """Vacía el contenido y el pie para la vista siguiente."""
+        self._cancelar_pendientes()
+        for marco in (self.contenido, self.pie):
+            for hijo in marco.winfo_children():
+                hijo.destroy()
+        for secuencia in self._teclas:
+            self.root.unbind(secuencia)
+        self._teclas = []
+        self._fotos = []
+        self.foco_inicial = None
+        # Entre vistas, la X no hace nada: cada vista define la suya.
+        self.root.protocol("WM_DELETE_WINDOW", lambda: None)
+
+    def viva(self) -> bool:
+        try:
+            return bool(self.root.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def destruir(self) -> None:
+        try:
+            self._cancelar_pendientes()
             self.root.destroy()
         except tk.TclError:
             pass

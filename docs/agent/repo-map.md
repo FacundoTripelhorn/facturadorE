@@ -249,7 +249,7 @@ which one operates; PV selection when more than one is enabled. See
 | Docker image & localhost bind | `Dockerfile`, `docker-compose.yml` |
 | Container entrypoint (profile normalize + secrets copy) | `docker/entrypoint.sh` |
 | Process supervisor + chooser + switch | `facturador/launcher/` |
-| Launcher windows (theme from `app.css` tokens, Tk + Pillow) | `facturador/launcher/theme.py`, `widgets.py`, `chooser.py`, `production_ack.py`, `failure_window.py`, `last_environment.py`; brand SVG renderer shared with the exe icon: `facturador/marca.py` |
+| Launcher windows (one Tk window from the chooser until the app opens; theme from `app.css` tokens, Tk + Pillow) | `facturador/launcher/theme.py`, `widgets.py` (the shared window and its views), `chooser.py`, `production_ack.py`, `progress.py` (start/stop in a worker thread, cancel without orphans), `failure_window.py`, `last_environment.py`; brand SVG renderer shared with the exe icon: `facturador/marca.py` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Windows exe (primary Windows path) | `packaging/windows/` (spec, `build.ps1`, icon, CI smoke), `facturador/launcher/frozen.py` (exe entry: backend mode, log, bundled age), `.github/workflows/windows.yml` (build, smoke, Release on `v*`) |
 | Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |

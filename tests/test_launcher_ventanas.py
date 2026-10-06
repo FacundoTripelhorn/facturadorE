@@ -4,7 +4,9 @@ resultado. Sin tkinter o sin pantalla, se saltean."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Iterator
 
 import pytest
 
@@ -12,12 +14,16 @@ from facturador.constants import ArcaEnvironment
 from facturador.launcher.chooser import ENVIRONMENT_OPTIONS, prompt_environment_gui
 from facturador.launcher.failure_window import FailureAction, show_failure_window
 from facturador.launcher.production_ack import prompt_production_confirm_gui
+from facturador.launcher.progress import StartupCancelled, StartupWindow
+from facturador.launcher.supervisor import LauncherError
 
 tkinter = pytest.importorskip("tkinter")
 
 
 @pytest.fixture
-def programar(monkeypatch) -> Callable[[Callable[[tkinter.Tk], None]], None]:
+def programar(
+    monkeypatch,
+) -> Iterator[Callable[[Callable[[tkinter.Tk], None]], None]]:
     """Corre ``accion(root)`` apenas arranca el mainloop de la ventana."""
     try:
         sonda = tkinter.Tk()
@@ -39,7 +45,11 @@ def programar(monkeypatch) -> Callable[[Callable[[tkinter.Tk], None]], None]:
         original(self, n)
 
     monkeypatch.setattr(tkinter.Tk, "mainloop", _mainloop)
-    return acciones.append
+    yield acciones.append
+    # Las vistas comparten la ventana: se cierra al terminar cada test.
+    from facturador.launcher.widgets import cerrar_ventana
+
+    cerrar_ventana()
 
 
 def _botones(root: tkinter.Misc) -> dict[str, tkinter.Misc]:
@@ -133,3 +143,83 @@ def test_error_sin_ambiente_no_ofrece_reintentar(programar):
         "--restore requiere --env", environment=None, can_choose=False
     )
     assert accion is FailureAction.CLOSE
+
+
+# --- una sola ventana: selector → progreso ------------------------------------
+
+
+class _ConVentana(StartupWindow):
+    """El progreso con ventana aunque corra bajo pytest."""
+
+    def wanted(self) -> bool:
+        return True
+
+
+def test_el_progreso_usa_la_misma_ventana_del_selector(programar):
+    from facturador.launcher import widgets
+
+    programar(lambda root: _botones(root)["Abrir Producción"].invocar())
+    assert (
+        prompt_environment_gui(ENVIRONMENT_OPTIONS, selected=ArcaEnvironment.PROD)
+        is ArcaEnvironment.PROD
+    )
+    raiz = widgets._abierta.root  # type: ignore[union-attr]
+    assert widgets.hay_ventana()  # sigue abierta entre vistas
+
+    hilos: list[str] = []
+
+    def _start() -> str:
+        hilos.append(threading.current_thread().name)
+        time.sleep(0.3)
+        return "listo"
+
+    programar(lambda root: None)
+    assert _ConVentana().start(ArcaEnvironment.PROD, _start, lambda: None) == "listo"
+    # Corrió en el hilo de trabajo, con la ventana de progreso.
+    assert hilos == ["launcher-progreso"]
+    assert widgets._abierta is not None and widgets._abierta.root is raiz
+    widgets.cerrar_ventana()
+    assert not widgets.hay_ventana()
+
+
+def test_progreso_esc_cancela_y_apaga(programar):
+    soltar = threading.Event()
+    detenidos: list[str] = []
+
+    def _start() -> str:
+        soltar.wait(5)
+        return "listo"
+
+    def _stop() -> None:
+        detenidos.append("stop")
+        soltar.set()
+
+    programar(lambda root: root.event_generate("<Escape>"))
+    with pytest.raises(StartupCancelled):
+        _ConVentana().start(ArcaEnvironment.HOMO, _start, _stop)
+    # Se reintenta mientras el arranque sigue y una vez más al final.
+    assert len(detenidos) >= 2 and set(detenidos) == {"stop"}
+
+
+def test_progreso_relanza_el_error_del_arranque(programar):
+    def _start() -> str:
+        raise LauncherError("puerto ocupado")
+
+    programar(lambda root: None)
+    with pytest.raises(LauncherError, match="puerto ocupado"):
+        _ConVentana().start(ArcaEnvironment.HOMO, _start, lambda: None)
+
+
+def test_cambio_cancelado_espera_el_cierre_del_actual(programar):
+    cerrado = threading.Event()
+
+    def _stop_actual() -> None:
+        time.sleep(0.3)
+        cerrado.set()
+
+    programar(lambda root: _botones(root)["Cancelar"].invocar())
+    cancelado = _ConVentana().stop_for_switch(
+        ArcaEnvironment.HOMO, ArcaEnvironment.PROD, _stop_actual
+    )
+    assert cancelado is True
+    assert cerrado.is_set()

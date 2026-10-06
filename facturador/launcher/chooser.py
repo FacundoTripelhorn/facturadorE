@@ -169,9 +169,9 @@ def prompt_environment_gui(
     Esc, "Cancelar" o la X cancelan.
     """
     try:
-        from .widgets import PUNTO, Boton, Tarjeta, Ventana
+        from .widgets import PUNTO, Boton, Tarjeta, ventana
 
-        ventana = Ventana()
+        v = ventana()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
 
@@ -179,11 +179,10 @@ def prompt_environment_gui(
     elegidas = [o.environment for o in opciones]
     indice = [elegidas.index(selected) if selected in elegidas else 0]
     resultado: list[ArcaEnvironment | None] = [None]
-    v = ventana
 
     def _abrir() -> None:
         resultado[0] = opciones[indice[0]].environment
-        v.cerrar()
+        v.terminar()
 
     def _seleccionar(i: int) -> None:
         indice[0] = i
@@ -227,7 +226,7 @@ def prompt_environment_gui(
 
     # Creados en el orden de Tab: tarjetas, Cancelar, Abrir. Los botones se
     # empaquetan antes que la ayuda: si falta lugar, se recorta la ayuda.
-    cancelar = Boton(v, v.pie, "Cancelar", command=v.cerrar)
+    cancelar = Boton(v, v.pie, "Cancelar", command=v.terminar)
     abrir = Boton(v, v.pie, "Abrir", variante="primario", command=_abrir)
     abrir.pack(side="right")
     cancelar.pack(side="right", padx=(0, v.px(8 - 2 * MARGEN)))
@@ -241,13 +240,13 @@ def prompt_environment_gui(
         tarjetas[nuevo].focus_set()
         return "break"
 
-    v.root.bind("<Up>", lambda _e: _mover(-1))
-    v.root.bind("<Down>", lambda _e: _mover(1))
+    v.tecla("<Up>", lambda _e: _mover(-1))
+    v.tecla("<Down>", lambda _e: _mover(1))
     # Enter sobre un botón lo activa el botón; en el resto, abre.
-    v.root.bind("<Return>", lambda _e: _abrir())
-    v.root.bind("<KP_Enter>", lambda _e: _abrir())
-    v.root.bind("<Escape>", lambda _e: v.cerrar())
-    v.root.protocol("WM_DELETE_WINDOW", v.cerrar)
+    v.tecla("<Return>", lambda _e: _abrir())
+    v.tecla("<KP_Enter>", lambda _e: _abrir())
+    v.tecla("<Escape>", lambda _e: v.terminar())
+    v.root.protocol("WM_DELETE_WINDOW", v.terminar)
 
     _seleccionar(indice[0])
     v.foco_inicial = tarjetas[indice[0]]
