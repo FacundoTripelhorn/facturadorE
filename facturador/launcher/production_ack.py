@@ -139,22 +139,21 @@ def prompt_production_confirm_gui() -> bool:
     El foco arranca en "Cancelar": un Enter apurado no abre Producción.
     """
     try:
-        from .widgets import Boton, Ventana, panel_error, pildora
+        from .widgets import Boton, panel_error, pildora, ventana
 
-        ventana = Ventana()
+        v = ventana()
     except Exception as exc:
         raise ChooserUnavailable(f"no se pudo abrir la ventana: {exc}") from exc
 
-    v = ventana
     selection: list[bool] = [False]
 
     def _ok() -> None:
         selection[0] = True
-        v.cerrar()
+        v.terminar()
 
     def _cancel() -> None:
         selection[0] = False
-        v.cerrar()
+        v.terminar()
 
     margen = v.px(MARGEN)
     pildora(v, v.contenido, ArcaEnvironment.PROD, "Producción").pack(
@@ -174,7 +173,7 @@ def prompt_production_confirm_gui() -> bool:
     confirmar.pack(side="right")
     cancelar.pack(side="right", padx=(0, v.px(8 - 2 * MARGEN)))
 
-    v.root.bind("<Escape>", lambda _e: _cancel())
+    v.tecla("<Escape>", lambda _e: _cancel())
     v.root.protocol("WM_DELETE_WINDOW", _cancel)
     v.foco_inicial = cancelar
     v.ejecutar()

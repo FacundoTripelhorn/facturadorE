@@ -36,6 +36,7 @@ from .failure_window import FailureAction, prompt_failure
 from .frozen import has_interactive_terminal
 from .last_environment import save_last_environment
 from .production_ack import ensure_production_acknowledged
+from .progress import StartupCancelled, StartupUI, StartupWindow, close_window
 from .supervisor import LauncherError, ProcessSupervisor
 from .window import UiEndReason
 
@@ -55,6 +56,8 @@ class SwitchTo:
     """El usuario confirmó otro ambiente: arrancar ese perfil a continuación."""
 
     environment: ArcaEnvironment
+    # El ambiente que se cerró para el cambio (para la vista "Cambiando a").
+    from_environment: ArcaEnvironment | None = None
 
 
 @dataclass(frozen=True)
@@ -150,13 +153,43 @@ def main(
     report_failure: Callable[[str], None] | None = None,
     failure_prompt: _FailurePromptFn | None = None,
     remember_environment: _RememberFn | None = None,
+    startup_ui: StartupUI | None = None,
 ) -> int:
     args = _build_parser().parse_args(argv)
+    # Una sola ventana del launcher hasta que abre la app; al salir, se
+    # cierra si quedó abierta.
+    try:
+        return _main(
+            args,
+            choose=choose,
+            confirm_production=confirm_production,
+            supervisor_factory=supervisor_factory,
+            report_failure=report_failure,
+            failure_prompt=failure_prompt,
+            remember_environment=remember_environment,
+            startup_ui=startup_ui,
+        )
+    finally:
+        close_window()
+
+
+def _main(
+    args: argparse.Namespace,
+    *,
+    choose: _ChooseFn | None,
+    confirm_production: _ConfirmProdFn | None,
+    supervisor_factory: Callable[..., ProcessSupervisor] | None,
+    report_failure: Callable[[str], None] | None,
+    failure_prompt: _FailurePromptFn | None,
+    remember_environment: _RememberFn | None,
+    startup_ui: StartupUI | None,
+) -> int:
     factory = supervisor_factory or ProcessSupervisor
     chooser = choose or choose_environment
     report = report_failure or _report_failure
     prompt = failure_prompt or prompt_failure
     remember = remember_environment or _remember_last_environment
+    progress = startup_ui or StartupWindow(show=not args.no_browser)
 
     def fail(message: str) -> None:
         # Errores sin ambiente: solo "Cerrar".
@@ -198,6 +231,7 @@ def main(
     else:
         pending = None
         allow_chooser_retry = True
+    switching_from: ArcaEnvironment | None = None
 
     while True:
         if pending is None:
@@ -224,8 +258,11 @@ def main(
             report_failure=report,
             failure_prompt=prompt,
             remember_environment=remember,
+            startup_ui=progress,
+            switching_from=switching_from,
             return_to_chooser_on_startup_error=allow_chooser_retry,
         )
+        switching_from = None
         if isinstance(outcome, Retry):
             # "Reintentar" en la ventana de error: el mismo ambiente.
             pending = outcome.environment
@@ -234,6 +271,7 @@ def main(
             # Ya confirmado en el chooser del cambio: arrancar el destino.
             # Vuelve a pedir ack solo si el perfil prod aún no lo tiene.
             pending = outcome.environment
+            switching_from = outcome.from_environment
             allow_chooser_retry = True
             continue
         if isinstance(outcome, ReturnToChooser):
@@ -258,6 +296,8 @@ def _run_session(
     report_failure: Callable[[str], None],
     failure_prompt: _FailurePromptFn | None = None,
     remember_environment: _RememberFn | None = None,
+    startup_ui: StartupUI | None = None,
+    switching_from: ArcaEnvironment | None = None,
     return_to_chooser_on_startup_error: bool = False,
 ) -> int | None | SwitchTo | ReturnToChooser | Retry:
     """Supervisa una sesión.
@@ -269,9 +309,11 @@ def _run_session(
     - ``SwitchTo``: el usuario eligió otro ambiente; el backend actual ya
       está detenido.
     - ``Retry``: el usuario pidió reintentar tras un error.
+    - ``ReturnToChooser`` también si canceló el arranque desde el progreso.
     """
     prompt = failure_prompt or prompt_failure
     remember = remember_environment or _remember_last_environment
+    progress = startup_ui or StartupWindow()
 
     def failed(message: str, code: int) -> int | None | Retry:
         return _session_failed(
@@ -321,16 +363,33 @@ def _run_session(
         readiness_timeout=args.timeout,
     )
     try:
-        result = supervisor.start()
+        # Con ventana, start() corre en un hilo y la ventana muestra el
+        # progreso; "Cancelar" lo detiene con stop().
+        result = progress.start(
+            environment,
+            supervisor.start,
+            lambda: supervisor.stop(),
+            switching_from=switching_from,
+        )
+    except StartupCancelled:
+        print(
+            f"Inicio de {_display_name(environment)} cancelado.",
+            flush=True,
+        )
+        return ReturnToChooser() if return_to_chooser_on_startup_error else 0
     except LauncherError as exc:
         return failed(str(exc), 1)
     except ProfileError as exc:
         # Cinturón por si el plan falla fuera del parser (p.ej. puerto vía API).
         return failed(str(exc), 2)
     except KeyboardInterrupt:
-        # start() ya apagó el hijo; no dejar traceback al usuario.
+        # start() (o la ventana de progreso) ya apagó el hijo; no dejar
+        # traceback al usuario.
         print("\nDeteniendo…", flush=True)
         return 0
+
+    # Listo: la ventana del launcher deja lugar a la de la app.
+    close_window()
 
     # /health respondió: es el ambiente a preseleccionar la próxima vez.
     remember(environment)
@@ -381,6 +440,7 @@ def _run_session(
                 confirm_production=confirm_production,
                 report_failure=report_failure,
                 failure_prompt=prompt,
+                startup_ui=progress,
                 return_to_chooser_on_startup_error=return_to_chooser_on_startup_error,
                 initial_reason=ui_reason,
             )
@@ -394,6 +454,7 @@ def _run_session(
                 current=environment,
                 choose=choose,
                 confirm_production=confirm_production,
+                startup_ui=progress,
             )
             if switch is not None:
                 return switch
@@ -428,6 +489,7 @@ def _after_native_ui_session(
     return_to_chooser_on_startup_error: bool,
     initial_reason: UiEndReason,
     failure_prompt: _FailurePromptFn | None = None,
+    startup_ui: StartupUI | None = None,
 ) -> int | None | SwitchTo | ReturnToChooser | Retry:
     """Ciclo post-webview: cerrar = apagar backend; interrupt = cambio de
     ambiente / muerte."""
@@ -462,6 +524,7 @@ def _after_native_ui_session(
                     choose=choose,
                     confirm_production=confirm_production,
                     reopen_on_same=False,
+                    startup_ui=startup_ui,
                 )
                 if switch is not None:
                     return switch
@@ -499,6 +562,7 @@ def _after_native_ui_session(
                 current=environment,
                 choose=choose,
                 confirm_production=confirm_production,
+                startup_ui=startup_ui,
             )
             if switch is not None:
                 return switch
@@ -521,6 +585,8 @@ def _reopen_ui(supervisor: ProcessSupervisor) -> UiEndReason | None:
     """
     if not getattr(supervisor, "open_browser", False):
         return None
+    # La ventana del launcher (selector, progreso) deja lugar a la app.
+    close_window()
     open_ui = getattr(supervisor, "open_ui", None)
     if callable(open_ui):
         result = open_ui()
@@ -547,16 +613,41 @@ def _handle_change_environment_request(
     choose: _ChooseFn,
     confirm_production: _ConfirmProdFn | None = None,
     reopen_on_same: bool = True,
-) -> SwitchTo | None:
+    startup_ui: StartupUI | None = None,
+) -> SwitchTo | ReturnToChooser | None:
     """Chooser con el backend aún vivo; stop solo si confirma otro.
 
     ``None`` = no hay pedido, o el usuario canceló / eligió el mismo ambiente.
     Si el destino es Producción sin ack, la confirmación corre *antes* de
-    ``stop()``: cancelar mantiene la sesión actual.
+    ``stop()``: cancelar mantiene la sesión actual. ``ReturnToChooser`` si
+    canceló mientras se cerraba el actual (ya no hay sesión que mantener).
 
     ``reopen_on_same``: si False, el caller reabre la UI (sesión webview nativa
     donde ``open_ui`` bloquearía de nuevo dentro de este handler).
     """
+    outcome = _decide_change_environment(
+        supervisor,
+        current=current,
+        choose=choose,
+        confirm_production=confirm_production,
+        reopen_on_same=reopen_on_same,
+        startup_ui=startup_ui or StartupWindow(),
+    )
+    if outcome is None:
+        # Sigue la sesión actual: el selector no queda abierto encima.
+        close_window()
+    return outcome
+
+
+def _decide_change_environment(
+    supervisor: ProcessSupervisor,
+    *,
+    current: ArcaEnvironment,
+    choose: _ChooseFn,
+    confirm_production: _ConfirmProdFn | None,
+    reopen_on_same: bool,
+    startup_ui: StartupUI,
+) -> SwitchTo | ReturnToChooser | None:
     request = supervisor.poll_change_environment_request()
     if request is None:
         return None
@@ -590,6 +681,7 @@ def _handle_change_environment_request(
             flush=True,
         )
         if reopen_on_same and supervisor.open_browser:
+            close_window()
             open_ui = getattr(supervisor, "open_ui", None)
             if callable(open_ui):
                 try:
@@ -633,14 +725,28 @@ def _handle_change_environment_request(
         )
         return None
 
-    # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro.
+    # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro. Con
+    # ventana, el progreso "Cambiando a …" aparece ya, mientras se cierra.
     print(
         f"Deteniendo {supervisor.plan.profile.display_name} "
         "antes de abrir el otro ambiente…",
         flush=True,
     )
-    supervisor.stop()
-    return SwitchTo(selected)
+    cancelled = startup_ui.stop_for_switch(
+        current, selected, lambda: supervisor.stop()
+    )
+    if cancelled:
+        print(
+            f"Cambio a {_display_name(selected)} cancelado; "
+            f"{supervisor.plan.profile.display_name} ya se cerró.",
+            flush=True,
+        )
+        return ReturnToChooser()
+    return SwitchTo(selected, from_environment=current)
+
+
+def _display_name(environment: ArcaEnvironment) -> str:
+    return "Producción" if environment is ArcaEnvironment.PROD else "Homologación"
 
 
 def _choose_for_switch(

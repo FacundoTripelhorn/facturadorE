@@ -41,6 +41,7 @@ TOKENS: tuple[str, ...] = (
     "acento-hover",
     "sobre-acento",
     "acento-tinte",
+    "ok",
     "aviso",
     "aviso-fondo",
     "aviso-borde",
@@ -248,4 +249,18 @@ def icono_error(lado: int, *, color: RGBA, fondo: RGBA) -> Image.Image:
     draw.line((12 * s, 8 * s, 12 * s, 12.5 * s), fill=color, width=trazo)
     r = trazo / 2 + 0.2 * s
     draw.ellipse((12 * s - r, 16 * s - r, 12 * s + r, 16 * s + r), fill=color)
+    return img.resize((lado, lado), Image.Resampling.LANCZOS)
+
+
+def icono_check(lado: int, *, color: RGBA, fondo: RGBA) -> Image.Image:
+    """Tilde de paso cumplido (trazo, como los íconos de la app)."""
+    s = lado * _SS / 24  # grilla de 24
+    img = Image.new("RGBA", (lado * _SS, lado * _SS), fondo)
+    draw = ImageDraw.Draw(img)
+    trazo = max(1, round(3 * s))
+    puntos = [(4 * s, 12 * s), (9 * s, 17 * s), (20 * s, 6 * s)]
+    draw.line(puntos, fill=color, width=trazo, joint="curve")
+    r = trazo / 2
+    for x, y in (puntos[0], puntos[-1]):
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
     return img.resize((lado, lado), Image.Resampling.LANCZOS)

@@ -102,15 +102,15 @@ def show_failure_window(
     can_choose: bool,
 ) -> FailureAction:
     """La ventana de error; bloquea hasta que el usuario elige."""
-    from .widgets import Boton, Ventana, panel_error, pildora
+    from .widgets import Boton, panel_error, pildora, ventana
 
-    v = Ventana()
+    v = ventana()
     salida = FailureAction.CHOOSE if can_choose else FailureAction.CLOSE
     accion: list[FailureAction] = [salida]
 
     def _terminar(elegida: FailureAction) -> None:
         accion[0] = elegida
-        v.cerrar()
+        v.terminar()
 
     def _copiar() -> None:
         try:
@@ -121,7 +121,7 @@ def show_failure_window(
             _log.debug("no se pudo copiar al portapapeles", exc_info=True)
             return
         copiar.cambiar_texto(_COPIADO)
-        v.root.after(_COPIADO_MS, lambda: copiar.cambiar_texto(_COPIAR))
+        v.despues(_COPIADO_MS, lambda: copiar.cambiar_texto(_COPIAR))
 
     margen = v.px(MARGEN)
     if environment is not None:
@@ -156,7 +156,7 @@ def show_failure_window(
     for i, boton in enumerate(reversed(botones)):
         boton.pack(side="right", padx=(0, 0 if i == 0 else v.px(8 - 2 * MARGEN)))
 
-    v.root.bind("<Escape>", lambda _e: _terminar(salida))
+    v.tecla("<Escape>", lambda _e: _terminar(salida))
     v.root.protocol("WM_DELETE_WINDOW", lambda: _terminar(salida))
     v.foco_inicial = botones[-1]
     v.ejecutar()
