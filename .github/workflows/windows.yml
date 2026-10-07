@@ -1,8 +1,11 @@
-# Build del ejecutable de Windows (PyInstaller) + smoke headless.
+# Build del ejecutable de Windows (PyInstaller), su instalador (Inno Setup)
+# y las pruebas sin pantalla.
 #
-# PRs y master: construye la carpeta portable, corre el smoke sin pantalla
-# (packaging/windows/smoke_ci.py) y sube el zip como artifact.
-# Tag v*: además publica FacturadorE-windows-<tag>.zip en un GitHub Release.
+# PRs y master: construye la carpeta empaquetada y el instalador, corre el
+# smoke sin pantalla (packaging/windows/smoke_ci.py) y la prueba del
+# instalador (packaging/windows/installer_ci.py), y sube el instalador y el
+# zip de la carpeta como artifacts.
+# Tag v*: además publica FacturadorE-Setup-<tag>.exe en un GitHub Release.
 # El chooser, la ventana, el cambio de ambiente y el cierre se prueban a
 # mano en la PC (docs/windows-smoke-test.md).
 name: Windows
@@ -44,12 +47,32 @@ jobs:
           if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}" }
           else { $v = "dev-" + "${{ github.sha }}".Substring(0, 7) }
           "value=$v" >> $env:GITHUB_OUTPUT
+      # Versión fija si el runner no lo trae: el instalador publicado no
+      # depende de qué haya en la imagen.
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --version=6.7.1 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "No se pudo instalar Inno Setup" }
+          }
       - name: Build
         shell: pwsh
         run: packaging/windows/build.ps1 -Version ${{ steps.version.outputs.value }}
       - name: Smoke headless
         shell: pwsh
         run: uv run python packaging/windows/smoke_ci.py packaging/windows/dist/FacturadorE
+      # Descarga simulada, instalación, smoke sobre lo instalado,
+      # actualización y desinstalación.
+      - name: Instalador
+        shell: pwsh
+        run: uv run python packaging/windows/installer_ci.py packaging/windows/dist/FacturadorE-Setup-${{ steps.version.outputs.value }}.exe
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: FacturadorE-Setup-${{ steps.version.outputs.value }}
+          path: packaging/windows/dist/FacturadorE-Setup-${{ steps.version.outputs.value }}.exe
+          if-no-files-found: error
+      # La carpeta empaquetada, para probarla sin instalar. No se publica.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: FacturadorE-windows-${{ steps.version.outputs.value }}
@@ -58,7 +81,7 @@ jobs:
 
   release:
     # Solo este job puede escribir en el repo (crear el Release) y firmar
-    # la atestación de procedencia del zip.
+    # la atestación de procedencia del instalador.
     if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
@@ -69,20 +92,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: FacturadorE-windows-${{ needs.build.outputs.version }}
-      # Prueba verificable de que el zip salió de este workflow y este
-      # commit: gh attestation verify <zip> --repo <owner>/<repo>.
+          name: FacturadorE-Setup-${{ needs.build.outputs.version }}
+      # Prueba verificable de que el instalador salió de este workflow y
+      # este commit: gh attestation verify <instalador> --repo <owner>/<repo>.
       # GitHub solo emite atestaciones en repos públicos (o Enterprise).
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         if: ${{ !github.event.repository.private }}
         with:
-          subject-path: FacturadorE-windows-${{ github.ref_name }}.zip
+          subject-path: FacturadorE-Setup-${{ github.ref_name }}.exe
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "${{ github.ref_name }}"
-          "FacturadorE-windows-${{ github.ref_name }}.zip"
+          "FacturadorE-Setup-${{ github.ref_name }}.exe"
           --repo "${{ github.repository }}"
           --title "FacturadorE ${{ github.ref_name }}"
           --generate-notes

@@ -16,8 +16,9 @@ Qué incluye:
   el cliente habitual, revisión antes de enviar, listado y detalle read-only.
 - **PDF del comprobante** con QR según RG 4892 (fpdf2, Python puro, sin browser).
 - **SQLite** como única fuente de verdad local; sin servicios externos.
-- **App de Windows portable**: `FacturadorE.exe` en un zip, sin instalar
-  Python ni Docker (ver [Uso en Windows](#uso-en-windows-recomendado)).
+- **App de Windows con instalador**: se instala por usuario, sin
+  administrador y sin Python ni Docker (ver
+  [Uso en Windows](#uso-en-windows-recomendado)).
 - **Empaquetado Docker** (misma imagen para Windows y macOS) con el puerto
   publicado solo en `127.0.0.1`, y launchers de doble click.
 - **Seed cifrado** del lado del cliente ([age](https://age-encryption.org)):
@@ -28,7 +29,7 @@ Qué incluye:
 
 ## Requisitos
 
-- **Windows:** solo el zip de FacturadorE (Windows 10/11 de 64 bits). Ver
+- **Windows:** solo el instalador de FacturadorE (Windows 10/11 de 64 bits). Ver
   [Uso en Windows](#uso-en-windows-recomendado).
 - **macOS / desarrollo:** **Docker Desktop**, o bien **Python ≥ 3.12** +
   [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
@@ -36,7 +37,7 @@ Qué incluye:
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
-- Para backups: **[age](https://age-encryption.org)** (el zip de Windows ya
+- Para backups: **[age](https://age-encryption.org)** (la app de Windows ya
   lo trae; si no, `winget install FiloSottile.age` / `brew install age`) y, si
   se sube a S3, **aws CLI**.
 
@@ -64,17 +65,13 @@ Guías paso a paso (trámites en ARCA, certificados y verificación):
 
 ## Uso en Windows (recomendado)
 
-1. Descargar `FacturadorE-windows-<versión>.zip` del último **Release** del
-   repo. Tip: antes de descomprimir, clic derecho en el zip → Propiedades →
-   marcar **Desbloquear** → Aceptar (así Windows no avisa por cada archivo).
-2. Descomprimir en `%LOCALAPPDATA%\Programs` (o donde quieras; no hace falta
-   ser administrador). El zip trae la carpeta `FacturadorE` con
-   `FacturadorE.exe` adentro.
-3. Abrir `FacturadorE.exe`. Como el ejecutable no está firmado, la primera vez
-   SmartScreen puede mostrar "Windows protegió su PC": **Más información →
-   Ejecutar de todas formas** (una vez por versión).
-4. Clic derecho en `FacturadorE.exe` → **Anclar a Inicio** (o a la barra de
-   tareas) para abrirlo con un click.
+1. Descargar `FacturadorE-Setup-<versión>.exe` del último **Release** del
+   repo.
+2. Abrir el instalador. Como no está firmado, SmartScreen puede mostrar
+   "Windows protegió su PC": **Más información → Ejecutar de todas formas**.
+   No pide administrador: instala para tu usuario en
+   `%LOCALAPPDATA%\Programs\FacturadorE`.
+3. Abrir **FacturadorE** desde el menú Inicio.
 
 Al abrirlo aparece el selector Homologación / Producción y después la ventana
 de la app. **Cerrar la ventana cierra todo**. Abrirlo de nuevo con la app en
@@ -82,20 +79,22 @@ marcha reabre la misma sesión, sin levantar otra copia.
 
 - **Datos:** todo vive en `%LOCALAPPDATA%\FacturadorE` (un perfil por
   ambiente, más `launcher.log`). La carpeta del programa no guarda nada.
-- **Actualizar:** cerrar la app y reemplazar la carpeta del programa por la
-  del zip nuevo. Los datos no se tocan.
-- **Desinstalar:** borrar la carpeta del programa. `%LOCALAPPDATA%\FacturadorE`
-  tiene los certificados y la base: hacé backup antes de borrarla.
+- **Actualizar:** ejecutar el instalador de la versión nueva encima. Cierra
+  la app si está abierta. Los datos no se tocan.
+- **Desinstalar:** desde Configuración → Aplicaciones. Borra solo el
+  programa: `%LOCALAPPDATA%\FacturadorE` (certificados y base) queda como
+  estaba. Hacé backup antes de borrar esa carpeta a mano.
 - **Ventana:** usa Microsoft Edge WebView2, que viene con Windows 11 y con
   Edge actualizado. Si falta, la app se abre en el navegador.
-- **Backups:** el zip trae `age` y `age-keygen` (en `_internal\bin`); no hace
+- **Backups:** la app trae `age` y `age-keygen` (en `_internal\bin`); no hace
   falta instalarlos.
 - **Si algo falla al abrir:** un diálogo explica el error. El detalle queda
   en `%LOCALAPPDATA%\FacturadorE\launcher.log` y en los logs del perfil.
 
-El zip lo arma CI en Windows al publicar un tag `v*`
+El instalador lo arma CI en Windows al publicar un tag `v*`
 ([`.github/workflows/windows.yml`](.github/workflows/windows.yml)). Para
-armarlo a mano en una PC con Windows y uv:
+armarlo a mano en una PC con Windows, uv e
+[Inno Setup](https://jrsoftware.org/isinfo.php):
 `powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1`.
 Prueba manual antes de usar una versión nueva:
 [`docs/windows-smoke-test.md`](docs/windows-smoke-test.md).
@@ -125,7 +124,7 @@ Producción: parar el contenedor, poner `ARCA_ENV=prod` (y el par `cert.*`
 bajo `profiles/prod/secrets/`), y volver a levantar — un reinicio, no un
 cambio en caliente.
 
-En Windows, la app portable (arriba) reemplaza a Docker como camino
+En Windows, la app instalada (arriba) reemplaza a Docker como camino
 principal; Docker queda como alternativa.
 
 Levantar: doble click en `scripts/launch.cmd` (Windows) o
@@ -359,10 +358,10 @@ docs/
 - **Usá tu propio certificado** y empezá en **Homologación**: la app emite
   comprobantes fiscales reales en Producción. Se distribuye sin garantía
   (ver [Licencia](#licencia)).
-- **Verificá el zip de Windows** antes de usarlo: cada Release publica una
+- **Verificá el instalador de Windows** antes de usarlo: cada Release publica una
   atestación de procedencia que prueba que salió del CI de este repo.
   Con la [CLI de GitHub](https://cli.github.com/):
-  `gh attestation verify FacturadorE-windows-<versión>.zip --repo FacundoTripelhorn/facturadorE`.
+  `gh attestation verify FacturadorE-Setup-<versión>.exe --repo FacundoTripelhorn/facturadorE`.
 - Vulnerabilidades: **no** abras un issue público; ver
   [`SECURITY.md`](SECURITY.md).
 
