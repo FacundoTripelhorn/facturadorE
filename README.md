@@ -85,7 +85,9 @@ marcha reabre la misma sesión, sin levantar otra copia.
   programa: `%LOCALAPPDATA%\FacturadorE` (certificados y base) queda como
   estaba. Hacé backup antes de borrar esa carpeta a mano.
 - **Ventana:** usa Microsoft Edge WebView2, que viene con Windows 11 y con
-  Edge actualizado. Si falta, la app se abre en el navegador.
+  Edge actualizado. Si la ventana no puede abrir, la app avisa y se abre en
+  el navegador: ver
+  [La ventana no abre y se abre el navegador](#la-ventana-no-abre-y-se-abre-el-navegador).
 - **Backups:** la app trae `age` y `age-keygen` (en `_internal\bin`); no hace
   falta instalarlos.
 - **Si algo falla al abrir:** un diálogo explica el error. El detalle queda
@@ -98,6 +100,27 @@ armarlo a mano en una PC con Windows, uv e
 `powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1`.
 Prueba manual antes de usar una versión nueva:
 [`docs/windows-smoke-test.md`](docs/windows-smoke-test.md).
+
+### La ventana no abre y se abre el navegador
+
+Si FacturadorE no puede abrir su ventana propia, muestra un aviso y abre la
+app en el navegador (`http://127.0.0.1:8399/`). Funciona igual, con dos
+diferencias: cerrar la pestaña **no** cierra la app (para cerrarla, finalizar
+`FacturadorE.exe` desde el Administrador de tareas), y el motivo queda en
+`%LOCALAPPDATA%\FacturadorE\launcher.log` (botón **Ver registro** del aviso).
+
+Causas conocidas y qué hacer:
+
+| Causa | Cómo se reconoce | Qué hacer |
+|-------|------------------|-----------|
+| Falta WebView2 | Windows 10 sin Edge actualizado. | Instalar [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) y volver a abrir. |
+| Archivos con la marca de internet | El registro dice `Failed to resolve Python.Runtime.Loader.Initialize`. Pasa si la carpeta del programa se copió a mano desde un zip descargado. | Instalar con `FacturadorE-Setup-<versión>.exe`: lo que escribe el instalador no lleva la marca. |
+| Un antivirus bloqueó o puso en cuarentena una DLL | El registro nombra una DLL de `_internal` que no se pudo cargar, o el antivirus muestra una alerta. | Restaurar el archivo o agregar una excepción para `%LOCALAPPDATA%\Programs\FacturadorE`, y reinstalar. |
+| Instalación incompleta o dañada | Faltan archivos en `_internal`. | Ejecutar el instalador de nuevo encima. |
+
+Si ninguna aplica, **Copiar detalle técnico** en el aviso junta el motivo, el
+ambiente y la versión para reportarlo. Revisalo antes de compartirlo: incluye
+rutas con tu usuario de Windows.
 
 ## Uso con Docker
 

@@ -3,7 +3,8 @@
 Tras ``GET /health``, el launcher abre ``http://127.0.0.1:<port>/`` en una
 ventana del webview del SO (WebView2 en Windows, WebKit en macOS) en lugar de
 una pestaña genérica del navegador. Si pywebview no puede arrancar, se cae al
-navegador del sistema con un mensaje claro en el log.
+navegador del sistema: queda un mensaje claro en el log y, antes de abrir el
+navegador, se avisa al usuario (``fallback_notice``).
 
 ``webview.start()`` bloquea el hilo que lo invoca hasta que se cierra la
 ventana (o ``interrupt_check`` fuerza ``destroy``). El caller (supervisor /
@@ -61,6 +62,7 @@ def open_app_ui(
     interrupt_check: Callable[[], bool] | None = None,
     webview_module: Any | None = None,
     browser_opener: Callable[[str], Any] | None = None,
+    fallback_notice: Callable[[str], Any] | None = None,
 ) -> UiOpenResult:
     """Abre la UI local en webview o, si falla, en el navegador del sistema.
 
@@ -72,6 +74,9 @@ def open_app_ui(
             colgado).
         webview_module: Inyectable en tests; por defecto ``import webview``.
         browser_opener: Fallback; por defecto ``webbrowser.open``.
+        fallback_notice: Se llama con el motivo cuando la ventana nativa no
+            abre, antes de abrir el navegador; bloquea hasta que el usuario
+            lo acepta. Sin él, la caída al navegador solo queda en el log.
     """
     open_browser = browser_opener or webbrowser.open
     try:
@@ -88,6 +93,7 @@ def open_app_ui(
             exc,
             url,
         )
+        _notify_fallback(fallback_notice, f"pywebview no está disponible ({exc})")
         _open_system_browser(open_browser, url)
         return UiOpenResult(reason=UiEndReason.BROWSER_FALLBACK)
 
@@ -134,6 +140,7 @@ def open_app_ui(
             url,
             exc_info=True,
         )
+        _notify_fallback(fallback_notice, str(exc) or type(exc).__name__)
         _open_system_browser(open_browser, url)
         return UiOpenResult(reason=UiEndReason.BROWSER_FALLBACK)
 
@@ -161,6 +168,16 @@ def _enable_downloads(webview: Any) -> None:
             "pywebview no acepta ALLOW_DOWNLOADS; las descargas quedan bloqueadas",
             exc_info=True,
         )
+
+
+def _notify_fallback(notice: Callable[[str], Any] | None, motivo: str) -> None:
+    """El aviso es una cortesía: si falla, el navegador se abre igual."""
+    if notice is None:
+        return
+    try:
+        notice(motivo)
+    except Exception:
+        _log.debug("no se pudo mostrar el aviso de caída al navegador", exc_info=True)
 
 
 def _open_system_browser(opener: Callable[[str], Any], url: str) -> None:

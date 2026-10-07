@@ -644,6 +644,29 @@ def panel_error(
     con_icono: bool = False,
 ) -> tk.Canvas:
     """Panel de error de la app: fondo, borde y texto ``--error-*``."""
+    return _panel(ventana, parent, texto, "error", titulo, con_icono)
+
+
+def panel_aviso(
+    ventana: Ventana,
+    parent: tk.Misc,
+    texto: str,
+    *,
+    titulo: str | None = None,
+    con_icono: bool = False,
+) -> tk.Canvas:
+    """Panel de aviso de la app: fondo, borde y texto ``--aviso-*``."""
+    return _panel(ventana, parent, texto, "aviso", titulo, con_icono)
+
+
+def _panel(
+    ventana: Ventana,
+    parent: tk.Misc,
+    texto: str,
+    tono: str,
+    titulo: str | None,
+    con_icono: bool,
+) -> tk.Canvas:
     v = ventana
     p = v.paleta
     ancho = v.px(ANCHO_CONTENIDO)
@@ -661,7 +684,7 @@ def panel_error(
     x = pad_x + (lado_icono + v.px(10) if con_icono else 0)
     ancho_texto = ancho - x - pad_x
     y = pad_y
-    tinta = v.color("error-tinta")
+    tinta = v.color(f"{tono}-tinta")
     if titulo:
         item = canvas.create_text(
             x, y, anchor="nw", text=titulo, font=v.fuente(14, negrita=True),
@@ -679,13 +702,13 @@ def panel_error(
         ancho,
         alto,
         fondo=p.pil("fondo"),
-        relleno=p.pil("error-fondo"),
+        relleno=p.pil(f"{tono}-fondo"),
         radio=v.px(RADIO),
-        borde=p.pil("error-borde"),
+        borde=p.pil(f"{tono}-borde"),
     )
     if con_icono:
         icono = icono_error(
-            lado_icono, color=p.pil("error"), fondo=p.pil("error-fondo")
+            lado_icono, color=p.pil(tono), fondo=p.pil(f"{tono}-fondo")
         )
         img.paste(icono, (pad_x, pad_y + v.px(1)))
     fondo_id = canvas.create_image(0, 0, anchor="nw", image=v.foto(img))

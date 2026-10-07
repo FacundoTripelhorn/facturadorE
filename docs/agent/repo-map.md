@@ -249,7 +249,7 @@ which one operates; PV selection when more than one is enabled. See
 | Docker image & localhost bind | `Dockerfile`, `docker-compose.yml` |
 | Container entrypoint (profile normalize + secrets copy) | `docker/entrypoint.sh` |
 | Process supervisor + chooser + switch | `facturador/launcher/` |
-| Launcher windows (one Tk window from the chooser until the app opens; theme from `app.css` tokens, Tk + Pillow) | `facturador/launcher/theme.py`, `widgets.py` (the shared window and its views), `chooser.py`, `production_ack.py`, `progress.py` (start/stop in a worker thread, cancel without orphans), `failure_window.py`, `last_environment.py`; brand SVG renderer shared with the exe icon: `facturador/marca.py` |
+| Launcher windows (one Tk window from the chooser until the app opens; theme from `app.css` tokens, Tk + Pillow) | `facturador/launcher/theme.py`, `widgets.py` (the shared window and its views), `chooser.py`, `production_ack.py`, `progress.py` (start/stop in a worker thread, cancel without orphans), `failure_window.py`, `fallback_window.py` (notice shown before falling back to the system browser when the native window cannot open), `last_environment.py`; brand SVG renderer shared with the exe icon: `facturador/marca.py` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
 | Windows exe (primary Windows path) | `packaging/windows/` (spec, `build.ps1`, icon, Inno Setup installer `FacturadorE.iss`, CI smoke `smoke_ci.py`, CI installer check `installer_ci.py`), `facturador/launcher/frozen.py` (exe entry: backend mode, log, bundled age), `.github/workflows/windows.yml` (build, smoke, installer check, Release of the installer on `v*`) |
 | Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |
@@ -272,7 +272,8 @@ Homologación/Producción chooser unless `--env` is passed, resolves the hidden
 profile, takes a per-profile lock (`ProfilePaths.launcher_lock`), starts
 `python -m facturador` with that single `ARCA_ENV`, waits for `GET /health`,
 opens a **native pywebview window** (`facturador/launcher/window.py`) to the
-loopback URL when ready (fallback: system browser; `--no-browser` skips UI),
+loopback URL when ready (fallback: a notice window, then the system browser;
+`--no-browser` skips UI),
 and stops the child when the window closes or on Ctrl+C without orphaning it.
 A second launch against the same profile reuses a healthy session (reopens the
 UI) or fails with a clear message; stale lock files without a live flock do not

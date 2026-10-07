@@ -45,6 +45,7 @@ TOKENS: tuple[str, ...] = (
     "aviso",
     "aviso-fondo",
     "aviso-borde",
+    "aviso-tinta",
     "error",
     "error-fondo",
     "error-borde",
