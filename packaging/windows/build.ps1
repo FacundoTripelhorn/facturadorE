@@ -1,10 +1,14 @@
-# Build de FacturadorE para Windows: ícono, age, PyInstaller y zip.
+# Build de FacturadorE para Windows: ícono, age, PyInstaller, zip e instalador.
 #
 # Mismo script en CI (.github/workflows/windows.yml) y a mano:
 #   powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1 -Version dev
-# Deja packaging\windows\dist\FacturadorE\ (carpeta portable) y
-# packaging\windows\dist\FacturadorE-windows-<Version>.zip.
-param([string]$Version = "dev")
+# Deja en packaging\windows\dist\:
+#   FacturadorE\                        carpeta empaquetada (la usa el smoke)
+#   FacturadorE-windows-<Version>.zip   la misma carpeta, artifact de CI
+#   FacturadorE-Setup-<Version>.exe     instalador (lo que se publica)
+# El instalador necesita Inno Setup 6.3 o posterior (ISCC.exe); sin él el
+# script falla, salvo con -SinInstalador.
+param([string]$Version = "dev", [switch]$SinInstalador)
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -55,6 +59,24 @@ try {
     $Zip = Join-Path $Dist "FacturadorE-windows-$Version.zip"
     Compress-Archive -Path (Join-Path $Dist "FacturadorE") -DestinationPath $Zip -Force
     Write-Host "Listo: $Zip"
+
+    if (-not $SinInstalador) {
+        $Iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty Source
+        if (-not $Iscc) {
+            $Iscc = @(
+                (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+                (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+                (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        }
+        if (-not $Iscc) {
+            throw "Falta Inno Setup (ISCC.exe). Instalalo o usá -SinInstalador."
+        }
+        & $Iscc /Qp "/DAppVersion=$Version" (Join-Path $Here "FacturadorE.iss")
+        if ($LASTEXITCODE -ne 0) { throw "Inno Setup falló" }
+        Write-Host "Listo: $(Join-Path $Dist "FacturadorE-Setup-$Version.exe")"
+    }
 }
 finally {
     Pop-Location

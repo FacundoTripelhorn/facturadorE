@@ -52,7 +52,7 @@ flowchart TB
     EP["docker/entrypoint.sh"]
     LAUNCH_PY["facturador/launcher/<br/>process supervisor"]
     LAUNCH["scripts/launch.cmd<br/>scripts/launch.command"]
-    PKG["packaging/windows/<br/>PyInstaller exe + smoke"]
+    PKG["packaging/windows/<br/>PyInstaller exe + installer + smoke"]
   end
 
   subgraph scripts["Local ARCA scripts"]
@@ -251,7 +251,7 @@ which one operates; PV selection when more than one is enabled. See
 | Process supervisor + chooser + switch | `facturador/launcher/` |
 | Launcher windows (one Tk window from the chooser until the app opens; theme from `app.css` tokens, Tk + Pillow) | `facturador/launcher/theme.py`, `widgets.py` (the shared window and its views), `chooser.py`, `production_ack.py`, `progress.py` (start/stop in a worker thread, cancel without orphans), `failure_window.py`, `last_environment.py`; brand SVG renderer shared with the exe icon: `facturador/marca.py` |
 | Double-click Docker helpers | `scripts/launch.cmd`, `scripts/launch.command` |
-| Windows exe (primary Windows path) | `packaging/windows/` (spec, `build.ps1`, icon, CI smoke), `facturador/launcher/frozen.py` (exe entry: backend mode, log, bundled age), `.github/workflows/windows.yml` (build, smoke, Release on `v*`) |
+| Windows exe (primary Windows path) | `packaging/windows/` (spec, `build.ps1`, icon, Inno Setup installer `FacturadorE.iss`, CI smoke `smoke_ci.py`, CI installer check `installer_ci.py`), `facturador/launcher/frozen.py` (exe entry: backend mode, log, bundled age), `.github/workflows/windows.yml` (build, smoke, installer check, Release of the installer on `v*`) |
 | Encrypted seed backup | `facturador/seed_backup.py`, `facturador/backup.py` |
 | S3 seed adapter (`seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
 | Profile diagnostics page | `facturador/diagnostics.py`, `facturador/web/templates/diagnostico.html`, `tests/test_diagnostics.py` |

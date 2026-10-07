@@ -59,7 +59,7 @@ finishing.
 | Seed backup trigger / retry | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `facturador/service.py` | `uv run pytest tests/test_seed_backup_sync.py` |
 | Schema / migrations | `facturador/schema.sql`, `facturador/migrations/`, `facturador/db.py` | `uv run pytest tests/test_migrations.py` then full `uv run pytest` (many modules touch the DB) |
 | Docker / launchers / profiles | `Dockerfile`, `docker-compose.yml`, `docker/`, `facturador/launcher/`, `facturador/profile.py`, `scripts/launch.*` | `uv run pytest tests/test_launcher.py tests/test_launcher_tema.py tests/test_launcher_progreso.py tests/test_launcher_ventanas.py tests/test_profile.py tests/test_profile_isolation.py` (the window tests skip without Tk or a display; run them under Xvfb with a Python that has Tk); `docker build -t facturador:ci .` if image/entrypoint changed |
-| Windows exe packaging | `packaging/windows/`, `facturador/launcher/frozen.py`, `.github/workflows/windows.yml` | `uv run pytest tests/test_launcher_frozen.py tests/test_launcher.py`; the real build and headless smoke only run on the Windows CI job; manual checklist in `docs/windows-smoke-test.md` |
+| Windows exe packaging | `packaging/windows/`, `facturador/launcher/frozen.py`, `.github/workflows/windows.yml` | `uv run pytest tests/test_launcher_frozen.py tests/test_launcher.py`; the real build, the headless smoke and the installer check (install, upgrade, uninstall) only run on the Windows CI job; manual checklist in `docs/windows-smoke-test.md` |
 | Agent / design docs only | `docs/agent/`, `AGENTS.md`, `docs/design.md`, `docs/adr/` | None required; spot-check links and Mermaid diagrams |
 
 **Lint/types scope:** `ruff` and `mypy` run on the whole tree; there is no
