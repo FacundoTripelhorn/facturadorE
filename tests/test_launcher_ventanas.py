@@ -13,6 +13,10 @@ import pytest
 from facturador.constants import ArcaEnvironment
 from facturador.launcher.chooser import ENVIRONMENT_OPTIONS, prompt_environment_gui
 from facturador.launcher.failure_window import FailureAction, show_failure_window
+from facturador.launcher.fallback_window import (
+    HELP_URL,
+    show_browser_fallback_window,
+)
 from facturador.launcher.production_ack import prompt_production_confirm_gui
 from facturador.launcher.progress import StartupCancelled, StartupWindow
 from facturador.launcher.supervisor import LauncherError
@@ -143,6 +147,50 @@ def test_error_sin_ambiente_no_ofrece_reintentar(programar):
         "--restore requiere --env", environment=None, can_choose=False
     )
     assert accion is FailureAction.CLOSE
+
+
+def test_aviso_de_navegador_solo_abrir_cierra_el_aviso(programar, tmp_path):
+    """Ver registro, Copiar y Ver ayuda no cierran el aviso ni abren la app;
+    recién "Abrir en el navegador" devuelve el control al launcher."""
+    registro = tmp_path / "launcher.log"
+    registro.write_text("x", encoding="utf-8")
+    archivos: list[object] = []
+    urls: list[str] = []
+    vistos: list[set[str]] = []
+
+    def _recorrer(root: tkinter.Tk) -> None:
+        botones = _botones(root)
+        vistos.append(set(botones))
+        botones["Ver registro"].invocar()
+        botones["Copiar detalle técnico"].invocar()
+        botones["Ver ayuda"].invocar()
+        assert "Python.Runtime" in root.clipboard_get()
+        assert "Homologación" in root.clipboard_get()
+        botones["Abrir en el navegador"].invocar()
+
+    programar(_recorrer)
+    show_browser_fallback_window(
+        "Failed to resolve Python.Runtime.Loader.Initialize",
+        environment=ArcaEnvironment.HOMO,
+        log_path=registro,
+        open_file=archivos.append,
+        open_url=urls.append,
+    )
+    assert vistos == [
+        {"Abrir en el navegador", "Ver registro", "Copiar detalle técnico", "Ver ayuda"}
+    ]
+    assert archivos == [registro]
+    assert urls == [HELP_URL]
+
+
+def test_aviso_de_navegador_esc_sigue_al_navegador(programar):
+    def _esc(root: tkinter.Tk) -> None:
+        # Sin launcher.log (fuera del exe) no se ofrece "Ver registro".
+        assert "Ver registro" not in _botones(root)
+        root.event_generate("<Escape>")
+
+    programar(_esc)
+    show_browser_fallback_window("no gui", environment=ArcaEnvironment.PROD)
 
 
 # --- una sola ventana: selector → progreso ------------------------------------

@@ -768,6 +768,111 @@ def test_open_app_ui_fallback_si_webview_falla():
     assert opened == ["http://127.0.0.1:8399/"]
 
 
+def test_open_app_ui_avisa_antes_de_abrir_el_navegador():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    class _BrokenWebview:
+        def create_window(self, *args, **kwargs):
+            raise RuntimeError("Failed to resolve Python.Runtime.Loader.Initialize")
+
+    pasos: list[str] = []
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_BrokenWebview(),
+        browser_opener=lambda url: pasos.append(f"navegador {url}"),
+        fallback_notice=lambda motivo: pasos.append(f"aviso {motivo}"),
+    )
+    assert result.reason is UiEndReason.BROWSER_FALLBACK
+    assert pasos == [
+        "aviso Failed to resolve Python.Runtime.Loader.Initialize",
+        "navegador http://127.0.0.1:8399/",
+    ]
+
+
+def test_open_app_ui_abre_el_navegador_aunque_el_aviso_falle():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    class _BrokenWebview:
+        def create_window(self, *args, **kwargs):
+            raise RuntimeError("no gui")
+
+    def _aviso_roto(_motivo: str) -> None:
+        raise RuntimeError("sin pantalla")
+
+    opened: list[str] = []
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_BrokenWebview(),
+        browser_opener=opened.append,
+        fallback_notice=_aviso_roto,
+    )
+    assert result.reason is UiEndReason.BROWSER_FALLBACK
+    assert opened == ["http://127.0.0.1:8399/"]
+
+
+def test_open_app_ui_no_avisa_si_la_ventana_abre():
+    from facturador.launcher import UiEndReason, open_app_ui
+
+    class _FakeWebview:
+        def create_window(self, *args, **kwargs):
+            return object()
+
+        def start(self, *args, **kwargs):
+            return None
+
+    avisos: list[str] = []
+    opened: list[str] = []
+    result = open_app_ui(
+        "http://127.0.0.1:8399/",
+        title="FacturadorE — Homologación",
+        webview_module=_FakeWebview(),
+        browser_opener=opened.append,
+        fallback_notice=avisos.append,
+    )
+    assert result.reason is UiEndReason.CLOSED
+    assert avisos == []
+    assert opened == []
+
+
+def test_supervisor_avisa_con_el_ambiente_si_la_ventana_no_abre(
+    tmp_path, monkeypatch
+):
+    """El supervisor le pasa a open_app_ui su aviso, con el ambiente."""
+    from facturador.launcher import UiEndReason, UiOpenResult
+    from facturador.launcher import supervisor as supervisor_mod
+
+    def _fake_open(url: str, *, title: str, fallback_notice, **_kwargs):
+        fallback_notice("pythonnet no cargó")
+        return UiOpenResult(reason=UiEndReason.BROWSER_FALLBACK)
+
+    monkeypatch.setattr(supervisor_mod, "open_app_ui", _fake_open)
+    avisos: list[tuple[str, ArcaEnvironment]] = []
+    supervisor = ProcessSupervisor(
+        environment=ArcaEnvironment.PROD,
+        app_data_root=tmp_path / "appdata",
+        home=tmp_path / "home",
+        open_browser=True,
+        fallback_notice=lambda motivo, ambiente: avisos.append((motivo, ambiente)),
+    )
+    result = supervisor.open_ui("http://127.0.0.1:8399")
+    assert result is not None
+    assert result.reason is UiEndReason.BROWSER_FALLBACK
+    assert avisos == [("pythonnet no cargó", ArcaEnvironment.PROD)]
+
+
+def test_aviso_de_navegador_no_abre_ventana_sin_dialogos(monkeypatch):
+    """Bajo pytest (o con terminal) el aviso no abre ninguna ventana."""
+    from facturador.launcher import fallback_window
+
+    def _no_deberia(*_args, **_kwargs):
+        raise AssertionError("no debería abrir la ventana")
+
+    monkeypatch.setattr(fallback_window, "show_browser_fallback_window", _no_deberia)
+    fallback_window.prompt_browser_fallback("motivo", ArcaEnvironment.HOMO)
+
+
 def test_open_app_ui_fallback_si_import_falla(monkeypatch):
     from facturador.launcher import UiEndReason
     from facturador.launcher import window as window_mod

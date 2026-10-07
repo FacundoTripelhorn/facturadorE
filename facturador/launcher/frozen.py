@@ -151,6 +151,13 @@ def _log_dir() -> Path:
         return Path.home()
 
 
+def launcher_log_path() -> Path | None:
+    """El ``launcher.log`` del app-data; None si todavía no existe (fuera
+    del exe la salida va a la terminal)."""
+    path = _log_dir() / LAUNCHER_LOG
+    return path if path.is_file() else None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     redirect_missing_streams(_log_dir())

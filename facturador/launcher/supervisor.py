@@ -29,6 +29,7 @@ from typing import Any
 from ..constants import DEFAULT_PORT, ArcaEnvironment
 from ..profile import EnvironmentProfile
 from .command import BackendLaunchPlan, plan_backend_launch
+from .fallback_window import prompt_browser_fallback
 from .lock import LockHolder, ProfileLock, ProfileLockHeld
 from .switch import (
     ChangeEnvironmentRequest,
@@ -81,6 +82,9 @@ class ProcessSupervisor:
     # Callable inyectable en tests / agents (p.ej. ``list.append``) es
     # no bloqueante y sí puede usarse desde start().
     browser_opener: Callable[[str], Any] | None = None
+    # Aviso cuando la ventana nativa no abre y la app va al navegador
+    # (motivo, ambiente). None → la ventana de aviso del launcher.
+    fallback_notice: Callable[[str, ArcaEnvironment], Any] | None = None
     python: str | None = None
     base_env: Mapping[str, str] | None = None
     # Inyectable en tests: reemplaza ``python -m facturador``.
@@ -338,6 +342,7 @@ class ProcessSupervisor:
                 url,
                 title=title,
                 interrupt_check=interrupt,
+                fallback_notice=self._notify_browser_fallback,
             )
         except Exception:
             # El backend ya está listo: un fallo al abrir la UI no debe
@@ -348,6 +353,10 @@ class ProcessSupervisor:
                 exc_info=True,
             )
             self._last_ui_result = None
+
+    def _notify_browser_fallback(self, motivo: str) -> None:
+        notice = self.fallback_notice or prompt_browser_fallback
+        notice(motivo, self.environment)
 
     def _ui_interrupt_check(self) -> bool:
         """True si hay que devolver el hilo principal (cambio de ambiente / muerte)."""
