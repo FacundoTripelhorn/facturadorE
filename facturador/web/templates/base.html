@@ -23,7 +23,7 @@
     </span>
     <nav class="principal" aria-label="Principal">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Emitir</a>
-      <a href="/comprobantes" {% if request.url.path == "/comprobantes" %}aria-current="page"{% endif %}>Comprobantes</a>
+      <a href="/comprobantes" {% if request.url.path.startswith("/comprobantes") %}aria-current="page"{% endif %}>Comprobantes</a>
       <a href="/constatacion" {% if request.url.path.startswith("/constatacion") %}aria-current="page"{% endif %}>Constatar CAE</a>
     </nav>
     {% set sin_leer = avisos_arca_no_leidos | length %}

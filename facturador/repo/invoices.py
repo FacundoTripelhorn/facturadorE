@@ -117,6 +117,30 @@ def list_invoices(
     ).fetchall()
 
 
+def list_authorized_in_year(
+    conn: sqlite3.Connection, environment: str, year: int
+) -> list[sqlite3.Row]:
+    """Autorizados del ambiente con fecha de comprobante en ``year``."""
+    return conn.execute(
+        "SELECT client_id, cliente, fecha_cbte, moneda_id, imp_total"
+        " FROM invoices"
+        " WHERE status = ? AND environment = ? AND substr(fecha_cbte, 1, 4) = ?"
+        " ORDER BY fecha_cbte, created_at",
+        (InvoiceStatus.AUTHORIZED, environment, f"{year:04d}"),
+    ).fetchall()
+
+
+def authorized_years(conn: sqlite3.Connection, environment: str) -> list[int]:
+    """Años con al menos un autorizado en el ambiente, del más reciente al
+    más viejo."""
+    rows = conn.execute(
+        "SELECT DISTINCT substr(fecha_cbte, 1, 4) AS anio FROM invoices"
+        " WHERE status = ? AND environment = ? ORDER BY anio DESC",
+        (InvoiceStatus.AUTHORIZED, environment),
+    ).fetchall()
+    return [int(row["anio"]) for row in rows if row["anio"].isdigit()]
+
+
 def count_invoices_by_status(conn: sqlite3.Connection) -> dict[str, int]:
     rows = conn.execute(
         "SELECT status, COUNT(*) AS n FROM invoices GROUP BY status"
