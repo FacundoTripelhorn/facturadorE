@@ -810,7 +810,8 @@ def comprobantes_resumen(request: Request, service: ServiceDep, anio: str = ""):
     """Totales del año en la moneda original de cada comprobante autorizado."""
     env = service.config.env
     anio_actual = dt.date.today().year
-    elegido = int(anio) if anio.isdigit() and len(anio) == 4 else anio_actual
+    # Solo dígitos ASCII: str.isdigit() acepta "²" y otros que int() rechaza.
+    elegido = int(anio) if re.fullmatch(r"[0-9]{4}", anio) else anio_actual
     anios = repo.authorized_years(service.conn, env)
     # El selector ofrece los años con comprobantes; el elegido figura aunque
     # no tenga ninguno (el actual, por defecto) para no mostrar otro.

@@ -204,8 +204,12 @@ def test_pagina_resumen_vacia_y_anio_por_defecto(api):
     assert r.status_code == 200
     assert f"Todavía no hay comprobantes autorizados en {anio}." in r.text
     assert f'<option value="{anio}" selected>' in r.text
-    # Un año inválido cae en el actual.
-    assert f"autorizados en {anio}." in api.get("/comprobantes/resumen?anio=xx").text
+    # Un año inválido cae en el actual, incluidos dígitos no ASCII que
+    # str.isdigit() acepta pero int() no.
+    for invalido in ("xx", "20266", "²²²²"):
+        r = api.get("/comprobantes/resumen", params={"anio": invalido})
+        assert r.status_code == 200
+        assert f"autorizados en {anio}." in r.text
 
 
 def test_selector_ofrece_los_anios_con_comprobantes(api):
