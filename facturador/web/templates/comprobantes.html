@@ -16,7 +16,8 @@
 
 <section class="card">
   <h2>Comprobantes</h2>
-  <nav class="tabs">
+  {% with vista = "listado" %}{% include "_vistas_comprobantes.html" %}{% endwith %}
+  <nav class="tabs estados" aria-label="Estado">
     {% for tab, label in tabs.items() %}
     <a href="/comprobantes?estado={{ tab }}"
        {% if tab == estado %}aria-current="page"{% endif %}>

@@ -487,3 +487,36 @@ table.diagnostico td:nth-child(2) { width: 1%; white-space: nowrap; }
 table.diagnostico .accion { margin-top: .35rem; font-size: .92rem; }
 table.diagnostico .accion form { display: inline; }
 .acciones-arca { margin: 1rem 0 0; }
+
+/* ---- comprobantes: resumen del año ---- */
+.resumen-anio {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: 1rem 1.5rem; border-bottom: 1px solid var(--borde);
+}
+.resumen-anio label { margin: 0; }
+.resumen-anio select { width: auto; padding: .35rem .6rem; }
+.resumen-anio .nota { margin: 0; }
+h3.seccion { margin: 0; padding: 1.1rem 1.5rem .6rem; font-size: .9rem; font-weight: 700; }
+.graficos {
+  display: grid; gap: 1.25rem; padding: 0 1.5rem 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.grafico { margin: 0; }
+.grafico figcaption { font-size: .78rem; font-weight: 650; color: var(--tinta-suave); }
+.grafico svg { display: block; width: 100%; max-width: 640px; height: auto; }
+.grafico text { fill: var(--tinta-suave); font-size: 12px; }
+.grafico text.maximo { font-family: var(--fuente-mono); }
+.grafico .barra { fill: var(--acento); }
+.grafico .barra:hover { fill: var(--acento-hover); }
+.grafico .eje { stroke: var(--borde-fuerte); }
+.grafico .guia { stroke: var(--borde); stroke-dasharray: 3 3; }
+.resumen-meses td.sin-datos { color: var(--tinta-suave); }
+.resumen-meses tfoot td {
+  font-weight: 700; background: var(--superficie-sutil);
+  border-top: 1px solid var(--borde-fuerte); border-bottom: 0;
+}
+.tabla-scroll + h3.seccion { border-top: 1px solid var(--borde); }
+@media (max-width: 640px) {
+  .resumen-anio, h3.seccion { padding-left: 1rem; padding-right: 1rem; }
+  .graficos { padding-left: 1rem; padding-right: 1rem; }
+}

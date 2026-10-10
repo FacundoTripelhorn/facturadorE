@@ -59,6 +59,7 @@ from ..launcher.switch import (
     is_launcher_supervised,
     write_change_environment_request,
 )
+from ..resumen import MESES, resumir
 from ..schemas import (
     BackupSettingsIn,
     ClientIn,
@@ -80,6 +81,7 @@ from ..settings import (
     get_active_emisor_id,
 )
 from ..setup import SetupState, reconcile_setup_state
+from .grafico import grafico_por_mes
 from .numeros import formato_importe, parse_importe
 
 router = APIRouter(
@@ -799,6 +801,33 @@ def comprobantes(
             "facturas": repo.list_invoices(
                 service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]
             ),
+        },
+    )
+
+
+@router.get("/comprobantes/resumen", response_class=HTMLResponse)
+def comprobantes_resumen(request: Request, service: ServiceDep, anio: str = ""):
+    """Totales del año en la moneda original de cada comprobante autorizado."""
+    env = service.config.env
+    anio_actual = dt.date.today().year
+    elegido = int(anio) if anio.isdigit() and len(anio) == 4 else anio_actual
+    anios = repo.authorized_years(service.conn, env)
+    # El selector ofrece los años con comprobantes; el elegido figura aunque
+    # no tenga ninguno (el actual, por defecto) para no mostrar otro.
+    opciones = sorted({*anios, elegido}, reverse=True)
+    resumen = resumir(
+        elegido, repo.list_authorized_in_year(service.conn, env, elegido)
+    )
+    return templates.TemplateResponse(
+        request,
+        "resumen.html",
+        {
+            "resumen": resumen,
+            "anios": opciones,
+            "meses": MESES,
+            "graficos": [
+                (m.moneda, grafico_por_mes(m.por_mes)) for m in resumen.monedas
+            ],
         },
     )
 

@@ -23,11 +23,13 @@ from .emisores import (
 from .invoices import (
     INVOICE_FIELDS,
     UPDATABLE_INVOICE_FIELDS,
+    authorized_years,
     count_invoices_by_status,
     create_invoice,
     delete_draft,
     get_invoice,
     get_invoice_items,
+    list_authorized_in_year,
     list_invoices,
     max_arca_id,
     max_authorized_cbte_nro,
@@ -39,6 +41,7 @@ from .settings import get_settings, save_settings
 
 __all__ = [
     "CLIENT_FIELDS",
+    "authorized_years",
     "count_invoices_by_status",
     "create_emisor",
     "EMISOR_FIELDS",
@@ -57,6 +60,7 @@ __all__ = [
     "get_settings",
     "list_clients",
     "list_emisores",
+    "list_authorized_in_year",
     "list_invoices",
     "max_arca_id",
     "max_authorized_cbte_nro",

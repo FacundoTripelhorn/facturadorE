@@ -179,6 +179,7 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 | Clients page | `clients.html` |
 | Settings page | `configuracion.html` |
 | Invoice list | `comprobantes.html`, `_listado.html` |
+| Billing summary (Comprobantes → Resumen: authorized totals per month, client and currency, server-side SVG chart) | `facturador/resumen.py`, `facturador/web/grafico.py`, `resumen.html`, `_vistas_comprobantes.html`, `tests/test_resumen.py` |
 | Base layout | `base.html`, `home.html` |
 | Frontend tests | `tests/test_web.py` |
 | Style guard (no `<style>`, no colors outside tokens) | `tests/test_estilos.py` |

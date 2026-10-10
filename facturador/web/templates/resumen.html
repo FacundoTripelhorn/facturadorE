@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h2>Comprobantes</h2>
+  {% with vista = "resumen" %}{% include "_vistas_comprobantes.html" %}{% endwith %}
+
+  <form class="resumen-anio" method="get" action="/comprobantes/resumen">
+    <label for="anio">Año</label>
+    <select id="anio" name="anio" onchange="this.form.submit()">
+      {% for a in anios %}
+      <option value="{{ a }}" {% if a == resumen.anio %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="secundario">Ver</button></noscript>
+    <span class="nota">Solo comprobantes autorizados, en la moneda de cada uno y sin convertir a pesos.</span>
+  </form>
+
+  {% if resumen.vacio %}
+  <p class="vacio">Todavía no hay comprobantes autorizados en {{ resumen.anio }}.</p>
+  {% else %}
+
+  <h3 class="seccion">Por mes</h3>
+  <div class="graficos">
+    {% for moneda, g in graficos %}
+    <figure class="grafico">
+      <figcaption>{{ moneda | moneda }}</figcaption>
+      <svg viewBox="0 0 {{ g.ancho }} {{ g.alto }}" role="img"
+           aria-label="Facturado por mes en {{ moneda | moneda }} durante {{ resumen.anio }}">
+        <line class="guia" x1="0" x2="{{ g.ancho }}" y1="{{ g.tope }}" y2="{{ g.tope }}"/>
+        <text class="maximo" x="{{ g.ancho }}" y="{{ g.tope - 6 }}" text-anchor="end">{{ moneda | moneda }} {{ g.maximo | importe }}</text>
+        {% for b in g.barras %}
+        {% if b.alto > 0 %}
+        <rect class="barra" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.ancho }}" height="{{ b.alto }}" rx="3">
+          <title>{{ b.mes }}: {{ moneda | moneda }} {{ b.total.importe | importe }} ({{ b.total.cantidad }} {{ "comprobante" if b.total.cantidad == 1 else "comprobantes" }})</title>
+        </rect>
+        {% endif %}
+        <text x="{{ b.centro }}" y="{{ g.alto - 5 }}" text-anchor="middle">{{ b.abrev }}</text>
+        {% endfor %}
+        <line class="eje" x1="0" x2="{{ g.ancho }}" y1="{{ g.base }}" y2="{{ g.base }}"/>
+      </svg>
+    </figure>
+    {% endfor %}
+  </div>
+
+  <div class="tabla-scroll">
+    <table class="resumen-meses">
+      <thead>
+        <tr>
+          <th>Mes</th>
+          {% for m in resumen.monedas %}
+          <th class="num">{{ m.moneda | moneda }}</th><th class="num">Cant.</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for nombre in meses %}
+        {% set i = loop.index0 %}
+        <tr>
+          <td>{{ nombre }}</td>
+          {% for m in resumen.monedas %}
+          {% set t = m.por_mes[i] %}
+          {% if t.cantidad %}
+          <td class="num">{{ t.importe | importe }}</td><td class="num">{{ t.cantidad }}</td>
+          {% else %}
+          <td class="num sin-datos">—</td><td class="num sin-datos">—</td>
+          {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total {{ resumen.anio }}</td>
+          {% for m in resumen.monedas %}
+          <td class="num">{{ m.anual.importe | importe }}</td><td class="num">{{ m.anual.cantidad }}</td>
+          {% endfor %}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <h3 class="seccion">Por cliente</h3>
+  <div class="tabla-scroll">
+    <table class="resumen-clientes">
+      <thead>
+        <tr><th>Cliente</th><th>Moneda</th><th class="num">Total</th><th class="num">Cant.</th></tr>
+      </thead>
+      <tbody>
+        {% for f in resumen.por_cliente %}
+        <tr>
+          <td>{{ f.cliente }}</td>
+          <td>{{ f.moneda | moneda }}</td>
+          <td class="num">{{ f.total.importe | importe }}</td>
+          <td class="num">{{ f.total.cantidad }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}
