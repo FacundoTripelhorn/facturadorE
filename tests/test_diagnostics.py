@@ -2,12 +2,14 @@
 
 import dataclasses
 import datetime as dt
+import shutil
 import sqlite3
 
 import httpx
 import pytest
 
 from facturador import diagnostics
+from facturador.age_identity import MachineIdentity
 from facturador.api.setup_guard import is_setup_exempt
 from facturador.arca.events import record_events
 from facturador.certs import load_certificate_metadata
@@ -47,12 +49,23 @@ def _chequeo(chequeos, titulo):
     return next(c for c in chequeos if c.titulo == titulo)
 
 
-def _backup_al_dia(api) -> None:
+requires_age_keygen = pytest.mark.skipif(
+    shutil.which("age-keygen") is None,
+    reason="age-keygen no está en PATH (CI lo instala; ver workflow)",
+)
+
+
+def _backup_al_dia(api, *, con_identidad: bool = False) -> None:
     conn = api.conn
     save_settings(
         conn, dataclasses.replace(load_settings(conn), backup_s3_bucket="mi-bucket")
     )
-    recipients_path(_profile(api).paths).write_text(AGE_KEY + "\n", encoding="utf-8")
+    claves = [AGE_KEY]
+    if con_identidad:
+        claves.append(MachineIdentity.for_profile(_profile(api).paths).create())
+    recipients_path(_profile(api).paths).write_text(
+        "".join(f"{c}\n" for c in claves), encoding="utf-8"
+    )
     _write_settings(
         conn, {STATUS_KEY: "ok", LAST_SUCCESS_KEY: "2026-09-20T10:00:00+00:00"}
     )
@@ -73,8 +86,9 @@ def test_perfil_listo_con_avisos_no_consulta_arca(api, arca):
     assert arca.calls["FEXGetLast_CMP"] == 0
 
 
+@requires_age_keygen
 def test_perfil_listo_sin_avisos(api, arca):
-    _backup_al_dia(api)
+    _backup_al_dia(api, con_identidad=True)
     r = api.get("/diagnostico?arca=1")
     assert r.status_code == 200
     assert "Listo para emitir." in r.text
