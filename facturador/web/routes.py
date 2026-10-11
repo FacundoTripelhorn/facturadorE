@@ -40,6 +40,7 @@ from ..api.csrf import (
 from ..api.deps import ServiceDep
 from ..arca.events import load_events, mark_read
 from ..arca.wsfex import WsfexError
+from ..backup_machines import nombre_del_equipo
 from ..certs import (
     CertificateError,
     CertificateMetadata,
@@ -67,6 +68,7 @@ from ..schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
+from ..seed_backup_sync import SeedBackupState, SeedBackupStatus
 from ..service import (
     ArcaUnavailableError,
     ConflictError,
@@ -1287,6 +1289,72 @@ async def guardar_punto_venta_setup(
 # ---------------------------------------------------------------------------
 
 
+def _fecha_backup(iso: str | None) -> str | None:
+    """Fecha y hora local de un timestamp de backup (se guarda en UTC)."""
+    if not iso:
+        return None
+    try:
+        momento = dt.datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=dt.UTC)
+    return momento.astimezone().strftime("%d/%m/%Y %H:%M")
+
+
+def _estado_backup(estado: SeedBackupState) -> dict[str, str]:
+    """Estado del último backup para la UI. El texto del último error no se
+    muestra: puede traer rutas locales (queda en el log)."""
+    ultimo = _fecha_backup(estado.last_success_at)
+    if estado.last_destination == "s3":
+        donde = "subido a S3"
+    else:
+        donde = "guardado solo en esta máquina (sin bucket S3)"
+    previo = f" Último backup: {ultimo}, {donde}." if ultimo else ""
+    if estado.status is SeedBackupStatus.OK and ultimo:
+        return {"badge": "ok", "titulo": "Al día",
+                "detalle": f"Último backup: {ultimo}, {donde}."}
+    if estado.status is SeedBackupStatus.FAILED:
+        intento = _fecha_backup(estado.last_attempt_at)
+        cuando = f" ({intento})" if intento else ""
+        return {"badge": "error", "titulo": "Error",
+                "detalle": f"Falló el último intento{cuando}; el detalle "
+                f"quedó en el log de la app.{previo}"}
+    if estado.status is SeedBackupStatus.PENDING:
+        return {"badge": "aviso", "titulo": "Pendiente",
+                "detalle": f"Hay cambios sin respaldar.{previo}"}
+    return {"badge": "neutro", "titulo": "Sin backup",
+            "detalle": "Todavía no se hizo ningún backup de este ambiente."}
+
+
+def _contexto_backups(
+    service, *, form_nombre: str | None = None, form_clave: str = ""
+) -> dict[str, object]:
+    """Identidad de esta máquina, máquinas con acceso y estado del backup.
+
+    Solo claves públicas: la identidad privada nunca llega a la plantilla.
+    """
+    error_identidad = error_maquinas = None
+    try:
+        clave_propia = service.machine_public_key()
+    except DomainError as exc:
+        clave_propia, error_identidad = None, str(exc)
+    try:
+        maquinas = service.list_backup_machines()
+    except DomainError as exc:
+        maquinas, error_maquinas = [], str(exc)
+    return {
+        "clave_propia": clave_propia,
+        "error_identidad": error_identidad,
+        "propia_en_lista": any(m.clave == clave_propia for m in maquinas),
+        "maquinas": maquinas,
+        "error_maquinas": error_maquinas,
+        "estado": _estado_backup(service.get_seed_backup_state()),
+        "form_nombre": nombre_del_equipo() if form_nombre is None else form_nombre,
+        "form_clave": form_clave,
+    }
+
+
 def _pagina_configuracion(
     request: Request,
     service,
@@ -1294,6 +1362,7 @@ def _pagina_configuracion(
     error: str | None = None,
     aviso: str | None = None,
     status_code: int = 200,
+    backup: dict[str, object] | None = None,
 ):
     activo_id = get_active_emisor_id(service.conn)
     return templates.TemplateResponse(
@@ -1306,6 +1375,7 @@ def _pagina_configuracion(
             "editando": editando,
             "error": error,
             "aviso": aviso,
+            "backup": backup or _contexto_backups(service),
         },
         status_code=status_code,
     )
@@ -1334,20 +1404,32 @@ def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
     )
 
 
+_AVISOS_CONFIGURACION = {
+    "guardado": "Emisor guardado.",
+    "backup": "Configuración de backups guardada.",
+    "activado": "Emisor activo actualizado.",
+    "identidad": "Identidad de esta máquina creada.",
+    "maquina": "Máquina agregada. El backup se actualiza en unos segundos.",
+    "maquina_quitada": "Máquina quitada. El backup se actualiza en unos "
+    "segundos.",
+    "backup_hecho": "Backup hecho.",
+}
+_ERRORES_CONFIGURACION = {
+    "backup": "No se pudo hacer el backup. El detalle quedó en el log de la "
+    "app; se reintenta al abrirla.",
+}
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def configuracion(request: Request, service: ServiceDep, edit: str | None = None,
-                  aviso: str = ""):
+                  aviso: str = "", error: str = ""):
     editando = repo.get_emisor(service.conn, edit) if edit else None
-    avisos = {
-        "guardado": "Emisor guardado.",
-        "backup": "Configuración de backups guardada.",
-        "activado": "Emisor activo actualizado.",
-    }
     return _pagina_configuracion(
         request,
         service,
         editando=editando,
-        aviso=avisos.get(aviso),
+        aviso=_AVISOS_CONFIGURACION.get(aviso),
+        error=_ERRORES_CONFIGURACION.get(error),
     )
 
 
@@ -1460,6 +1542,82 @@ def guardar_backup(
         )
     service.update_backup_settings(payload)
     return RedirectResponse("/configuracion?aviso=backup", status_code=303)
+
+
+@router.post("/ui/configuracion/backup/identidad", response_class=HTMLResponse)
+def crear_identidad_maquina(request: Request, service: ServiceDep):
+    try:
+        service.create_machine_identity()
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request, service, error=str(exc), status_code=422
+        )
+    return RedirectResponse("/configuracion?aviso=identidad#backups", status_code=303)
+
+
+@router.post("/ui/configuracion/backup/esta-maquina", response_class=HTMLResponse)
+def agregar_esta_maquina(request: Request, service: ServiceDep):
+    try:
+        service.add_this_machine(nombre_del_equipo())
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request, service, error=str(exc), status_code=422
+        )
+    return RedirectResponse("/configuracion?aviso=maquina#backups", status_code=303)
+
+
+@router.post("/ui/configuracion/backup/maquinas", response_class=HTMLResponse)
+def agregar_maquina(
+    request: Request,
+    service: ServiceDep,
+    nombre: str = Form(""),
+    clave: str = Form(""),
+):
+    try:
+        service.add_backup_machine(nombre, clave)
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            error=str(exc),
+            status_code=422,
+            backup=_contexto_backups(
+                service, form_nombre=nombre, form_clave=clave
+            ),
+        )
+    return RedirectResponse("/configuracion?aviso=maquina#backups", status_code=303)
+
+
+@router.post("/ui/configuracion/backup/maquinas/quitar", response_class=HTMLResponse)
+def quitar_maquina(
+    request: Request, service: ServiceDep, clave: str = Form("")
+):
+    try:
+        service.remove_backup_machine(clave)
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request, service, error=str(exc), status_code=422
+        )
+    return RedirectResponse(
+        "/configuracion?aviso=maquina_quitada#backups", status_code=303
+    )
+
+
+@router.post("/ui/configuracion/backup/ahora", response_class=HTMLResponse)
+def hacer_backup_ahora(request: Request, service: ServiceDep):
+    """Lo mismo que ``POST /backup/seed``: corre el backup ya (con S3 si hay
+    bucket) y vuelve a Configuración con el resultado."""
+    try:
+        estado = service.run_seed_backup_now()
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request, service, error=str(exc), status_code=409
+        )
+    if estado.status is SeedBackupStatus.OK:
+        return RedirectResponse(
+            "/configuracion?aviso=backup_hecho#backups", status_code=303
+        )
+    return RedirectResponse("/configuracion?error=backup#backups", status_code=303)
 
 
 # ---------------------------------------------------------------------------

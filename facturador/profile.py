@@ -30,6 +30,8 @@ LOG_FILENAME = "facturador.log"
 ONBOARDING_FILENAME = "onboarding.json"
 LAUNCHER_LOCK_FILENAME = "launcher.lock"
 PRODUCTION_ACK_FILENAME = "production_ack.json"
+AGE_IDENTITY_DIRNAME = "age"
+AGE_IDENTITY_FILENAME = "key.txt"
 
 _DISPLAY_NAMES = {
     ArcaEnvironment.HOMO: "Homologación",
@@ -205,6 +207,16 @@ class ProfilePaths:
 
     def __repr__(self) -> str:
         return "ProfilePaths(...)"
+
+
+def machine_identity_path(paths: ProfilePaths) -> Path:
+    """Identidad ``age`` de la máquina: ``<app-data>/age/key.txt``.
+
+    Es de la máquina, no del perfil: la comparten los dos ambientes y queda
+    fuera de las raíces de perfil (``<app-data>/<env>``), así nunca entra a
+    ``backups/`` ni al seed.
+    """
+    return paths.root.parent / AGE_IDENTITY_DIRNAME / AGE_IDENTITY_FILENAME
 
 
 @dataclass(frozen=True)

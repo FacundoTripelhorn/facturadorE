@@ -278,19 +278,27 @@ No incluye DB, certificados, claves privadas ni datos por comprobante.
 
 Aprovisionamiento por máquina: cada máquina que pueda restaurar el perfil
 tiene su propia identidad `age`, y el seed se cifra a las claves públicas de
-todas ellas.
+todas ellas. Todo se hace desde **Configuración → Backups**, sin terminal:
+
+1. **Esta máquina → Crear identidad de esta máquina.** La identidad queda en
+   el app-data, fuera de los perfiles (`%LOCALAPPDATA%\FacturadorE\age\key.txt`
+   en Windows) y es una sola para los dos ambientes. La parte privada nunca
+   se muestra, no entra al seed y no sube a S3.
+2. **Agregar esta máquina** suma su clave pública a la lista del perfil.
+3. Para darle acceso a otra PC: copiar su clave pública (en esa PC,
+   Configuración → Backups → Esta máquina) y pegarla en **Máquinas con acceso
+   al backup** de la PC que ya tiene el perfil. Cada clave lleva su nombre en
+   la línea `# nombre` de arriba.
+4. **Hacer backup ahora** (o esperar: cada cambio en la lista dispara un
+   backup). El estado muestra el último backup y si subió a S3 o quedó local.
+
+La lista local (`backups/recipients.txt` del perfil) es la que manda: cada
+upload reemplaza la de S3 con la local. Cambiar la lista desde una sola
+máquina a la vez.
+
+Sin la app (desarrollo), el mismo seed local se genera con el CLI:
 
 ```bash
-# 1. En CADA máquina, una sola vez: crear su identidad age. La clave privada
-#    queda solo en esa máquina (nunca en el repo, el perfil ni el seed).
-age-keygen -o ~/.age/key.txt      # imprime "Public key: age1..."
-age-keygen -y ~/.age/key.txt      # vuelve a mostrar la clave pública
-
-# 2. En el perfil que emite: una clave pública por línea, una por cada
-#    máquina del paso 1 (las líneas con # son comentarios).
-echo "age1..." >> "$(perfil)/backups/recipients.txt"
-
-# 3. Generar el seed cifrado local.
 # Launcher nativo: --env resuelve el perfil en el app-data del SO
 uv run python -m facturador.backup --env homo
 
@@ -301,14 +309,14 @@ uv run python -m facturador.backup --root ~/facturador/profiles/homo
 El CLI escribe `backups/seed.age` (nombre fijo, overwrite) y **no sube nada a
 S3**: es solo local. El upload lo hace la app: se dispara solo después de cada
 cambio de configuración del perfil (y se reintenta al arrancar si quedó
-pendiente), o a pedido con `POST /backup/seed`. Correr el CLI sobre un perfil
-sin cambios no actualiza el seed del bucket. La clave lógica en el bucket del
-usuario es `{prefix}/{cuit}/{env}/seed.age` (versioning del bucket como red de
-seguridad). El registro de comprobantes se reconstruye desde ARCA, no desde S3.
+pendiente), o a pedido con **Hacer backup ahora** (`POST /backup/seed`).
+Correr el CLI sobre un perfil sin cambios no actualiza el seed del bucket. La
+clave lógica en el bucket del usuario es `{prefix}/{cuit}/{env}/seed.age`
+(versioning del bucket como red de seguridad). El registro de comprobantes se
+reconstruye desde ARCA, no desde S3.
 
-Editar `recipients.txt` a mano no dispara un upload: después de sumar una
-máquina, correr `POST /backup/seed` para que el seed del bucket quede cifrado
-también a su clave.
+Editar `recipients.txt` a mano no dispara un upload: después, usar **Hacer
+backup ahora** para que el seed del bucket quede cifrado a la lista nueva.
 
 Para restaurar en otra máquina: completar el setup del perfil (certificado,
 emisor, PV), bajar el seed del bucket (p.ej.
@@ -317,7 +325,7 @@ backend y correr:
 
 ```bash
 uv run python -m facturador.launcher --restore --env prod \
-    --identity ~/.age/key.txt --seed ./seed.age
+    --identity <app-data>/age/key.txt --seed ./seed.age
 ```
 
 Sin `--seed` usa `backups/seed.age` del perfil.
@@ -355,6 +363,8 @@ facturador/
   reconstruct.py # loop FEXGetCMP full/catch-up
   seed_import.py # identidad cert→env→CUIT→schema→integrity
   diagnostics.py # chequeos de la página Diagnóstico (¿se puede emitir?)
+  age_identity.py    # identidad age de esta máquina (app-data, nunca se lee la privada)
+  backup_machines.py # máquinas con acceso: alta/baja en recipients.txt
   schema.sql    # baseline del esquema (migración v1)
   migrations/   # runner versionado + schema_migrations
 docker/         # entrypoint del contenedor (ver Dockerfile y docker-compose.yml)

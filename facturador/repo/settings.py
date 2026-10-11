@@ -16,6 +16,7 @@ PROTECTED_KEYS = frozenset(
         "seed_backup_last_attempt_at",
         "seed_backup_last_error",
         "seed_backup_pending_reason",
+        "seed_backup_last_destination",
     }
 )
 

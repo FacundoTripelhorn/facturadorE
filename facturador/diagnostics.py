@@ -20,6 +20,7 @@ from enum import StrEnum
 import httpx
 
 from . import repo
+from .age_identity import AgeIdentityError, MachineIdentity
 from .arca.events import load_events
 from .arca.wsaa import WsaaError
 from .arca.wsfex import WsfexClient, WsfexError
@@ -100,6 +101,7 @@ def diagnosticar_perfil(
         _base_de_datos(conn),
         *_protegido("Comprobantes a reconciliar", lambda: _pendientes(conn)),
         *_protegido("Backup", lambda: _backup(profile, conn)),
+        _identidad_de_esta_maquina(profile),
         _avisos_arca(profile),
     ]
 
@@ -286,7 +288,8 @@ def _backup(profile: EnvironmentProfile, conn: sqlite3.Connection) -> Chequeo:
             titulo, Nivel.AVISO,
             "No hay claves age válidas en recipients.txt: el backup no se "
             "puede cifrar.",
-            Accion("Agregar las claves públicas (ver README, Backups)."),
+            Accion("Agregar las máquinas con acceso en Configuración, Backups.",
+                   enlace="/configuracion#backups"),
         )
     estado = load_seed_backup_state(conn)
     ultimo = f" Último backup: {estado.last_success_at[:10]}." if (
@@ -309,14 +312,46 @@ def _backup(profile: EnvironmentProfile, conn: sqlite3.Connection) -> Chequeo:
     )
 
 
+def _identidad_de_esta_maquina(profile: EnvironmentProfile) -> Chequeo:
+    """Aviso, nunca bloquea: emitir no depende de poder restaurar."""
+    titulo = "Identidad de esta máquina"
+    ir = Accion("Resolverlo en Configuración, Backups.",
+                enlace="/configuracion#backups")
+    try:
+        clave = MachineIdentity.for_profile(profile.paths).public_key()
+    except AgeIdentityError as exc:
+        return Chequeo(titulo, Nivel.AVISO, str(exc), ir)
+    if clave is None:
+        return Chequeo(
+            titulo, Nivel.AVISO,
+            "Esta máquina no tiene identidad de backup: no podría restaurar "
+            "el backup.",
+            ir,
+        )
+    if clave not in _recipients(profile):
+        return Chequeo(
+            titulo, Nivel.AVISO,
+            "Esta máquina no puede restaurar el backup de este ambiente: su "
+            "clave no está en la lista de máquinas con acceso.",
+            ir,
+        )
+    return Chequeo(
+        titulo, Nivel.OK, "Puede restaurar el backup de este ambiente."
+    )
+
+
+def _recipients(profile: EnvironmentProfile) -> list[str]:
+    try:
+        texto = recipients_path(profile.paths).read_text(encoding="utf-8")
+        return parse_recipients(texto)
+    except (OSError, UnicodeDecodeError, SeedBackupError):
+        return []
+
+
 def _hay_recipients_validos(profile: EnvironmentProfile) -> bool:
     """Misma lectura que usa el backup. El detalle del error no se muestra:
     trae la ruta del archivo o su contenido."""
-    try:
-        texto = recipients_path(profile.paths).read_text(encoding="utf-8")
-        return bool(parse_recipients(texto))
-    except (OSError, UnicodeDecodeError, SeedBackupError):
-        return False
+    return bool(_recipients(profile))
 
 
 def _avisos_arca(profile: EnvironmentProfile) -> Chequeo:

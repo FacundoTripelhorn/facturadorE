@@ -520,3 +520,18 @@ h3.seccion { margin: 0; padding: 1.1rem 1.5rem .6rem; font-size: .9rem; font-wei
   .resumen-anio, h3.seccion { padding-left: 1rem; padding-right: 1rem; }
   .graficos { padding-left: 1rem; padding-right: 1rem; }
 }
+
+/* ---- Configuración → Backups ---- */
+.backups .cuerpo + h3.seccion, .backups .vacio + .cuerpo,
+.backups .tabla-scroll + .cuerpo { border-top: 1px solid var(--borde); }
+.backups .panel + form button { margin-top: 0; }
+.backups h3.seccion + .cuerpo { padding-top: .25rem; }
+.backups h3.seccion .sub { color: var(--tinta-suave); font-weight: 450; font-size: .82rem; }
+.backups .vacio { padding: 1.25rem 1.5rem; }
+.estado-backup { margin: 0; display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; }
+.clave-age { font-family: var(--fuente-mono); font-size: .85rem; }
+.copiar-clave { display: flex; gap: .6rem; align-items: center; }
+.copiar-clave input { flex: 1; min-width: 0; }
+.fila > div.clave-nueva { flex: 2; }
+table.maquinas .badge { margin-left: .4rem; }
+table.maquinas form { margin: 0; text-align: right; }
