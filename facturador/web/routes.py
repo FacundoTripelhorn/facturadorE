@@ -1306,14 +1306,16 @@ def _estado_backup(estado: SeedBackupState) -> dict[str, str]:
     """Estado del último backup para la UI. El texto del último error no se
     muestra: puede traer rutas locales (queda en el log)."""
     ultimo = _fecha_backup(estado.last_success_at)
-    if estado.last_destination == "s3":
-        donde = "subido a S3"
-    else:
-        donde = "guardado solo en esta máquina (sin bucket S3)"
-    previo = f" Último backup: {ultimo}, {donde}." if ultimo else ""
+    # Un backup anterior a que se guardara el destino no dice dónde quedó:
+    # no se adivina.
+    donde = {
+        "s3": ", subido a S3",
+        "local": ", guardado solo en esta máquina (sin bucket S3)",
+    }.get(estado.last_destination or "", "")
+    previo = f" Último backup: {ultimo}{donde}." if ultimo else ""
     if estado.status is SeedBackupStatus.OK and ultimo:
         return {"badge": "ok", "titulo": "Al día",
-                "detalle": f"Último backup: {ultimo}, {donde}."}
+                "detalle": f"Último backup: {ultimo}{donde}."}
     if estado.status is SeedBackupStatus.FAILED:
         intento = _fecha_backup(estado.last_attempt_at)
         cuando = f" ({intento})" if intento else ""

@@ -38,8 +38,11 @@ from facturador.seed_backup import (
     seed_archive_path,
 )
 from facturador.seed_backup_sync import (
+    LAST_SUCCESS_KEY,
+    STATUS_KEY,
     SeedBackupCoordinator,
     SeedBackupStatus,
+    _write_settings,
     load_seed_backup_state,
 )
 from tests.arca_fake import FakeArca, FakeWsaa
@@ -360,6 +363,20 @@ def test_backup_ahora_sube_a_s3_con_bucket(backups):
     assert any(k.endswith("/recipients.txt") for k in claves)
     # El API devuelve lo mismo.
     assert backups.get("/backup/seed").json()["last_destination"] == "s3"
+
+
+def test_backup_previo_sin_destino_guardado_no_dice_donde_quedo(backups):
+    """Un perfil con un backup ok de antes de guardar el destino no tiene
+    ``last_destination``: no se afirma que quedó local ni que subió a S3."""
+    _write_settings(
+        backups.conn,
+        {STATUS_KEY: "ok", LAST_SUCCESS_KEY: "2026-09-20T10:00:00+00:00"},
+    )
+    r = backups.get("/configuracion")
+    assert "Al día" in r.text
+    assert "Último backup: 20/09/2026" in r.text
+    assert "solo en esta máquina" not in r.text
+    assert "subido a S3" not in r.text
 
 
 def test_backup_ahora_fallido_muestra_error_sin_detalle(backups):
