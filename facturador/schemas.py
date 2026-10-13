@@ -83,6 +83,7 @@ class SeedBackupStateOut(BaseModel):
     last_attempt_at: str | None = None
     last_error: str | None = None
     pending_reason: str | None = None
+    last_destination: str | None = None
     needs_retry: bool = False
 
 

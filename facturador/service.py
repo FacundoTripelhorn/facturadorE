@@ -17,12 +17,14 @@ import json
 import logging
 import sqlite3
 import threading
+from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
 import httpx
 
 from . import repo
+from .age_identity import AgeIdentityError, MachineIdentity
 from .arca.amounts import (
     IMP_TOTAL,
     MONEDA_CTZ,
@@ -43,6 +45,13 @@ from .arca.wsfex import (
     Invoice,
     WsfexClient,
     WsfexError,
+)
+from .backup_machines import (
+    Maquina,
+    MaquinasError,
+    agregar_maquina,
+    listar_maquinas,
+    quitar_maquina,
 )
 from .certs import CertificateError
 from .config import Config
@@ -75,6 +84,7 @@ from .schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
+from .seed_backup import SeedBackupError, recipients_path
 from .seed_backup_sync import SeedBackupCoordinator, SeedBackupState
 from .seed_import import SeedIdentityError
 from .settings import (
@@ -98,6 +108,11 @@ PARAMS_TTL = dt.timedelta(hours=24)
 # es segura para transacciones concurrentes. Serializar todo el authorize
 # resuelve ambas. Volumen ~1 factura/semana: el costo de serializar es nulo.
 _AUTHORIZE_LOCK = threading.Lock()
+
+# Alta/baja de máquinas: leer recipients.txt, editar y escribir sin que otro
+# request de esta misma app se meta en el medio. Entre máquinas rige la regla
+# de un solo escritor (no hay escrituras condicionales en S3).
+_RECIPIENTS_LOCK = threading.Lock()
 
 
 class ServiceError(RuntimeError):
@@ -134,6 +149,7 @@ class InvoiceService:
         wsfex: WsfexClient,
         seed_backup: SeedBackupCoordinator | None = None,
         wscdc: WscdcClient | None = None,
+        machine_identity: MachineIdentity | None = None,
     ):
         self.config = config
         self.conn = conn
@@ -142,6 +158,9 @@ class InvoiceService:
         self.wscdc = wscdc or WscdcClient(config)
         # Opcional para tests unitarios del service sin coordinator.
         self.seed_backup = seed_backup
+        self.machine_identity = machine_identity or MachineIdentity.for_profile(
+            config.paths
+        )
 
     def _notify_seed_backup(self, reason: str) -> None:
         """Config-change hook. Never raises; never called from authorize."""
@@ -280,6 +299,64 @@ class InvoiceService:
                 "Seed backup no está habilitado en este proceso."
             )
         return self.seed_backup.replace_recipients(text)
+
+    # ------------------------------------------------------------------
+    # Máquinas con acceso al backup (identidad age + recipients.txt)
+    # ------------------------------------------------------------------
+
+    def machine_public_key(self) -> str | None:
+        """Clave pública de esta máquina; None si todavía no tiene identidad."""
+        try:
+            return self.machine_identity.public_key()
+        except AgeIdentityError as exc:
+            raise DomainError(str(exc)) from exc
+
+    def create_machine_identity(self) -> str:
+        """Crea la identidad de esta máquina (no pisa una existente)."""
+        try:
+            return self.machine_identity.create()
+        except AgeIdentityError as exc:
+            raise DomainError(str(exc)) from exc
+
+    def _recipients_text(self) -> str:
+        try:
+            return recipients_path(self.config.paths).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ""
+        except (OSError, UnicodeDecodeError) as exc:
+            raise DomainError(
+                "No se pudo leer la lista de máquinas con acceso."
+            ) from exc
+
+    def list_backup_machines(self) -> list[Maquina]:
+        try:
+            return listar_maquinas(self._recipients_text())
+        except SeedBackupError as exc:
+            raise DomainError(str(exc)) from exc
+
+    def _edit_recipients(self, edit: Callable[[str], str]) -> SeedBackupState:
+        with _RECIPIENTS_LOCK:
+            try:
+                text = edit(self._recipients_text())
+            except (MaquinasError, SeedBackupError) as exc:
+                raise DomainError(str(exc)) from exc
+            return self.replace_seed_recipients(text)
+
+    def add_backup_machine(self, nombre: str, clave: str) -> SeedBackupState:
+        return self._edit_recipients(
+            lambda text: agregar_maquina(text, nombre=nombre, clave=clave)
+        )
+
+    def add_this_machine(self, nombre: str) -> SeedBackupState:
+        clave = self.machine_public_key()
+        if clave is None:
+            raise DomainError("Esta máquina todavía no tiene identidad.")
+        return self.add_backup_machine(nombre, clave)
+
+    def remove_backup_machine(self, clave: str) -> SeedBackupState:
+        return self._edit_recipients(
+            lambda text: quitar_maquina(text, clave=clave)
+        )
 
     # ------------------------------------------------------------------
     # Parámetros (cache con refresh lazy de 24 h — design.md §6.2)

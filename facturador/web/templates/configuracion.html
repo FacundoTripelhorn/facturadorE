@@ -123,8 +123,116 @@
   </div>
 </section>
 
-<section class="card">
-  <h2>Backups <span class="sub">opcional: upload cifrado a S3</span></h2>
+<section class="card backups" id="backups">
+  <h2>Backups <span class="sub">seed de configuración, cifrado en esta máquina</span></h2>
+
+  <h3 class="seccion">Estado</h3>
+  <div class="cuerpo">
+    <p class="estado-backup">
+      <span class="badge {{ backup.estado.badge }}">{{ backup.estado.titulo }}</span>
+      {{ backup.estado.detalle }}
+    </p>
+    {% if backup.maquinas %}
+    <form method="post" action="/ui/configuracion/backup/ahora">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Hacer backup ahora</button>
+    </form>
+    {% else %}
+    <p class="nota">Agregá al menos una máquina con acceso para poder hacer el backup.</p>
+    {% endif %}
+  </div>
+
+  <h3 class="seccion">Esta máquina</h3>
+  <div class="cuerpo">
+    {% if backup.error_identidad %}
+    <div class="panel error"><div>{{ backup.error_identidad }}</div></div>
+    {% elif not backup.clave_propia %}
+    <p>Esta máquina todavía no tiene identidad de backup. Con ella puede
+    abrir el backup de los perfiles que la tengan en su lista de máquinas con
+    acceso. Es una sola para los dos ambientes y la parte privada no sale de
+    esta máquina.</p>
+    <form method="post" action="/ui/configuracion/backup/identidad">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Crear identidad de esta máquina</button>
+    </form>
+    {% else %}
+    <label for="clave_propia">Clave pública de esta máquina</label>
+    <div class="copiar-clave">
+      <input id="clave_propia" class="clave-age" readonly
+             value="{{ backup.clave_propia }}">
+      <button type="button" class="secundario" data-copiar="clave_propia">Copiar</button>
+    </div>
+    <p class="nota">Para darle acceso al backup de otra PC, pegá esta clave en
+    Configuración → Backups de esa PC. Es pública: se puede copiar sin riesgo.</p>
+    {% if not backup.propia_en_lista %}
+    <div class="panel aviso">
+      <div>Esta máquina no puede restaurar el backup de este ambiente.</div>
+    </div>
+    <form method="post" action="/ui/configuracion/backup/esta-maquina">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Agregar esta máquina</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <h3 class="seccion">Máquinas con acceso al backup</h3>
+  {% if backup.error_maquinas %}
+  <div class="cuerpo">
+    <div class="panel error"><div>{{ backup.error_maquinas }}</div></div>
+  </div>
+  {% elif backup.maquinas %}
+  <div class="tabla-scroll">
+    <table class="maquinas">
+      <thead><tr><th>Nombre</th><th>Clave</th><th></th></tr></thead>
+      <tbody>
+        {% for m in backup.maquinas %}
+        <tr>
+          <td>{{ m.nombre or "Sin nombre" }}
+            {% if m.clave == backup.clave_propia %}<span class="badge neutro">Esta máquina</span>{% endif %}</td>
+          <td><span class="clave-age" title="{{ m.clave }}">{{ m.clave_corta }}</span></td>
+          <td>
+            {% if backup.maquinas | length > 1 %}
+            <form method="post" action="/ui/configuracion/backup/maquinas/quitar"
+                  onsubmit="return confirm('{% if m.clave == backup.clave_propia %}Es la clave de esta máquina: después del próximo backup no va a poder restaurarlo. ¿Quitarla igual?{% else %}¿Quitar esta máquina? Después del próximo backup no va a poder restaurarlo.{% endif %}')">
+              {% include "_csrf_field.html" %}
+              <input type="hidden" name="clave" value="{{ m.clave }}">
+              <button type="submit" class="secundario">Quitar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="vacio">Todavía no hay máquinas con acceso: sin ninguna, el backup no se puede cifrar.</p>
+  {% endif %}
+  <div class="cuerpo">
+    <form method="post" action="/ui/configuracion/backup/maquinas">
+      {% include "_csrf_field.html" %}
+      <div class="fila">
+        <div>
+          <label for="maquina_nombre">Nombre</label>
+          <input id="maquina_nombre" name="nombre" maxlength="80"
+                 value="{{ backup.form_nombre }}">
+        </div>
+        <div class="clave-nueva">
+          <label for="maquina_clave">Clave pública</label>
+          <input id="maquina_clave" name="clave" class="clave-age" required
+                 placeholder="age1…" autocomplete="off" spellcheck="false"
+                 value="{{ backup.form_clave }}">
+        </div>
+      </div>
+      <p class="nota">La clave pública de otra PC aparece en su Configuración →
+      Backups, en «Esta máquina». La lista de esta PC es la que manda: cada
+      backup reemplaza la del bucket.</p>
+      <button type="submit">Agregar máquina</button>
+    </form>
+  </div>
+
+  <h3 class="seccion">Bucket S3 <span class="sub">opcional</span></h3>
   <div class="cuerpo">
   <form method="post" action="/ui/configuracion/backup">
     {% include "_csrf_field.html" %}
@@ -141,12 +249,37 @@
                value="{{ s.backup_s3_prefix }}">
       </div>
     </div>
-    <p class="nota">El backup se cifra en la máquina con una passphrase que
-    nunca se guarda; el bucket solo recibe el archivo ya cifrado.</p>
+    <p class="nota">El backup se cifra en esta máquina con las claves públicas
+    de las máquinas con acceso: solo ellas pueden abrirlo. El bucket recibe el
+    archivo ya cifrado.</p>
     <button type="submit">Guardar backups</button>
   </form>
   </div>
 </section>
+
+<script>
+(function () {
+  document.addEventListener("click", function (ev) {
+    var boton = ev.target.closest("button[data-copiar]");
+    if (!boton) { return; }
+    var campo = document.getElementById(boton.getAttribute("data-copiar"));
+    if (!campo) { return; }
+    function listo() {
+      boton.textContent = "Copiada";
+      setTimeout(function () { boton.textContent = "Copiar"; }, 2000);
+    }
+    function aMano() {
+      campo.select();
+      try { if (document.execCommand("copy")) { listo(); } } catch (e) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(campo.value).then(listo, aMano);
+    } else {
+      aMano();
+    }
+  });
+})();
+</script>
 
 <p class="nota">
   El ambiente ARCA ({{ env_label }}) es contexto de solo lectura del perfil

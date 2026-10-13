@@ -51,6 +51,8 @@ LAST_SUCCESS_KEY = "seed_backup_last_success_at"
 LAST_ATTEMPT_KEY = "seed_backup_last_attempt_at"
 LAST_ERROR_KEY = "seed_backup_last_error"
 PENDING_REASON_KEY = "seed_backup_pending_reason"
+# Dónde quedó el último backup que salió bien: "s3" o "local".
+LAST_DESTINATION_KEY = "seed_backup_last_destination"
 
 SEED_BACKUP_STATE_KEYS = frozenset(
     {
@@ -59,6 +61,7 @@ SEED_BACKUP_STATE_KEYS = frozenset(
         LAST_ATTEMPT_KEY,
         LAST_ERROR_KEY,
         PENDING_REASON_KEY,
+        LAST_DESTINATION_KEY,
     }
 )
 
@@ -81,6 +84,7 @@ class SeedBackupState:
     last_attempt_at: str | None = None
     last_error: str | None = None
     pending_reason: str | None = None
+    last_destination: str | None = None
 
     @property
     def needs_retry(self) -> bool:
@@ -135,6 +139,7 @@ def load_seed_backup_state(conn: sqlite3.Connection) -> SeedBackupState:
         last_attempt_at=_read_setting(conn, LAST_ATTEMPT_KEY),
         last_error=_read_setting(conn, LAST_ERROR_KEY),
         pending_reason=_read_setting(conn, PENDING_REASON_KEY),
+        last_destination=_read_setting(conn, LAST_DESTINATION_KEY),
     )
 
 
@@ -153,7 +158,14 @@ def mark_seed_backup_pending(
     return load_seed_backup_state(conn)
 
 
-def _mark_success(conn: sqlite3.Connection, *, when: str) -> SeedBackupState:
+def _destination(result: str | None) -> str:
+    """El runner devuelve la URI de S3 o el path local del seed."""
+    return "s3" if result and result.startswith("s3://") else "local"
+
+
+def _mark_success(
+    conn: sqlite3.Connection, *, when: str, destination: str
+) -> SeedBackupState:
     _write_settings(
         conn,
         {
@@ -162,6 +174,7 @@ def _mark_success(conn: sqlite3.Connection, *, when: str) -> SeedBackupState:
             LAST_ATTEMPT_KEY: when,
             LAST_ERROR_KEY: "",
             PENDING_REASON_KEY: "",
+            LAST_DESTINATION_KEY: destination,
         },
     )
     return load_seed_backup_state(conn)
@@ -355,7 +368,7 @@ class SeedBackupCoordinator:
 
         try:
             try:
-                self._run_with_worker_conn(worker_conn)
+                result = self._run_with_worker_conn(worker_conn)
             except (SeedBackupError, S3SeedError, OSError, ValueError) as exc:
                 logger.warning("Seed backup falló: %s", exc)
                 try:
@@ -376,7 +389,9 @@ class SeedBackupCoordinator:
                     return load_seed_backup_state(worker_conn)
             self._run_count += 1
             try:
-                return _mark_success(worker_conn, when=when)
+                return _mark_success(
+                    worker_conn, when=when, destination=_destination(result)
+                )
             except Exception:
                 logger.exception("No se pudo persistir éxito de seed backup")
                 return load_seed_backup_state(worker_conn)
@@ -392,6 +407,7 @@ def seed_backup_state_as_dict(state: SeedBackupState) -> dict[str, Any]:
         "last_attempt_at": state.last_attempt_at,
         "last_error": state.last_error,
         "pending_reason": state.pending_reason,
+        "last_destination": state.last_destination,
         "needs_retry": state.needs_retry,
     }
 
