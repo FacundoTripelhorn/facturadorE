@@ -17,7 +17,8 @@
         {# Solo una autorizada entra en una orden de pago. #}
         {% if f["status"] == AUTHORIZED %}
         <input type="checkbox" name="ids" value="{{ f['id'] }}"
-               data-cliente="{{ clave_cliente(f) }}"
+               data-cliente="{{ f['client_id'] or '' }}"
+               data-receptor="{{ identidad_receptor(f) }}"
                aria-label="Elegir {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} ({{ f['cliente'] }})">
         {% endif %}
       </td>

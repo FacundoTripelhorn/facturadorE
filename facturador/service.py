@@ -66,7 +66,7 @@ from .mappers import (
 from .orden_pago import (
     OrdenPagoError,
     PdfSubido,
-    clave_cliente,
+    mismo_cliente,
     nombre_facturas_e,
     nombre_recaudadora,
     unir_pdfs,
@@ -630,7 +630,7 @@ class InvoiceService:
             raise ConflictError(
                 "La orden de pago solo admite facturas autorizadas."
             )
-        if len({clave_cliente(f) for f in facturas}) > 1:
+        if not mismo_cliente(facturas):
             raise DomainError("Elegí facturas de un solo cliente.")
         return sorted(facturas, key=lambda f: (f["cbte_nro"], f["punto_venta"]))
 

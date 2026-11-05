@@ -26,6 +26,8 @@ from facturador.orden_pago import (
     MAX_UPLOAD_BYTES,
     OrdenPagoError,
     PdfSubido,
+    identidad_receptor,
+    mismo_cliente,
     nombre_facturas_e,
     nombre_recaudadora,
     normalizar_cuenta,
@@ -235,11 +237,84 @@ def test_checkbox_lleva_el_cliente_para_detectar_mezcla(api, arca):
 
     html = api.get("/comprobantes?estado=autorizadas").text
 
-    cliente_uno = repo.get_invoice(api.conn, uno)["client_id"]
-    cliente_otro = repo.get_invoice(api.conn, otro)["client_id"]
-    assert cliente_uno != cliente_otro
-    assert f'data-cliente="{cliente_uno}"' in html
-    assert f'data-cliente="{cliente_otro}"' in html
+    for invoice_id in (uno, otro):
+        factura = repo.get_invoice(api.conn, invoice_id)
+        assert f'data-cliente="{factura["client_id"]}"' in html
+        assert f'data-receptor="{identidad_receptor(factura)}"' in html
+    assert repo.get_invoice(api.conn, uno)["client_id"] != repo.get_invoice(
+        api.conn, otro
+    )["client_id"]
+
+
+def _como_reconstruida(api, invoice_id: str) -> None:
+    """Deja la factura como la deja el rebuild desde ARCA: sin client_id."""
+    api.conn.execute(
+        "UPDATE invoices SET client_id = NULL WHERE id = ?", (invoice_id,)
+    )
+    api.conn.commit()
+
+
+def test_reconstruida_y_nueva_del_mismo_cliente_se_pueden_unir(api, arca):
+    """Tras un restore, las facturas reconstruidas desde ARCA no tienen
+    client_id y las nuevas sí: siguen siendo del mismo cliente."""
+    _crear_cliente_por_form(api, cuenta_recaudadora="Deel")
+    vieja = _autorizada(api)
+    nueva = _autorizada(api)
+    _como_reconstruida(api, vieja)
+
+    html = api.get("/comprobantes?estado=autorizadas").text
+    assert 'data-cliente=""' in html  # la reconstruida, sin id
+
+    pagina = api.get(f"/orden-de-pago?ids={vieja}&ids={nueva}")
+    assert pagina.status_code == 200, pagina.text
+    assert 'value="Deel"' in pagina.text  # del cliente de la que sí tiene id
+    pdf = api.get(f"/orden-de-pago/facturas-e?ids={vieja}&ids={nueva}")
+    assert pdf.status_code == 200
+    assert 'filename="e_invoices_1_2.pdf"' in pdf.headers["content-disposition"]
+
+
+def test_reconstruida_de_otro_receptor_no_se_mezcla(api, arca):
+    _crear_cliente_por_form(api)
+    _crear_cliente_por_form(api, **OTRO_CLIENTE, id_impositivo="RUT 1111")
+    uno = _autorizada(api)
+    otro = _autorizada(api, client_id=_client_id(api, "OTRO CLIENTE S.A."))
+    _como_reconstruida(api, otro)
+
+    r = api.get(f"/orden-de-pago/facturas-e?ids={uno}&ids={otro}")
+    assert r.status_code == 422
+    assert r.json() == {"detail": "Elegí facturas de un solo cliente."}
+
+
+def _fila(client_id, cliente="ACME", id_impositivo="RUT 1", cuit_pais=1):
+    return {
+        "client_id": client_id,
+        "cliente": cliente,
+        "id_impositivo": id_impositivo,
+        "cuit_pais_cliente": cuit_pais,
+    }
+
+
+@pytest.mark.parametrize(
+    ("facturas", "esperado"),
+    [
+        # Mismo id aunque el cliente se haya renombrado.
+        ([_fila("c1", "ACME"), _fila("c1", "ACME LLC", "RUT 2")], True),
+        # Reconstruida (sin id) + nueva: mismo receptor.
+        ([_fila(None), _fila("c1")], True),
+        ([_fila(None, id_impositivo=" rut  1 "), _fila("c1")], True),
+        # Sin ID impositivo: el nombre del snapshot decide.
+        ([_fila(None, "Acme ", ""), _fila("c1", "ACME", "")], True),
+        ([_fila(None, "Acme", ""), _fila("c1", "Otra", "")], False),
+        # Ids distintos: nunca, aunque compartan receptor.
+        ([_fila("c1"), _fila("c2")], False),
+        ([_fila(None), _fila("c1"), _fila("c2")], False),
+        ([_fila("c1"), _fila("c2", id_impositivo="RUT 2")], False),
+        ([_fila(None), _fila("c1", id_impositivo="RUT 2")], False),
+        ([_fila(None), _fila(None, cuit_pais=2)], False),
+    ],
+)
+def test_mismo_cliente(facturas, esperado):
+    assert mismo_cliente(facturas) is esperado
 
 
 # --- Pantalla "Orden de pago" -------------------------------------------------

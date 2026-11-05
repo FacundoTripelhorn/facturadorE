@@ -46,10 +46,37 @@ class PdfSubido:
     contenido: bytes
 
 
-def clave_cliente(factura: sqlite3.Row) -> str:
-    """Identidad del cliente de una factura: su id, o el nombre del
-    snapshot si no tiene (comprobantes reconstruidos desde ARCA)."""
-    return factura["client_id"] or f"nombre:{factura['cliente']}"
+def _normalizar(texto: object) -> str:
+    return " ".join(str(texto or "").split()).casefold()
+
+
+def identidad_receptor(factura: sqlite3.Row) -> str:
+    """Receptor según el snapshot de la factura, que ARCA también guarda.
+
+    Coincide entre una factura emitida acá y la misma reconstruida desde
+    ARCA (que no tiene ``client_id``): CUIT país + ID impositivo, o el
+    nombre si el cliente no tiene ID impositivo.
+    """
+    impositivo = _normalizar(factura["id_impositivo"])
+    if impositivo:
+        return f"fiscal:{factura['cuit_pais_cliente']}:{impositivo}"
+    return f"nombre:{factura['cuit_pais_cliente']}:{_normalizar(factura['cliente'])}"
+
+
+def mismo_cliente(facturas: Sequence[sqlite3.Row]) -> bool:
+    """True si todas las facturas son del mismo cliente.
+
+    Con ``client_id`` en todas, decide el id (aunque el cliente se haya
+    renombrado). Las reconstruidas desde ARCA tras un restore no tienen
+    ``client_id``: si hay alguna, además de no haber dos ids distintos,
+    todas tienen que compartir el receptor del snapshot.
+    """
+    ids = {f["client_id"] or None for f in facturas}
+    if None not in ids:
+        return len(ids) <= 1
+    return len(ids - {None}) <= 1 and (
+        len({identidad_receptor(f) for f in facturas}) <= 1
+    )
 
 
 def numero_desde_nombre(nombre_archivo: str) -> str:

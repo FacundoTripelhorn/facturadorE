@@ -59,7 +59,7 @@ from ..launcher.switch import (
     is_launcher_supervised,
     write_change_environment_request,
 )
-from ..orden_pago import clave_cliente
+from ..orden_pago import identidad_receptor
 from ..resumen import MESES, resumir
 from ..schemas import (
     BackupSettingsIn,
@@ -236,7 +236,7 @@ templates.env.globals["NIVEL_BADGE"] = {
     Nivel.BLOQUEA: "error",
 }
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
-templates.env.globals["clave_cliente"] = clave_cliente
+templates.env.globals["identidad_receptor"] = identidad_receptor
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 # Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.

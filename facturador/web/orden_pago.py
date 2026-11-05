@@ -49,10 +49,15 @@ def _totales_por_moneda(facturas: list[sqlite3.Row]) -> list[tuple[str, Decimal]
     return list(totales.items())
 
 
-def _cuenta_del_cliente(conn: sqlite3.Connection, factura: sqlite3.Row) -> str:
-    if not factura["client_id"]:
+def _cuenta_del_cliente(
+    conn: sqlite3.Connection, facturas: list[sqlite3.Row]
+) -> str:
+    """Cuenta recaudadora del cliente de la orden. Las facturas
+    reconstruidas desde ARCA no tienen ``client_id``: vale cualquiera que sí."""
+    client_id = next((f["client_id"] for f in facturas if f["client_id"]), None)
+    if client_id is None:
         return ""
-    cliente = repo.get_client(conn, factura["client_id"])
+    cliente = repo.get_client(conn, client_id)
     if cliente is None:
         return ""
     return cliente["cuenta_recaudadora"] or ""
@@ -88,9 +93,7 @@ def orden_de_pago(
             "ids": [f["id"] for f in facturas],
             "cliente": facturas[0]["cliente"] if facturas else "",
             "totales": _totales_por_moneda(facturas),
-            "cuenta": (
-                _cuenta_del_cliente(service.conn, facturas[0]) if facturas else ""
-            ),
+            "cuenta": _cuenta_del_cliente(service.conn, facturas),
             "error": error,
         },
         status_code=status_code,
