@@ -299,6 +299,10 @@ button {
 }
 button:hover { background: var(--acento-hover); }
 button:active { transform: translateY(1px); }
+button:disabled, button:disabled:hover {
+  background: var(--neutro-fondo); color: var(--tinta-suave);
+  box-shadow: none; cursor: not-allowed; transform: none;
+}
 button.secundario {
   background: var(--superficie); color: var(--tinta-suave);
   border: 1px solid var(--borde); margin: 0; padding: .3rem .85rem;
@@ -519,4 +523,46 @@ h3.seccion { margin: 0; padding: 1.1rem 1.5rem .6rem; font-size: .9rem; font-wei
 @media (max-width: 640px) {
   .resumen-anio, h3.seccion { padding-left: 1rem; padding-right: 1rem; }
   .graficos { padding-left: 1rem; padding-right: 1rem; }
+}
+
+/* ---- orden de pago del banco ---- */
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.barra-orden {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: .9rem 1.5rem; border-bottom: 1px solid var(--borde);
+}
+.barra-orden button { margin: 0; }
+.barra-orden .nota { margin: 0; color: var(--error); font-weight: 600; }
+th.col-elegir, td.col-elegir { width: 1%; padding-right: 0; }
+td.col-elegir input { width: 1.1rem; height: 1.1rem; margin: 0; cursor: pointer;
+  accent-color: var(--acento); vertical-align: middle; }
+.acciones-orden { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.acciones-orden button { margin-top: 0; }
+.acciones-orden .nota { margin: 0; }
+form.acciones-orden { border-top: 1px solid var(--borde); }
+#form-recaudadora .acciones-orden { margin-top: 1.2rem; }
+/* Número y fecha alineados con su encabezado; solo el total va a la derecha. */
+.facturas-orden td.num:not(:last-child) { text-align: left; }
+.facturas-orden tfoot td {
+  font-weight: 700; background: var(--superficie-sutil);
+  border-top: 1px solid var(--borde-fuerte); border-bottom: 0;
+}
+table.pdfs-recaudadora { margin-top: .6rem; border: 1px solid var(--borde);
+  border-radius: 8px; border-collapse: separate; border-spacing: 0; }
+table.pdfs-recaudadora th:first-child, table.pdfs-recaudadora td:first-child { padding-left: .8rem; }
+table.pdfs-recaudadora th:last-child, table.pdfs-recaudadora td:last-child { padding-right: .8rem; width: 1%; }
+table.pdfs-recaudadora td { padding-top: .45rem; padding-bottom: .45rem; }
+table.pdfs-recaudadora td.nombre-pdf { overflow-wrap: anywhere; }
+table.pdfs-recaudadora input { max-width: 9rem; padding: .4rem .6rem; }
+table.pdfs-recaudadora button { margin: 0; padding: .4rem .8rem; }
+table.pdfs-recaudadora tr.incompleta td { background: var(--error-fondo); }
+table.pdfs-recaudadora tr.incompleta input { border-color: var(--error); }
+input[aria-invalid="true"] { border-color: var(--error); }
+@media (max-width: 640px) {
+  .barra-orden { padding-left: 1rem; padding-right: 1rem; }
+  th.col-elegir, td.col-elegir { padding-right: 0; }
+  table.pdfs-recaudadora input { max-width: 6.5rem; }
 }

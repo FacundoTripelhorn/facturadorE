@@ -17,6 +17,7 @@ import json
 import logging
 import sqlite3
 import threading
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -62,6 +63,17 @@ from .mappers import (
     row_to_wsfex_invoice,
     wsfex_invoice_to_raw,
 )
+from .orden_pago import (
+    OrdenPagoError,
+    PdfSubido,
+    clave_cliente,
+    nombre_facturas_e,
+    nombre_recaudadora,
+    unir_pdfs,
+    validar_numero,
+    validar_pdf_subido,
+)
+from .pdf import get_or_render_invoice_pdf, invoice_pdf_filename
 from .profile import EnvironmentProfile
 from .reconstruct import ReconstructError, ReconstructReport
 from .restore import catch_up_register
@@ -88,6 +100,8 @@ from .settings import (
 logger = logging.getLogger(__name__)
 
 PARAMS_TTL = dt.timedelta(hours=24)
+# Tope defensivo de facturas por orden de pago (en la práctica son pocas).
+MAX_FACTURAS_ORDEN_PAGO = 50
 
 # Serializa authorize() de punta a punta entre llamadas concurrentes. Dos
 # razones: (1) ARCA exige numeración estrictamente secuencial (solo se puede
@@ -592,6 +606,92 @@ class InvoiceService:
             if resolved is not None:
                 return resolved
         return inv
+
+    # --- Orden de pago del banco -----------------------------------------
+
+    def facturas_para_orden_pago(
+        self, invoice_ids: Sequence[str]
+    ) -> list[sqlite3.Row]:
+        """Facturas de una orden de pago, ordenadas por número ascendente.
+
+        Solo autorizadas y de un solo cliente; la UI ya lo impide, pero el
+        pedido puede venir armado a mano.
+        """
+        ids = list(dict.fromkeys(i for i in invoice_ids if i))
+        if not ids:
+            raise DomainError("Elegí al menos una factura autorizada.")
+        if len(ids) > MAX_FACTURAS_ORDEN_PAGO:
+            raise DomainError(
+                f"Una orden de pago admite hasta {MAX_FACTURAS_ORDEN_PAGO} "
+                "facturas."
+            )
+        facturas = [self.get_invoice(i, reconcile=False) for i in ids]
+        if any(f["status"] != InvoiceStatus.AUTHORIZED for f in facturas):
+            raise ConflictError(
+                "La orden de pago solo admite facturas autorizadas."
+            )
+        if len({clave_cliente(f) for f in facturas}) > 1:
+            raise DomainError("Elegí facturas de un solo cliente.")
+        return sorted(facturas, key=lambda f: (f["cbte_nro"], f["punto_venta"]))
+
+    def pdf_facturas_orden_pago(
+        self, invoice_ids: Sequence[str]
+    ) -> tuple[str, bytes]:
+        """(nombre, PDF) con las Facturas E unidas en orden ascendente.
+
+        Cada factura sale del mismo render (y cache) que la descarga
+        individual, así que sus páginas son idénticas.
+        """
+        facturas = self.facturas_para_orden_pago(invoice_ids)
+        partes: list[tuple[str, bytes]] = []
+        for f in facturas:
+            items = repo.get_invoice_items(self.conn, f["id"])
+            try:
+                pdf = get_or_render_invoice_pdf(
+                    f, items, self.config.paths.pdf_dir
+                )
+            except ValueError as exc:
+                raise ConflictError(
+                    f"No se pudo generar el PDF de "
+                    f"{f['punto_venta']:05d}-{f['cbte_nro']:08d}: {exc}"
+                ) from exc
+            partes.append((invoice_pdf_filename(f), pdf))
+        try:
+            unido = unir_pdfs(partes)
+        except OrdenPagoError as exc:
+            raise ConflictError(str(exc)) from exc
+        return nombre_facturas_e([f["cbte_nro"] for f in facturas]), unido
+
+    def pdf_recaudadora_orden_pago(
+        self,
+        invoice_ids: Sequence[str],
+        cuenta: str,
+        archivos: Sequence[PdfSubido],
+        numeros: Sequence[str],
+    ) -> tuple[str, bytes]:
+        """(nombre, PDF) con los invoices de la recaudadora unidos en el orden
+        en que se subieron. Nada se guarda: los bytes llegan y se van."""
+        self.facturas_para_orden_pago(invoice_ids)
+        try:
+            if not archivos:
+                raise OrdenPagoError(
+                    "Subí al menos un PDF de la cuenta recaudadora."
+                )
+            if len(numeros) != len(archivos):
+                raise OrdenPagoError(
+                    "Cada PDF de la cuenta recaudadora necesita su número."
+                )
+            nros = [
+                validar_numero(n, a.nombre)
+                for n, a in zip(numeros, archivos, strict=True)
+            ]
+            nombre = nombre_recaudadora(cuenta, nros)
+            for archivo in archivos:
+                validar_pdf_subido(archivo)
+            unido = unir_pdfs([(a.nombre, a.contenido) for a in archivos])
+        except OrdenPagoError as exc:
+            raise DomainError(str(exc)) from exc
+        return nombre, unido
 
     def constatar_cae(self, invoice_id: str) -> ConstatacionResult:
         """Constatación WSCDC bajo demanda.

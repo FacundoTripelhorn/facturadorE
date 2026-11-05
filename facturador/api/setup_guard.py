@@ -65,6 +65,9 @@ def requires_ready_profile(method: str, path: str) -> bool:
     # Constatación WSCDC: necesita cert + TA ``wscdc``.
     if path.startswith("/constatacion") or path.startswith("/ui/constatacion"):
         return True
+    # Orden de pago: arma PDFs de facturas, igual que ``/invoices/…/pdf``.
+    if path.startswith("/orden-de-pago") or path.startswith("/ui/orden-de-pago"):
+        return True
     if path.startswith("/params"):
         return True
     if path == "/registry" or path.startswith("/registry/"):
@@ -88,6 +91,10 @@ def is_html_ui_route(method: str, path: str) -> bool:
     if path.startswith("/constatacion") or path.startswith("/ui/constatacion"):
         return True
     if path.startswith("/ui/registry"):
+        return True
+    # Solo la pantalla: las descargas responden JSON (las lee el script de
+    # descarga y muestra el error), nunca una redirección a HTML.
+    if method == "GET" and path == "/orden-de-pago":
         return True
     return False
 

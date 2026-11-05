@@ -16,6 +16,9 @@ El snapshot de emisor, el snapshot de render (descripciones de params +
 ``pdf_render_version``) y ``registry_gaps`` amplían
 el baseline a propósito: no hay DBs desplegadas que migrar, así que NO
 corresponde una migración v2 solo por esas tablas/columnas.
+
+Desde que hay instaladores publicados sí hay DBs en uso: todo cambio de
+esquema nuevo va en una migración propia, nunca editando el baseline.
 """
 
 from __future__ import annotations
@@ -86,8 +89,20 @@ def _load_baseline_sql() -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Cuenta recaudadora del cliente (p. ej. "deel"): dónde paga ese cliente.
+# Opcional; precarga la pantalla de orden de pago.
+_CLIENTS_CUENTA_RECAUDADORA = """
+ALTER TABLE clients ADD COLUMN cuenta_recaudadora TEXT
+"""
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(version=1, name="baseline", sql=_load_baseline_sql()),
+    Migration(
+        version=2,
+        name="clients_cuenta_recaudadora",
+        sql=_CLIENTS_CUENTA_RECAUDADORA,
+    ),
 )
 
 

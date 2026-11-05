@@ -4,6 +4,7 @@
 <table>
   <thead>
     <tr>
+      {% if seleccion_orden %}<th class="col-elegir"><span class="solo-lectores">Elegir para la orden de pago</span></th>{% endif %}
       <th>Fecha</th><th>Comprobante</th><th class="oculta-movil">Cliente</th>
       <th class="num">Importe</th><th>Estado</th><th class="oculta-movil">CAE</th><th></th>
     </tr>
@@ -11,6 +12,16 @@
   <tbody>
     {% for f in facturas %}
     <tr>
+      {% if seleccion_orden %}
+      <td class="col-elegir">
+        {# Solo una autorizada entra en una orden de pago. #}
+        {% if f["status"] == AUTHORIZED %}
+        <input type="checkbox" name="ids" value="{{ f['id'] }}"
+               data-cliente="{{ clave_cliente(f) }}"
+               aria-label="Elegir {{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }} ({{ f['cliente'] }})">
+        {% endif %}
+      </td>
+      {% endif %}
       <td class="num">{{ f["fecha_cbte"] | fecha }}</td>
       <td class="num">
         {# El número es definitivo solo al autorizar; antes es una reserva

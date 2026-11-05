@@ -97,7 +97,17 @@ class ClientIn(BaseModel):
     idioma_default: int = 1
     forma_pago_default: str = "WIRE TRANSFER"
     descripcion_default: str = ""
+    # Dónde paga este cliente (p. ej. "deel"); precarga la orden de pago.
+    cuenta_recaudadora: str | None = Field(default=None, max_length=60)
     is_default: bool = False
+
+    @field_validator("cuenta_recaudadora")
+    @classmethod
+    def _cuenta_vacia_es_none(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 class ClientOut(ClientIn):

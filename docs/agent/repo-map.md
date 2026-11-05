@@ -179,6 +179,7 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 | Clients page | `clients.html` |
 | Settings page | `configuracion.html` |
 | Invoice list | `comprobantes.html`, `_listado.html` |
+| Orden de pago del banco (Comprobantes → Autorizadas → tildar → une Facturas E + invoices de la recaudadora con pypdf; nada subido se guarda) | `facturador/orden_pago.py` (nombres, normalización, unión), `InvoiceService.*orden_pago*` en `facturador/service.py`, `facturador/web/orden_pago.py`, `facturador/api/upload_limit.py` (tope 413 + sin spool a disco), `orden_pago.html`, `_descarga_pdf.html` (también para `<form>`), `tests/test_orden_pago.py` |
 | Billing summary (Comprobantes → Resumen: authorized totals per month, client and currency, server-side SVG chart) | `facturador/resumen.py`, `facturador/web/grafico.py`, `resumen.html`, `_vistas_comprobantes.html`, `tests/test_resumen.py` |
 | Base layout | `base.html`, `home.html` |
 | Frontend tests | `tests/test_web.py` |

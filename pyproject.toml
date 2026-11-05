@@ -16,6 +16,7 @@ dependencies = [
     "boto3>=1.35",
     "pywebview>=6.2.1",
     "fpdf2>=2.8",
+    "pypdf>=5",
 ]
 
 [dependency-groups]
@@ -23,7 +24,6 @@ dev = [
     "pytest>=8",
     "ruff>=0.8",
     "mypy>=1.13",
-    "pypdf>=5",
 ]
 packaging = [
     "pyinstaller>=6.10",

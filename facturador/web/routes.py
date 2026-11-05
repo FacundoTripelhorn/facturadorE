@@ -59,6 +59,7 @@ from ..launcher.switch import (
     is_launcher_supervised,
     write_change_environment_request,
 )
+from ..orden_pago import clave_cliente
 from ..resumen import MESES, resumir
 from ..schemas import (
     BackupSettingsIn,
@@ -235,6 +236,7 @@ templates.env.globals["NIVEL_BADGE"] = {
     Nivel.BLOQUEA: "error",
 }
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
+templates.env.globals["clave_cliente"] = clave_cliente
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 # Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.
@@ -798,6 +800,8 @@ def comprobantes(
             "estado": estado,
             "aviso": _catchup_aviso(aviso, n),
             "error": error or None,
+            # Las facturas de una orden de pago se eligen en esta solapa.
+            "seleccion_orden": estado == "autorizadas",
             "facturas": repo.list_invoices(
                 service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]
             ),
@@ -903,6 +907,7 @@ def guardar_cliente(
     idioma_default: int = Form(1),
     forma_pago_default: str = Form("WIRE TRANSFER"),
     descripcion_default: str = Form(""),
+    cuenta_recaudadora: str = Form(""),
     is_default: bool = Form(False),
 ):
     try:
@@ -916,6 +921,7 @@ def guardar_cliente(
             idioma_default=idioma_default,
             forma_pago_default=forma_pago_default,
             descripcion_default=descripcion_default,
+            cuenta_recaudadora=cuenta_recaudadora,
             is_default=is_default,
         )
         if client_id:

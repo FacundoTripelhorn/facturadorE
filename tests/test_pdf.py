@@ -554,12 +554,14 @@ def test_datos_hostiles_del_emisor_se_imprimen_literales(api, arca):
 
 
 def test_baseline_incluye_snapshot_de_render(tmp_path):
-    """Columnas de render en el baseline — sin migración de upgrade."""
-    from facturador import db
-    from facturador.migrations import latest_version
+    """Columnas de render en el baseline (v1), no en una migración posterior."""
+    import sqlite3
 
-    conn = db.connect(tmp_path / "fresh.db")
+    from facturador.migrations import MIGRATIONS, migrate
+
+    conn = sqlite3.connect(tmp_path / "fresh.db")
     try:
+        migrate(conn, migrations=MIGRATIONS[:1])
         inv_cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
         item_cols = {
             r[1] for r in conn.execute("PRAGMA table_info(invoice_items)")
@@ -572,8 +574,6 @@ def test_baseline_incluye_snapshot_de_render(tmp_path):
         ):
             assert name in inv_cols
         assert "pro_umed_ds" in item_cols
-        # Guardrail: snapshot de render sigue en el baseline (una migración).
-        assert latest_version() == 1
     finally:
         conn.close()
 

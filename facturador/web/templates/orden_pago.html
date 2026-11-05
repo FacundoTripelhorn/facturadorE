@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="panel error">
+  <div>
+    <strong>No se puede armar la orden de pago.</strong> {{ error }}
+    <p><a href="/comprobantes?estado=autorizadas">Volver a Comprobantes</a></p>
+  </div>
+</div>
+{% endif %}
+
+{% if facturas %}
+<section class="card">
+  <h2>Orden de pago <span class="sub">{{ cliente }}</span></h2>
+  <div class="tabla-scroll">
+    <table class="facturas-orden">
+      <thead>
+        <tr><th>Comprobante</th><th class="oculta-movil">Fecha</th><th class="num">Total</th></tr>
+      </thead>
+      <tbody>
+        {% for f in facturas %}
+        <tr>
+          <td class="num"><a href="/facturas/{{ f['id'] }}">{{ "%05d"|format(f["punto_venta"]) }}-{{ "%08d"|format(f["cbte_nro"]) }}</a></td>
+          <td class="num oculta-movil">{{ f["fecha_cbte"] | fecha }}</td>
+          <td class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        {% for moneda, total in totales %}
+        <tr>
+          <td>Total {% if facturas|length > 1 %}({{ facturas|length }} facturas){% endif %}</td>
+          <td class="oculta-movil"></td>
+          <td class="num" id="total-orden">{{ moneda | moneda }} {{ total | importe }}</td>
+        </tr>
+        {% endfor %}
+      </tfoot>
+    </table>
+  </div>
+  <form class="cuerpo acciones-orden" method="get" action="/orden-de-pago/facturas-e"
+        data-descarga-pdf data-comprobante="las facturas E">
+    {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
+    <button type="submit" aria-label="Unir facturas E">Unir</button>
+    <span class="nota">Se descarga un solo PDF con las facturas en orden de número.</span>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Invoices de la cuenta recaudadora</h2>
+  <form class="cuerpo" id="form-recaudadora" method="post"
+        action="/ui/orden-de-pago/recaudadora" enctype="multipart/form-data"
+        data-descarga-pdf data-comprobante="los invoices de la recaudadora">
+    {% include "_csrf_field.html" %}
+    {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
+    <label for="cuenta">Cuenta recaudadora</label>
+    <input id="cuenta" name="cuenta" value="{{ cuenta }}" maxlength="60"
+           placeholder="p. ej. deel" required aria-describedby="ayuda-cuenta">
+    <p class="nota" id="ayuda-cuenta">Va en el nombre del archivo. Lo que cambies acá no se guarda en el cliente.</p>
+
+    <label for="agregar-pdfs">PDFs de la cuenta recaudadora</label>
+    <input type="file" id="agregar-pdfs" accept=".pdf,application/pdf" multiple>
+    {# Los archivos elegidos se acumulan acá, en el orden en que se agregan. #}
+    <input type="file" name="archivos" id="archivos" multiple hidden>
+
+    <table class="pdfs-recaudadora" id="tabla-pdfs" hidden>
+      <thead><tr><th>Archivo</th><th>Número</th><th><span class="solo-lectores">Quitar</span></th></tr></thead>
+      <tbody id="filas-pdfs"></tbody>
+    </table>
+    <p class="nota" id="sin-pdfs">Todavía no agregaste PDFs. El número de cada uno se precarga con el primer número del nombre del archivo.</p>
+
+    <div class="acciones-orden">
+      <button type="submit" id="descargar-recaudadora" disabled
+              aria-label="Unir invoices recaudadora">Unir</button>
+      <span class="nota" id="estado-recaudadora" role="status"></span>
+    </div>
+    <p class="nota">Se descarga un solo PDF, en el orden en que agregaste los archivos. Lo subido no se guarda en la app.</p>
+  </form>
+</section>
+
+<script>
+(function () {
+  var form = document.getElementById("form-recaudadora");
+  var picker = document.getElementById("agregar-pdfs");
+  var real = document.getElementById("archivos");
+  var cuenta = document.getElementById("cuenta");
+  var tabla = document.getElementById("tabla-pdfs");
+  var filas = document.getElementById("filas-pdfs");
+  var vacio = document.getElementById("sin-pdfs");
+  var boton = document.getElementById("descargar-recaudadora");
+  var estado = document.getElementById("estado-recaudadora");
+  var archivos = [];   // [{file, numero}] en el orden en que se agregaron
+
+  // Mismas reglas que facturador/orden_pago.py.
+  function numeroDesdeNombre(nombre) {
+    var base = nombre.split(/[\\/]/).pop();
+    var punto = base.lastIndexOf(".");
+    var stem = punto > 0 ? base.slice(0, punto) : base;
+    var m = stem.match(/[0-9]+/);
+    return m ? m[0] : "";
+  }
+  function normalizarCuenta(nombre) {
+    return nombre.normalize("NFKD").replace(/[^\x00-\x7f]/g, "")
+      .toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function sincronizar() {
+    var dt = new DataTransfer();
+    archivos.forEach(function (a) { dt.items.add(a.file); });
+    real.files = dt.files;
+  }
+
+  function validar() {
+    var faltan = 0;
+    filas.querySelectorAll("tr").forEach(function (tr) {
+      var input = tr.querySelector("input[name=numeros]");
+      var incompleta = input.value.trim() === "";
+      tr.classList.toggle("incompleta", incompleta);
+      input.setAttribute("aria-invalid", incompleta ? "true" : "false");
+      if (incompleta) { faltan++; }
+    });
+    var sinCuenta = normalizarCuenta(cuenta.value) === "";
+    cuenta.setAttribute("aria-invalid", sinCuenta && archivos.length ? "true" : "false");
+    boton.disabled = archivos.length === 0 || faltan > 0 || sinCuenta;
+    if (archivos.length === 0) {
+      estado.textContent = "";
+    } else if (sinCuenta) {
+      estado.textContent = "Falta el nombre de la cuenta recaudadora.";
+    } else if (faltan) {
+      estado.textContent = faltan === 1
+        ? "Falta el número de 1 PDF."
+        : "Falta el número de " + faltan + " PDFs.";
+    } else {
+      var nros = archivos.map(function (a) { return a.numero.trim(); });
+      estado.textContent = "Sale como " + normalizarCuenta(cuenta.value) +
+        "_invoices_" + nros.join("_") + ".pdf";
+    }
+  }
+
+  function dibujar() {
+    filas.textContent = "";
+    archivos.forEach(function (a, i) {
+      var tr = document.createElement("tr");
+      var tdNombre = document.createElement("td");
+      tdNombre.className = "nombre-pdf";
+      tdNombre.textContent = a.file.name;
+
+      var tdNumero = document.createElement("td");
+      var input = document.createElement("input");
+      input.name = "numeros";
+      input.required = true;
+      input.maxLength = 40;
+      input.inputMode = "numeric";
+      input.value = a.numero;
+      input.setAttribute("aria-label", "Número de " + a.file.name);
+      input.addEventListener("input", function () { a.numero = input.value; validar(); });
+      tdNumero.appendChild(input);
+
+      var tdQuitar = document.createElement("td");
+      var quitar = document.createElement("button");
+      quitar.type = "button";
+      quitar.className = "secundario quitar-pdf";
+      quitar.textContent = "Quitar";
+      quitar.setAttribute("aria-label", "Quitar " + a.file.name);
+      quitar.addEventListener("click", function () {
+        archivos.splice(i, 1);
+        sincronizar();
+        dibujar();
+      });
+      tdQuitar.appendChild(quitar);
+
+      tr.appendChild(tdNombre);
+      tr.appendChild(tdNumero);
+      tr.appendChild(tdQuitar);
+      filas.appendChild(tr);
+    });
+    tabla.hidden = archivos.length === 0;
+    vacio.hidden = archivos.length > 0;
+    validar();
+  }
+
+  picker.addEventListener("change", function () {
+    Array.prototype.forEach.call(picker.files, function (file) {
+      archivos.push({ file: file, numero: numeroDesdeNombre(file.name) });
+    });
+    picker.value = "";   // elegir el mismo archivo otra vez vuelve a disparar
+    sincronizar();
+    dibujar();
+  });
+  cuenta.addEventListener("input", validar);
+  form.addEventListener("submit", function (ev) {
+    validar();
+    if (boton.disabled) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+  }, true);
+  dibujar();
+})();
+</script>
+{% endif %}
+{% include "_descarga_pdf.html" %}
+
+{% endblock %}

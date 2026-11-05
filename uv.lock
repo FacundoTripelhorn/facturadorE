@@ -294,6 +294,7 @@ dependencies = [
     { name = "fpdf2" },
     { name = "httpx" },
     { name = "jinja2" },
+    { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "pywebview" },
@@ -304,7 +305,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
-    { name = "pypdf" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -320,6 +320,7 @@ requires-dist = [
     { name = "fpdf2", specifier = ">=2.8" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "pypdf", specifier = ">=5" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "pywebview", specifier = ">=6.2.1" },
@@ -330,7 +331,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.13" },
-    { name = "pypdf", specifier = ">=5" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.8" },
 ]
