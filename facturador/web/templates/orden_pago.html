@@ -39,7 +39,7 @@
     </table>
   </div>
   <form class="cuerpo acciones-orden" method="get" action="/orden-de-pago/facturas-e"
-        data-descarga-pdf data-comprobante="las facturas E">
+        data-descarga-pdf data-titulo-error="No se pudieron unir las facturas E.">
     {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
     <button type="submit" aria-label="Unir facturas E">Unir</button>
     <span class="nota">Se descarga un solo PDF con las facturas en orden de número.</span>
@@ -50,7 +50,8 @@
   <h2>Invoices de la cuenta recaudadora</h2>
   <form class="cuerpo" id="form-recaudadora" method="post"
         action="/ui/orden-de-pago/recaudadora" enctype="multipart/form-data"
-        data-descarga-pdf data-comprobante="los invoices de la recaudadora">
+        data-descarga-pdf
+        data-titulo-error="No se pudieron unir los invoices de la recaudadora.">
     {% include "_csrf_field.html" %}
     {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
     <label for="cuenta">Cuenta recaudadora</label>

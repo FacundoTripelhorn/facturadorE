@@ -260,6 +260,11 @@ def test_pantalla_lista_facturas_en_orden_y_suma_total(api, tres_autorizadas):
     assert 'id="descargar-recaudadora" disabled' in html
     assert 'enctype="multipart/form-data"' in html
     assert "__descargaPdfLista" in html
+    assert 'data-titulo-error="No se pudieron unir las facturas E."' in html
+    assert (
+        'data-titulo-error="No se pudieron unir los invoices de la recaudadora."'
+        in html
+    )
 
 
 def test_pantalla_sin_cuenta_en_el_cliente_deja_el_campo_vacio(api, arca):

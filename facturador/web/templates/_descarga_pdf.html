@@ -37,9 +37,10 @@
     var cuerpo = document.createElement("div");
     var titulo = document.createElement("strong");
     var comprobante = link.getAttribute("data-comprobante");
-    titulo.textContent = comprobante
+    // data-titulo-error reemplaza el título genérico (p. ej. al unir PDFs).
+    titulo.textContent = link.getAttribute("data-titulo-error") || (comprobante
       ? "No se pudo descargar el PDF de " + comprobante + "."
-      : "No se pudo descargar el PDF.";
+      : "No se pudo descargar el PDF.");
     cuerpo.appendChild(titulo);
     cuerpo.appendChild(document.createTextNode(" " + mensaje));
 
@@ -83,7 +84,7 @@
         form.submit();
       })
       .catch(function () {
-        mostrarAviso(form, "No se pudo contactar a la app para generar el PDF.");
+        mostrarAviso(form, "No se pudo contactar a la app.");
       })
       .finally(function () { form.removeAttribute("aria-busy"); });
   });
