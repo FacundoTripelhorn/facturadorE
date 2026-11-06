@@ -97,7 +97,7 @@ class ClientIn(BaseModel):
     idioma_default: int = 1
     forma_pago_default: str = "WIRE TRANSFER"
     descripcion_default: str = ""
-    # Dónde paga este cliente (p. ej. "deel"); precarga la orden de pago.
+    # Plataforma por la que paga este cliente; precarga la orden de pago.
     cuenta_recaudadora: str | None = Field(default=None, max_length=60)
     is_default: bool = False
 

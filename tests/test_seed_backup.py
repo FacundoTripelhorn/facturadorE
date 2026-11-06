@@ -355,14 +355,14 @@ def test_seed_lleva_la_cuenta_recaudadora_del_cliente_default(perfil_listo):
     cliente = repo.get_default_client(conn)
     assert cliente is not None
     conn.execute(
-        "UPDATE clients SET cuenta_recaudadora = 'Deel' WHERE id = ?",
+        "UPDATE clients SET cuenta_recaudadora = 'Recaudadora' WHERE id = ?",
         (cliente["id"],),
     )
     conn.commit()
 
     seed = assemble_seed(conn, environment="homo")
 
-    assert seed["default_client"]["cuenta_recaudadora"] == "Deel"
+    assert seed["default_client"]["cuenta_recaudadora"] == "Recaudadora"
     envelope = build_envelope(
         seed, build_manifest(seed, device_id=ensure_device_id(paths))
     )
@@ -386,7 +386,7 @@ def test_restore_aplica_la_cuenta_recaudadora(perfil_listo, tmp_path):
     cliente = repo.get_default_client(conn)
     assert cliente is not None
     conn.execute(
-        "UPDATE clients SET cuenta_recaudadora = 'Deel' WHERE id = ?",
+        "UPDATE clients SET cuenta_recaudadora = 'Recaudadora' WHERE id = ?",
         (cliente["id"],),
     )
     conn.commit()
@@ -399,7 +399,7 @@ def test_restore_aplica_la_cuenta_recaudadora(perfil_listo, tmp_path):
         destino.commit()
         restaurado = repo.get_default_client(destino)
         assert restaurado is not None
-        assert restaurado["cuenta_recaudadora"] == "Deel"
+        assert restaurado["cuenta_recaudadora"] == "Recaudadora"
 
         # Un seed anterior (sin la clave) deja el campo vacío.
         del seed["default_client"]["cuenta_recaudadora"]

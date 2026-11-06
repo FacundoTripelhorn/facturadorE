@@ -83,7 +83,7 @@
            value="{{ editando['descripcion_default'] if editando else '' }}">
     <label for="cuenta_recaudadora">Cuenta recaudadora (opcional)</label>
     <input id="cuenta_recaudadora" name="cuenta_recaudadora" maxlength="60"
-           placeholder="p. ej. deel" aria-describedby="ayuda-cuenta-recaudadora"
+           placeholder="p. ej. el nombre de la plataforma de cobro" aria-describedby="ayuda-cuenta-recaudadora"
            value="{{ (editando['cuenta_recaudadora'] or '') if editando else '' }}">
     <p class="nota" id="ayuda-cuenta-recaudadora">Dónde te paga este cliente. Precarga la orden de pago del banco.</p>
     <label class="check">

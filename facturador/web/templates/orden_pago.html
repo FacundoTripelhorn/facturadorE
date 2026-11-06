@@ -56,7 +56,7 @@
     {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
     <label for="cuenta">Cuenta recaudadora</label>
     <input id="cuenta" name="cuenta" value="{{ cuenta }}" maxlength="60"
-           placeholder="p. ej. deel" required aria-describedby="ayuda-cuenta">
+           placeholder="p. ej. el nombre de la plataforma de cobro" required aria-describedby="ayuda-cuenta">
     <p class="nota" id="ayuda-cuenta">Va en el nombre del archivo. Lo que cambies acá no se guarda en el cliente.</p>
 
     <label for="agregar-pdfs">PDFs de la cuenta recaudadora</label>

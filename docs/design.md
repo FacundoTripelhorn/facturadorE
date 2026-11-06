@@ -223,7 +223,7 @@ clients
   cuit_pais (bigint)              -- de FEXGetPARAM_DST_CUIT
   id_impositivo (text)            -- tax id del cliente en su país
   moneda_default (text), incoterms_default (text), idioma_default (int)
-  cuenta_recaudadora (text, null) -- dónde paga (p. ej. "deel"); precarga la orden de pago
+  cuenta_recaudadora (text, null) -- plataforma por la que paga; precarga la orden de pago
   is_default (bool)               -- cliente habitual, precargado en el form
   created_at, updated_at
 
@@ -300,7 +300,7 @@ Reglas de `authorize`:
 
 Jinja2 + HTMX servido por la misma app FastAPI: formulario de factura con selects poblados desde `/params/*` y el cliente default precargado, listado de comprobantes con estado/CAE, botón de descarga de PDF. Nada más en el spike.
 
-**Orden de pago del banco.** Para ingresar al país un cobro, el banco pide dos PDFs: las Facturas E que se liquidan y los invoices de la cuenta recaudadora (p. ej. Deel). En **Comprobantes → Autorizadas** se tildan facturas autorizadas de **un solo cliente** (mismo `client_id`; las reconstruidas desde ARCA no lo tienen y cuentan como del cliente cuyo receptor coincide en el snapshot: CUIT país + ID impositivo, o el nombre) y **Armar orden de pago** abre `/orden-de-pago`: lista las facturas con su suma (para chequear contra el monto de la orden) y dos descargas independientes.
+**Orden de pago del banco.** Para ingresar al país un cobro, el banco pide dos PDFs: las Facturas E que se liquidan y los invoices de la cuenta recaudadora (la plataforma por la que paga el cliente). En **Comprobantes → Autorizadas** se tildan facturas autorizadas de **un solo cliente** (mismo `client_id`; las reconstruidas desde ARCA no lo tienen y cuentan como del cliente cuyo receptor coincide en el snapshot: CUIT país + ID impositivo, o el nombre) y **Armar orden de pago** abre `/orden-de-pago`: lista las facturas con su suma (para chequear contra el monto de la orden) y dos descargas independientes.
 
 - **Facturas E** → `e_invoices_12_13_14.pdf`: números sin punto de venta, ascendentes; el PDF une las facturas en ese orden con el mismo render y cache que la descarga individual.
 - **Invoices de la recaudadora** → `{cuenta}_invoices_42_43.pdf`: se unen en el orden en que se subieron. Cada PDF necesita su número (se precarga con el primer grupo de dígitos del nombre del archivo) y la cuenta un nombre, que se normaliza a minúsculas sin espacios ni caracteres raros. Se precarga desde el cliente y se puede cambiar para esa orden sin tocar el cliente.

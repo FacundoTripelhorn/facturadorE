@@ -89,7 +89,7 @@ def _load_baseline_sql() -> str:
     return path.read_text(encoding="utf-8")
 
 
-# Cuenta recaudadora del cliente (p. ej. "deel"): dónde paga ese cliente.
+# Cuenta recaudadora del cliente: la plataforma por la que paga.
 # Opcional; precarga la pantalla de orden de pago.
 _CLIENTS_CUENTA_RECAUDADORA = """
 ALTER TABLE clients ADD COLUMN cuenta_recaudadora TEXT

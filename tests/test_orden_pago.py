@@ -84,11 +84,11 @@ def _textos(pdf: bytes) -> list[str]:
     ("nombre", "esperado"),
     [
         ("Invoice-42.pdf", "42"),
-        ("deel_2026_0042.pdf", "2026"),
+        ("cobro_2026_0042.pdf", "2026"),
         ("INV0043.PDF", "0043"),
         ("sin numero.pdf", ""),
         ("factura.v2", ""),  # la extensión no cuenta
-        ("C:\\Users\\yo\\Deel 44.pdf", "44"),
+        ("C:\\Users\\yo\\Cobro 44.pdf", "44"),
         ("45", "45"),
     ],
 )
@@ -99,10 +99,10 @@ def test_numero_se_precarga_con_el_primer_grupo_de_digitos(nombre, esperado):
 @pytest.mark.parametrize(
     ("cuenta", "esperado"),
     [
-        ("deel", "deel"),
-        ("Deel", "deel"),
-        ("Deel Inc.", "deelinc"),
-        ("  Pay-oneer  ", "payoneer"),
+        ("recaudadora", "recaudadora"),
+        ("Recaudadora", "recaudadora"),
+        ("Cobros Sur S.A.", "cobrossursa"),
+        ("  Co-bros  ", "cobros"),
         ("Pagos Ñandú", "pagosnandu"),
         ("../../etc", "etc"),
         ("!!!", ""),
@@ -118,8 +118,8 @@ def test_nombre_facturas_e_va_en_orden_ascendente_sin_punto_de_venta():
 
 def test_nombre_recaudadora_respeta_el_orden_de_subida():
     assert (
-        nombre_recaudadora("Deel", ["44", "42", "43"])
-        == "deel_invoices_44_42_43.pdf"
+        nombre_recaudadora("Recaudadora", ["44", "42", "43"])
+        == "recaudadora_invoices_44_42_43.pdf"
     )
 
 
@@ -179,7 +179,7 @@ def _autorizada(api, **overrides) -> str:
 def tres_autorizadas(api, arca):
     """Tres facturas autorizadas (nros 1, 2, 3) del cliente default, con la
     cuenta recaudadora cargada en el cliente."""
-    _crear_cliente_por_form(api, cuenta_recaudadora="Deel")
+    _crear_cliente_por_form(api, cuenta_recaudadora="Recaudadora")
     ids = [
         _autorizada(api, imp_total=monto)
         for monto in ("1000,00", "1500,50", "499,50")
@@ -191,7 +191,7 @@ def _ids_query(ids) -> str:
     return "&".join(f"ids={i}" for i in ids)
 
 
-def _subir(api, ids, archivos, numeros, cuenta="deel"):
+def _subir(api, ids, archivos, numeros, cuenta="recaudadora"):
     # Dict con listas: httpx manda el multipart con Content-Length, como un
     # navegador (una lista de tuplas lo mandaría chunked).
     form: dict[str, str | list[str]] = {**with_csrf(api, {"cuenta": cuenta})}
@@ -257,7 +257,7 @@ def _como_reconstruida(api, invoice_id: str) -> None:
 def test_reconstruida_y_nueva_del_mismo_cliente_se_pueden_unir(api, arca):
     """Tras un restore, las facturas reconstruidas desde ARCA no tienen
     client_id y las nuevas sí: siguen siendo del mismo cliente."""
-    _crear_cliente_por_form(api, cuenta_recaudadora="Deel")
+    _crear_cliente_por_form(api, cuenta_recaudadora="Recaudadora")
     vieja = _autorizada(api)
     nueva = _autorizada(api)
     _como_reconstruida(api, vieja)
@@ -267,7 +267,7 @@ def test_reconstruida_y_nueva_del_mismo_cliente_se_pueden_unir(api, arca):
 
     pagina = api.get(f"/orden-de-pago?ids={vieja}&ids={nueva}")
     assert pagina.status_code == 200, pagina.text
-    assert 'value="Deel"' in pagina.text  # del cliente de la que sí tiene id
+    assert 'value="Recaudadora"' in pagina.text  # del cliente de la que sí tiene id
     pdf = api.get(f"/orden-de-pago/facturas-e?ids={vieja}&ids={nueva}")
     assert pdf.status_code == 200
     assert 'filename="e_invoices_1_2.pdf"' in pdf.headers["content-disposition"]
@@ -328,7 +328,7 @@ def test_pantalla_lista_facturas_en_orden_y_suma_total(api, tres_autorizadas):
     posiciones = [html.index(f"00001-0000000{n}") for n in (1, 2, 3)]
     assert posiciones == sorted(posiciones)
     assert "USD 3.000,00" in html            # 1000 + 1500,50 + 499,50
-    assert 'value="Deel"' in html            # precargada desde el cliente
+    assert 'value="Recaudadora"' in html            # precargada desde el cliente
     assert "CLIENTE URUGUAY S.A." in html
     assert 'aria-label="Unir facturas E">Unir</button>' in html
     assert 'aria-label="Unir invoices recaudadora">Unir</button>' in html
@@ -425,12 +425,12 @@ def test_descarga_recaudadora_une_en_orden_de_subida(api, tres_autorizadas):
             ("Invoice-42.pdf", _pdf_con_texto("I42", 2)),
         ],
         ["44", "42"],
-        cuenta="Deel Inc.",
+        cuenta="Cobros Sur S.A.",
     )
 
     assert r.status_code == 200, r.text
     assert r.headers["content-disposition"] == (
-        'attachment; filename="deelinc_invoices_44_42.pdf"'
+        'attachment; filename="cobrossursa_invoices_44_42.pdf"'
     )
     assert _textos(r.content) == ["I44 p1", "I42 p1", "I42 p2"]
 
@@ -511,7 +511,7 @@ def test_descarga_recaudadora_valida_las_facturas(api, arca):
 def test_descarga_recaudadora_exige_csrf(api, tres_autorizadas):
     r = api.post(
         "/ui/orden-de-pago/recaudadora",
-        data={"cuenta": "deel", "ids": tres_autorizadas[0], "numeros": "1"},
+        data={"cuenta": "recaudadora", "ids": tres_autorizadas[0], "numeros": "1"},
         files=[("archivos", ("a.pdf", _pdf_con_texto("A"), "application/pdf"))],
     )
     assert r.status_code == 403
@@ -599,13 +599,13 @@ def test_orden_de_pago_exige_perfil_listo():
 
 
 def test_cliente_guarda_la_cuenta_recaudadora_por_form(api, arca):
-    _crear_cliente_por_form(api, cuenta_recaudadora="  Deel  ")
+    _crear_cliente_por_form(api, cuenta_recaudadora="  Recaudadora  ")
     cliente = api.get("/clients").json()[0]
-    assert cliente["cuenta_recaudadora"] == "Deel"
+    assert cliente["cuenta_recaudadora"] == "Recaudadora"
 
     edit = api.get(f"/clientes?edit={cliente['id']}").text
     assert 'name="cuenta_recaudadora"' in edit
-    assert 'value="Deel"' in edit
+    assert 'value="Recaudadora"' in edit
 
     r = api.post(
         "/ui/clientes",
@@ -620,11 +620,15 @@ def test_cliente_guarda_la_cuenta_recaudadora_por_form(api, arca):
 
 def test_editar_la_cuenta_en_la_orden_no_toca_el_cliente(api, tres_autorizadas):
     r = _subir(
-        api, tres_autorizadas, [("a.pdf", _pdf_con_texto("A"))], ["7"], cuenta="Wise"
+        api,
+        tres_autorizadas,
+        [("a.pdf", _pdf_con_texto("A"))],
+        ["7"],
+        cuenta="Otra Cuenta",
     )
     assert r.status_code == 200
-    assert "wise_invoices_7.pdf" in r.headers["content-disposition"]
-    assert api.get("/clients").json()[0]["cuenta_recaudadora"] == "Deel"
+    assert "otracuenta_invoices_7.pdf" in r.headers["content-disposition"]
+    assert api.get("/clients").json()[0]["cuenta_recaudadora"] == "Recaudadora"
 
 
 def test_migracion_agrega_la_cuenta_recaudadora_a_clientes_existentes(tmp_path):

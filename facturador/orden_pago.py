@@ -1,10 +1,11 @@
 """Orden de pago del banco: une PDFs para ingresar al país un cobro.
 
 El banco pide dos PDFs por orden: las Facturas E que se liquidan y los
-invoices de la cuenta recaudadora (p. ej. Deel) de esos cobros. Este módulo
-arma los nombres de archivo y une PDFs con pypdf (fpdf2 no puede abrir PDFs
-existentes). Todo pasa en memoria: los invoices subidos no se escriben a
-disco ni a la base; se unen, se devuelven y se descartan.
+invoices de la cuenta recaudadora (la plataforma por la que paga el
+cliente). Este módulo arma los nombres de archivo y une PDFs con pypdf
+(fpdf2 no puede abrir PDFs existentes). Todo pasa en memoria: los invoices
+subidos no se escriben a disco ni a la base; se unen, se devuelven y se
+descartan.
 
 Los PDFs externos son hostiles: solo se aceptan bytes que empiecen con
 ``%PDF``; uno encriptado o que pypdf no puede leer da un error que nombra
@@ -82,7 +83,7 @@ def mismo_cliente(facturas: Sequence[sqlite3.Row]) -> bool:
 def numero_desde_nombre(nombre_archivo: str) -> str:
     """Primer grupo de dígitos del nombre, sin la extensión ("" si no hay).
 
-    ``Invoice-42.pdf`` → ``42``; ``deel_2026_0042.pdf`` → ``2026``. Es solo
+    ``Invoice-42.pdf`` → ``42``; ``cobro_2026_0042.pdf`` → ``2026``. Es solo
     una precarga: el usuario lo corrige en la pantalla.
     """
     base = nombre_archivo.replace("\\", "/").rsplit("/", 1)[-1]
@@ -95,7 +96,7 @@ def normalizar_cuenta(nombre: str) -> str:
     """Nombre de la cuenta apto para un nombre de archivo.
 
     Minúsculas, sin acentos, sin espacios ni caracteres raros:
-    ``"Deel Inc."`` → ``"deelinc"``, ``"Payoneer"`` → ``"payoneer"``.
+    ``"Cobros Sur S.A."`` → ``"cobrossursa"``, ``"Recaudadora"`` → ``"recaudadora"``.
     """
     sin_acentos = (
         unicodedata.normalize("NFKD", nombre)
@@ -125,7 +126,7 @@ def nombre_facturas_e(cbte_nros: Sequence[int]) -> str:
 
 
 def nombre_recaudadora(cuenta: str, numeros: Sequence[str]) -> str:
-    """``deel_invoices_42_43_44.pdf``: números en el orden en que se subieron."""
+    """``recaudadora_invoices_42_43_44.pdf``: números en el orden de subida."""
     normalizada = normalizar_cuenta(cuenta)
     if not normalizada:
         raise OrdenPagoError("Falta el nombre de la cuenta recaudadora.")
