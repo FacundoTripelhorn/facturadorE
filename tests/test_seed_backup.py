@@ -348,3 +348,65 @@ def test_cli_backup_falla_sin_emisores_sin_sugerir_env(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "Perfil incompleto" in err
     assert "--env" not in err
+
+
+def test_seed_lleva_la_cuenta_recaudadora_del_cliente_default(perfil_listo):
+    paths, conn = perfil_listo
+    cliente = repo.get_default_client(conn)
+    assert cliente is not None
+    conn.execute(
+        "UPDATE clients SET cuenta_recaudadora = 'Recaudadora' WHERE id = ?",
+        (cliente["id"],),
+    )
+    conn.commit()
+
+    seed = assemble_seed(conn, environment="homo")
+
+    assert seed["default_client"]["cuenta_recaudadora"] == "Recaudadora"
+    envelope = build_envelope(
+        seed, build_manifest(seed, device_id=ensure_device_id(paths))
+    )
+    assert_seed_has_no_secrets(envelope)
+
+
+def test_seed_anterior_sin_cuenta_recaudadora_sigue_siendo_valido(perfil_listo):
+    paths, conn = perfil_listo
+    seed = assemble_seed(conn, environment="homo")
+    del seed["default_client"]["cuenta_recaudadora"]
+    envelope = build_envelope(
+        seed, build_manifest(seed, device_id=ensure_device_id(paths))
+    )
+    assert_seed_has_no_secrets(envelope)  # no debe fallar
+
+
+def test_restore_aplica_la_cuenta_recaudadora(perfil_listo, tmp_path):
+    from facturador.seed_import import apply_seed
+
+    _paths, conn = perfil_listo
+    cliente = repo.get_default_client(conn)
+    assert cliente is not None
+    conn.execute(
+        "UPDATE clients SET cuenta_recaudadora = 'Recaudadora' WHERE id = ?",
+        (cliente["id"],),
+    )
+    conn.commit()
+    seed = assemble_seed(conn, environment="homo")
+
+    destino = connect(tmp_path / "restaurado.db")
+    try:
+        seal_fiscal_cuit(destino, TEST_CUIT)
+        apply_seed(destino, seed)
+        destino.commit()
+        restaurado = repo.get_default_client(destino)
+        assert restaurado is not None
+        assert restaurado["cuenta_recaudadora"] == "Recaudadora"
+
+        # Un seed anterior (sin la clave) deja el campo vacío.
+        del seed["default_client"]["cuenta_recaudadora"]
+        apply_seed(destino, seed)
+        destino.commit()
+        restaurado = repo.get_default_client(destino)
+        assert restaurado is not None
+        assert restaurado["cuenta_recaudadora"] is None
+    finally:
+        destino.close()

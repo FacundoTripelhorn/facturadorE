@@ -3,7 +3,12 @@
    comprobante no entra en una página), el mensaje se muestra en un panel
    arriba de la página en lugar de guardar la respuesta de error como
    archivo. Sin JavaScript el link sigue descargando directo. Incluir una
-   vez por página. #}
+   vez por página.
+
+   Un <form data-descarga-pdf> (GET o POST, también multipart) sigue el
+   mismo camino: se envía primero por fetch para verificar y, si sale bien,
+   se envía de verdad con form.submit() para que la descarga sea la nativa
+   del navegador o de la ventana de la app. #}
 <script>
 (function () {
   if (window.__descargaPdfLista) { return; }
@@ -32,9 +37,10 @@
     var cuerpo = document.createElement("div");
     var titulo = document.createElement("strong");
     var comprobante = link.getAttribute("data-comprobante");
-    titulo.textContent = comprobante
+    // data-titulo-error reemplaza el título genérico (p. ej. al unir PDFs).
+    titulo.textContent = link.getAttribute("data-titulo-error") || (comprobante
       ? "No se pudo descargar el PDF de " + comprobante + "."
-      : "No se pudo descargar el PDF.";
+      : "No se pudo descargar el PDF.");
     cuerpo.appendChild(titulo);
     cuerpo.appendChild(document.createTextNode(" " + mensaje));
 
@@ -51,6 +57,37 @@
     main.insertBefore(aviso, main.firstChild);
     aviso.scrollIntoView({ block: "nearest" });
   }
+
+  function pedidoDeForm(form) {
+    var datos = new FormData(form);
+    if ((form.getAttribute("method") || "get").toLowerCase() === "post") {
+      return fetch(form.action, { method: "POST", body: datos, cache: "no-store" });
+    }
+    var url = new URL(form.action, window.location.href);
+    url.search = new URLSearchParams(datos).toString();
+    return fetch(url.toString(), { cache: "no-store" });
+  }
+
+  document.addEventListener("submit", function (ev) {
+    var form = ev.target.closest("form[data-descarga-pdf]");
+    if (!form) { return; }
+    ev.preventDefault();
+    if (form.getAttribute("aria-busy") === "true") { return; }
+    form.setAttribute("aria-busy", "true");
+    cerrarAviso();
+
+    pedidoDeForm(form)
+      .then(function (r) { return r.ok ? null : mensajeDeError(r); })
+      .then(function (mensaje) {
+        if (mensaje !== null) { mostrarAviso(form, mensaje); return; }
+        // form.submit() no dispara "submit": no vuelve a pasar por acá.
+        form.submit();
+      })
+      .catch(function () {
+        mostrarAviso(form, "No se pudo contactar a la app.");
+      })
+      .finally(function () { form.removeAttribute("aria-busy"); });
+  });
 
   document.addEventListener("click", function (ev) {
     var link = ev.target.closest("a[data-descarga-pdf]");

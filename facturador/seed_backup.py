@@ -213,6 +213,7 @@ def _default_client_payload(conn: sqlite3.Connection) -> dict[str, Any] | None:
         "idioma_default": int(row["idioma_default"]),
         "forma_pago_default": row["forma_pago_default"] or "",
         "descripcion_default": row["descripcion_default"] or "",
+        "cuenta_recaudadora": row["cuenta_recaudadora"] or "",
     }
 
 
@@ -348,6 +349,8 @@ _CLIENT_KEYS = frozenset(
         "descripcion_default",
     }
 )
+# Claves que un seed anterior puede no traer (se agregaron después).
+_CLIENT_OPTIONAL_KEYS = frozenset({"cuenta_recaudadora"})
 _UI_KEYS = frozenset(
     {"backup_s3_bucket", "backup_s3_prefix", "pdf_render_version"}
 )
@@ -367,10 +370,14 @@ _SECRET_MARKERS = (
 
 
 def _require_exact_keys(
-    obj: Mapping[str, Any], allowed: frozenset[str], *, where: str
+    obj: Mapping[str, Any],
+    allowed: frozenset[str],
+    *,
+    where: str,
+    optional: frozenset[str] = frozenset(),
 ) -> None:
     keys = frozenset(obj)
-    extra = keys - allowed
+    extra = keys - allowed - optional
     if extra:
         raise SeedBackupError(
             f"El seed tiene claves no permitidas en {where}: "
@@ -430,7 +437,12 @@ def assert_seed_has_no_secrets(envelope: Mapping[str, Any]) -> None:
     if client is not None:
         if not isinstance(client, Mapping):
             raise SeedBackupError("seed.default_client inválido.")
-        _require_exact_keys(client, _CLIENT_KEYS, where="seed.default_client")
+        _require_exact_keys(
+            client,
+            _CLIENT_KEYS,
+            where="seed.default_client",
+            optional=_CLIENT_OPTIONAL_KEYS,
+        )
 
     ui = seed["ui"]
     if not isinstance(ui, Mapping):

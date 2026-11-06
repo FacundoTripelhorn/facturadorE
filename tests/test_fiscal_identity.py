@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from facturador.fiscal_identity import (
     resolve_profile_fiscal_cuit,
     seal_fiscal_cuit,
 )
-from facturador.migrations import latest_version
+from facturador.migrations import MIGRATIONS, migrate
 from facturador.profile import EnvironmentProfile
 from facturador.schemas import EmisorCreateIn, InvoiceCreate
 from facturador.service import ConflictError, InvoiceService
@@ -295,9 +296,10 @@ def test_baseline_incluye_cuit_emisor(tmp_path: Path):
 
 
 def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
-    """Snapshot en el baseline — sin migración de upgrade (no hay DBs)."""
-    conn = db.connect(tmp_path / "fresh.db")
+    """Snapshot en el baseline (v1), no en una migración posterior."""
+    conn = sqlite3.connect(tmp_path / "fresh.db")
     try:
+        migrate(conn, migrations=MIGRATIONS[:1])
         cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
         for name in (
             "emisor_razon_social",
@@ -307,8 +309,6 @@ def test_baseline_incluye_snapshot_de_emisor(tmp_path: Path):
             "emisor_inicio_actividades",
         ):
             assert name in cols
-        # Guardrail de review: sigue siendo una sola migración (baseline).
-        assert latest_version() == 1
     finally:
         conn.close()
 

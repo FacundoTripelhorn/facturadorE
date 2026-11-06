@@ -30,8 +30,9 @@ a = Analysis(
     pathex=[str(HERE.parent.parent)],
     datas=datas,
     hiddenimports=hiddenimports,
-    # Solo tests/dev: no viajan en el bundle.
-    excludes=["pytest", "mypy", "ruff", "pypdf"],
+    # Solo tests/dev: no viajan en el bundle. pypdf sí: une los PDFs de la
+    # orden de pago (smoke_ci.py verifica que esté).
+    excludes=["pytest", "mypy", "ruff"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

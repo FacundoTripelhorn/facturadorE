@@ -17,8 +17,17 @@ CLIENT_FIELDS = (
     "idioma_default",
     "forma_pago_default",
     "descripcion_default",
+    "cuenta_recaudadora",
     "is_default",
 )
+# Campos que el llamador puede omitir (quedan NULL).
+_OPTIONAL_FIELDS = frozenset({"cuenta_recaudadora"})
+
+
+def _values(data: dict) -> tuple:
+    return tuple(
+        data.get(f) if f in _OPTIONAL_FIELDS else data[f] for f in CLIENT_FIELDS
+    )
 
 
 def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
@@ -31,7 +40,7 @@ def create_client(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:
             f"INSERT INTO clients (id, {', '.join(CLIENT_FIELDS)},"
             " created_at, updated_at)"
             f" VALUES (?{', ?' * len(CLIENT_FIELDS)}, ?, ?)",
-            (client_id, *(data[f] for f in CLIENT_FIELDS), ts, ts),
+            (client_id, *_values(data), ts, ts),
         )
     row = get_client(conn, client_id)
     if row is None:  # recién insertado: no debe pasar
@@ -50,7 +59,7 @@ def update_client(
         conn.execute(
             f"UPDATE clients SET {', '.join(f'{f} = ?' for f in CLIENT_FIELDS)},"
             " updated_at = ? WHERE id = ?",
-            (*(data[f] for f in CLIENT_FIELDS), now(), client_id),
+            (*_values(data), now(), client_id),
         )
     return get_client(conn, client_id)
 

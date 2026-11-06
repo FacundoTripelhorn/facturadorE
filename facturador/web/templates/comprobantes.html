@@ -25,9 +25,54 @@
     </a>
     {% endfor %}
   </nav>
+  {% if seleccion_orden and facturas %}
+  {# Orden de pago del banco: se eligen facturas autorizadas de un solo
+     cliente (mismo client_id; si alguna es reconstruida desde ARCA y no
+     tiene client_id, además el mismo receptor en el snapshot). Misma regla que
+     facturador/orden_pago.py::mismo_cliente; el backend la repite. #}
+  <form method="get" action="/orden-de-pago" id="form-orden">
+    <div class="barra-orden">
+      <button type="submit" id="armar-orden" disabled>
+        Armar orden de pago (<span id="conteo-orden" class="num">0</span>)
+      </button>
+      <span class="nota" id="aviso-orden" role="status"></span>
+    </div>
+    <div class="tabla-scroll">
+      {% include "_listado.html" %}
+    </div>
+  </form>
+  <script>
+  (function () {
+    var form = document.getElementById("form-orden");
+    var boton = document.getElementById("armar-orden");
+    var conteo = document.getElementById("conteo-orden");
+    var aviso = document.getElementById("aviso-orden");
+
+    function actualizar() {
+      var elegidas = form.querySelectorAll("input[name=ids]:checked");
+      var ids = {}, receptores = {}, sinId = false;
+      elegidas.forEach(function (c) {
+        var id = c.getAttribute("data-cliente");
+        if (id) { ids[id] = true; } else { sinId = true; }
+        receptores[c.getAttribute("data-receptor")] = true;
+      });
+      var mismo = Object.keys(ids).length <= 1 &&
+        (!sinId || Object.keys(receptores).length <= 1);
+      var mezcla = !mismo;
+      conteo.textContent = elegidas.length;
+      boton.disabled = elegidas.length === 0 || mezcla;
+      aviso.textContent = mezcla ? "Elegí facturas de un solo cliente" : "";
+    }
+
+    form.addEventListener("change", actualizar);
+    actualizar();
+  })();
+  </script>
+  {% else %}
   <div class="tabla-scroll">
     {% include "_listado.html" %}
   </div>
+  {% endif %}
 </section>
 {% include "_descarga_pdf.html" %}
 

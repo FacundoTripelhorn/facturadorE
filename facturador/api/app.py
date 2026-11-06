@@ -34,6 +34,7 @@ from .localhost_policy import (
     resolve_policy_ports,
 )
 from .setup_guard import SetupGuardMiddleware
+from .upload_limit import UploadLimitMiddleware
 
 _ERROR_STATUS = {
     NotFoundError: 404,
@@ -122,7 +123,9 @@ def create_app(
 
     # Setup guard + CSRF + Host/Origin.
     # add_middleware apila por fuera: el último agregado es el más externo.
-    # Orden de request: LocalhostPolicy → CsrfCookie → SetupGuard → routers.
+    # Orden de request: LocalhostPolicy → CsrfCookie → SetupGuard →
+    # UploadLimit → routers.
+    app.add_middleware(UploadLimitMiddleware)
     app.add_middleware(
         SetupGuardMiddleware,
         get_state=make_setup_state_provider(
@@ -155,6 +158,7 @@ def create_app(
     # Frontend HTML (§2.4): mismas dependencias vía app.state.service. Los
     # errores de dominio del frontend se renderizan en partials, no acá.
     app.include_router(web.router)
+    app.include_router(web.orden_pago_router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
 
     return app

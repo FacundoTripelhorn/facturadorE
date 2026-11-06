@@ -3,10 +3,10 @@
 Cubre lo que no necesita ventana: el exe arranca el backend de
 Homologación en un app-data temporal, ``/health`` responde, un segundo
 launch reusa la sesión sin crear otro backend, el launcher deja su log
-(el exe no tiene consola), age viaja en el bundle y un puerto ocupado da el
-mensaje claro (la salida del backend llega a la pipe del supervisor). El
-chooser, la ventana, el cambio de ambiente y el cierre se prueban a mano:
-docs/windows-smoke-test.md.
+(el exe no tiene consola), age y pypdf viajan en el bundle y un puerto
+ocupado da el mensaje claro (la salida del backend llega a la pipe del
+supervisor). El chooser, la ventana, el cambio de ambiente y el cierre se
+prueban a mano: docs/windows-smoke-test.md.
 
 Uso: ``python packaging/windows/smoke_ci.py packaging/windows/dist/FacturadorE``
 """
@@ -86,6 +86,21 @@ def _puerto_ocupado(exe: Path) -> None:
     print("puerto ocupado: mensaje claro")
 
 
+def _modulos_en_el_bundle(exe: Path, modulos: tuple[str, ...]) -> None:
+    """Los módulos Python puros van comprimidos en el PYZ dentro del exe: se
+    leen con el lector de archivos de PyInstaller (grupo ``packaging``)."""
+    from PyInstaller.archive.readers import CArchiveReader
+
+    paquete = CArchiveReader(str(exe))
+    pyz = next(nombre for nombre in paquete.toc if nombre.endswith(".pyz"))
+    contenido = paquete.open_embedded_archive(pyz).toc
+    for modulo in modulos:
+        assert any(
+            nombre == modulo or nombre.startswith(f"{modulo}.") for nombre in contenido
+        ), f"falta {modulo} en el bundle"
+        print(f"{modulo}: en el bundle")
+
+
 def main(carpeta: Path) -> int:
     exe = carpeta / EXE_NAME
     assert exe.is_file(), f"no está {exe}"
@@ -99,6 +114,8 @@ def main(carpeta: Path) -> int:
             [str(ruta), "--version"], capture_output=True, text=True, check=True
         )
         print(f"{herramienta}: {version.stdout.strip()}")
+    # Une los PDFs de la orden de pago; sin él esa pantalla falla.
+    _modulos_en_el_bundle(exe, ("pypdf",))
 
     _puerto_ocupado(exe)
 

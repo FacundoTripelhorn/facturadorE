@@ -321,6 +321,10 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
             "descripcion_default": str(
                 client.get("descripcion_default") or ""
             ),
+            # Opcional: los seeds anteriores no la traen.
+            "cuenta_recaudadora": (
+                str(client.get("cuenta_recaudadora") or "").strip() or None
+            ),
             "is_default": 1,
         }
         if existing is None:
@@ -335,6 +339,7 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
                 "idioma_default",
                 "forma_pago_default",
                 "descripcion_default",
+                "cuenta_recaudadora",
                 "is_default",
             )
             conn.execute(
@@ -349,7 +354,8 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
                 " razon_social = ?, domicilio = ?, pais_dst = ?, cuit_pais = ?,"
                 " id_impositivo = ?, moneda_default = ?, incoterms_default = ?,"
                 " idioma_default = ?, forma_pago_default = ?,"
-                " descripcion_default = ?, is_default = 1,"
+                " descripcion_default = ?, cuenta_recaudadora = ?,"
+                " is_default = 1,"
                 " updated_at = ?"
                 " WHERE id = ?",
                 (
@@ -363,6 +369,7 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
                     payload["idioma_default"],
                     payload["forma_pago_default"],
                     payload["descripcion_default"],
+                    payload["cuenta_recaudadora"],
                     ts,
                     client_id,
                 ),
