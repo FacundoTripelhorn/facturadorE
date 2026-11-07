@@ -68,9 +68,7 @@ def ensure_production_acknowledged(
     if environment is not ArcaEnvironment.PROD:
         return True
 
-    profile = EnvironmentProfile.resolve(
-        environment, app_data_root=app_data_root
-    )
+    profile = EnvironmentProfile.resolve(environment, app_data_root=app_data_root)
     if is_production_acknowledged(profile.paths):
         return True
 

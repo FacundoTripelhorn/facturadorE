@@ -143,16 +143,16 @@ class InvoiceCreate(BaseModel):
     Todo lo demás sale del cliente (default si no se indica client_id)."""
 
     imp_total: Decimal = Field(allow_inf_nan=True)
-    punto_venta: int | None = None   # obligatorio si el emisor tiene varios PV
+    punto_venta: int | None = None  # obligatorio si el emisor tiene varios PV
     client_id: str | None = None
-    descripcion: str | None = None      # default: descripcion_default del cliente
-    fecha_cbte: str | None = None       # default: hoy (día del cobro)
-    fecha_pago: str | None = None       # default: fecha_cbte, siempre editable
-    moneda_id: str | None = None        # default: moneda_default del cliente
+    descripcion: str | None = None  # default: descripcion_default del cliente
+    fecha_cbte: str | None = None  # default: hoy (día del cobro)
+    fecha_pago: str | None = None  # default: fecha_cbte, siempre editable
+    moneda_id: str | None = None  # default: moneda_default del cliente
     # default: cotización ARCA del día
     moneda_ctz: Decimal | None = Field(default=None, allow_inf_nan=True)
     obs: str = ""
-    items: list[ItemIn] | None = None   # default: 1 ítem qty=1, precio=imp_total
+    items: list[ItemIn] | None = None  # default: 1 ítem qty=1, precio=imp_total
 
     @field_validator("fecha_cbte", "fecha_pago")
     @classmethod

@@ -125,9 +125,7 @@ def store_certificate_pair(
         environment=profile.environment,
         now=now,
     )
-    assert_certificate_matches_profile(
-        profile, metadata.cuit, sealed_cuit=sealed_cuit
-    )
+    assert_certificate_matches_profile(profile, metadata.cuit, sealed_cuit=sealed_cuit)
 
     with _STORE_LOCK:
         # Releer bajo lock: otro hilo pudo instalar un CUIT distinto entre
@@ -227,9 +225,7 @@ def read_live_certificate_pair(paths: ProfilePaths) -> tuple[bytes, bytes]:
     """
     with _STORE_LOCK:
         if not paths.cert.is_file() or not paths.key.is_file():
-            raise CertificateError(
-                "Falta el par certificado/clave en el perfil."
-            )
+            raise CertificateError("Falta el par certificado/clave en el perfil.")
         try:
             return paths.cert.read_bytes(), paths.key.read_bytes()
         except OSError as exc:
@@ -253,9 +249,7 @@ def load_certificate_metadata(
     try:
         cert_bytes = cert_path.read_bytes()
     except OSError as exc:
-        raise CertificateError(
-            "No se pudo leer el certificado del perfil."
-        ) from exc
+        raise CertificateError("No se pudo leer el certificado del perfil.") from exc
     cert = _load_certificate(cert_bytes)
     cuit = _cuit_from_subject(cert)
     return CertificateMetadata(
@@ -279,9 +273,7 @@ def _load_certificate(cert_pem: bytes) -> x509.Certificate:
     try:
         return x509.load_pem_x509_certificate(cert_pem)
     except ValueError as exc:
-        raise CertificateError(
-            "El certificado no es un PEM X.509 válido."
-        ) from exc
+        raise CertificateError("El certificado no es un PEM X.509 válido.") from exc
 
 
 def _load_private_key(key_pem: bytes):
@@ -289,13 +281,9 @@ def _load_private_key(key_pem: bytes):
         return load_pem_private_key(key_pem, password=None)
     except TypeError as exc:
         # cryptography pide password cuando la key está cifrada.
-        raise CertificateError(
-            "La clave privada no debe tener passphrase."
-        ) from exc
+        raise CertificateError("La clave privada no debe tener passphrase.") from exc
     except ValueError as exc:
-        raise CertificateError(
-            "La clave privada no es un PEM válido."
-        ) from exc
+        raise CertificateError("La clave privada no es un PEM válido.") from exc
 
 
 def _assert_supported_key_type(key) -> None:
@@ -316,9 +304,7 @@ def _assert_key_matches_certificate(cert: x509.Certificate, key) -> None:
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     if cert_pub != key_pub:
-        raise CertificateError(
-            "La clave privada no corresponde al certificado."
-        )
+        raise CertificateError("La clave privada no corresponde al certificado.")
 
 
 def _cuit_from_subject(cert: x509.Certificate) -> str:
@@ -351,8 +337,7 @@ def _assert_validity_window(
         )
     if instant > not_after:
         raise CertificateError(
-            "El certificado está vencido "
-            f"(vencía el {not_after.date().isoformat()})."
+            f"El certificado está vencido (vencía el {not_after.date().isoformat()})."
         )
 
 

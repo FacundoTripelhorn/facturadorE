@@ -96,9 +96,7 @@ def _utcnow_iso() -> str:
 
 
 def _read_setting(conn: sqlite3.Connection, key: str) -> str | None:
-    row = conn.execute(
-        "SELECT value FROM settings WHERE key = ?", (key,)
-    ).fetchone()
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     if row is None:
         return None
     value = str(row["value"] if isinstance(row, sqlite3.Row) else row[0]).strip()
@@ -138,9 +136,7 @@ def load_seed_backup_state(conn: sqlite3.Connection) -> SeedBackupState:
     )
 
 
-def mark_seed_backup_pending(
-    conn: sqlite3.Connection, reason: str
-) -> SeedBackupState:
+def mark_seed_backup_pending(conn: sqlite3.Connection, reason: str) -> SeedBackupState:
     """Record that config changed; does not upload. Never raises to callers."""
     clean_reason = (reason or "config_changed").strip()[:200] or "config_changed"
     _write_settings(
@@ -167,9 +163,7 @@ def _mark_success(conn: sqlite3.Connection, *, when: str) -> SeedBackupState:
     return load_seed_backup_state(conn)
 
 
-def _mark_failed(
-    conn: sqlite3.Connection, *, when: str, error: str
-) -> SeedBackupState:
+def _mark_failed(conn: sqlite3.Connection, *, when: str, error: str) -> SeedBackupState:
     # Keep pending_reason; surface a short, non-secret error.
     clean = " ".join(error.split())[:500]
     _write_settings(
@@ -196,9 +190,7 @@ def run_seed_backup(
     profile has no bucket (local-only success). Raises ``SeedBackupError`` /
     ``S3SeedError`` on failure — callers must not propagate to config flows.
     """
-    archive, envelope = create_encrypted_seed(
-        conn, paths, environment=environment
-    )
+    archive, envelope = create_encrypted_seed(conn, paths, environment=environment)
     seed = envelope["seed"]
     settings = load_settings(conn)
     bucket = settings.backup_s3_bucket.strip()
@@ -207,9 +199,7 @@ def run_seed_backup(
         return str(archive)
 
     cuit = str(seed.get("fiscal_cuit") or get_sealed_fiscal_cuit(conn) or "")
-    prefix = (
-        (settings.backup_s3_prefix or "").strip() or BACKUP_PREFIX_DEFAULT
-    )
+    prefix = (settings.backup_s3_prefix or "").strip() or BACKUP_PREFIX_DEFAULT
     location = SeedLocation.from_config(
         bucket=bucket,
         prefix=prefix,
@@ -273,9 +263,7 @@ class SeedBackupCoordinator:
         try:
             state = mark_seed_backup_pending(self._conn, reason)
         except Exception:
-            logger.exception(
-                "No se pudo persistir pending de seed backup (%s)", reason
-            )
+            logger.exception("No se pudo persistir pending de seed backup (%s)", reason)
             return load_seed_backup_state(self._conn)
         # Sin recipients no hay cifrado posible: dejar pending y esperar
         # alta de recipients / retry en launch / backup_now (evita spam).
@@ -361,18 +349,14 @@ class SeedBackupCoordinator:
                 try:
                     return _mark_failed(worker_conn, when=when, error=str(exc))
                 except Exception:
-                    logger.exception(
-                        "No se pudo persistir fallo de seed backup"
-                    )
+                    logger.exception("No se pudo persistir fallo de seed backup")
                     return load_seed_backup_state(worker_conn)
             except Exception as exc:
                 logger.exception("Seed backup falló inesperadamente")
                 try:
                     return _mark_failed(worker_conn, when=when, error=str(exc))
                 except Exception:
-                    logger.exception(
-                        "No se pudo persistir fallo de seed backup"
-                    )
+                    logger.exception("No se pudo persistir fallo de seed backup")
                     return load_seed_backup_state(worker_conn)
             self._run_count += 1
             try:

@@ -96,11 +96,11 @@ def build_tra(service: str = SERVICE, now: dt.datetime | None = None) -> bytes:
     header = ET.SubElement(root, "header")
     ET.SubElement(header, "uniqueId").text = str(int(now.timestamp()))
     ET.SubElement(header, "generationTime").text = (
-        (now - TRA_GENERATION_SLACK).isoformat(timespec="seconds")
-    )
+        now - TRA_GENERATION_SLACK
+    ).isoformat(timespec="seconds")
     ET.SubElement(header, "expirationTime").text = (
-        (now + TRA_EXPIRATION_SLACK).isoformat(timespec="seconds")
-    )
+        now + TRA_EXPIRATION_SLACK
+    ).isoformat(timespec="seconds")
     ET.SubElement(root, "service").text = service
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 

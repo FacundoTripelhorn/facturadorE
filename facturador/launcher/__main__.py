@@ -22,6 +22,7 @@ sobre la validez fiscal; cancelar vuelve al chooser sin arrancar.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -39,6 +40,8 @@ from .production_ack import ensure_production_acknowledged
 from .progress import StartupCancelled, StartupUI, StartupWindow, close_window
 from .supervisor import LauncherError, ProcessSupervisor
 from .window import UiEndReason
+
+_log = logging.getLogger(__name__)
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
@@ -77,13 +80,9 @@ def _parse_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            f"puerto inválido: {value!r}"
-        ) from exc
+        raise argparse.ArgumentTypeError(f"puerto inválido: {value!r}") from exc
     if port < 1 or port > 65535:
-        raise argparse.ArgumentTypeError(
-            f"puerto fuera de rango (1-65535): {port}"
-        )
+        raise argparse.ArgumentTypeError(f"puerto fuera de rango (1-65535): {port}")
     return port
 
 
@@ -221,9 +220,7 @@ def _main(
     # Sesión inicial: --env fija el primer perfil; sin flag, el chooser.
     if args.env is not None:
         try:
-            pending: ArcaEnvironment | None = resolve_launch_environment(
-                args.env
-            )
+            pending: ArcaEnvironment | None = resolve_launch_environment(args.env)
         except ProfileError as exc:
             fail(str(exc))
             return 2
@@ -238,10 +235,7 @@ def _main(
             try:
                 selected = chooser()
             except ChooserUnavailable as exc:
-                fail(
-                    "No se pudo mostrar el selector de ambiente. "
-                    f"{exc}"
-                )
+                fail(f"No se pudo mostrar el selector de ambiente. {exc}")
                 return 2
             if selected is None:
                 return 0
@@ -332,8 +326,7 @@ def _run_session(
         )
     except ChooserUnavailable as exc:
         return failed(
-            "No se pudo mostrar la confirmación de Producción. "
-            f"{exc}",
+            f"No se pudo mostrar la confirmación de Producción. {exc}",
             2,
         )
     except ProfileError as exc:
@@ -341,8 +334,7 @@ def _run_session(
         return failed(str(exc), 2)
     except OSError as exc:
         return failed(
-            "No se pudo guardar la confirmación de Producción: "
-            f"{exc}",
+            f"No se pudo guardar la confirmación de Producción: {exc}",
             2,
         )
     if not acknowledged:
@@ -398,6 +390,8 @@ def _run_session(
     try:
         supervisor.open_browser = want_ui
     except Exception:
+        # Solo los supervisores falsos de tests pueden rechazar el atributo;
+        # el real siempre lo acepta.
         pass
 
     plan = result.plan
@@ -462,11 +456,7 @@ def _run_session(
                 supervisor.process.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
                 continue
-        code = (
-            supervisor.process.returncode
-            if supervisor.process is not None
-            else 1
-        )
+        code = supervisor.process.returncode if supervisor.process is not None else 1
         # Caída post-arranque: desde el chooser se puede elegir de nuevo.
         return failed(
             f"El backend de {plan.profile.display_name} se detuvo solo "
@@ -496,11 +486,7 @@ def _after_native_ui_session(
     prompt = failure_prompt or prompt_failure
 
     def died() -> int | None | Retry:
-        code = (
-            supervisor.process.returncode
-            if supervisor.process is not None
-            else 1
-        )
+        code = supervisor.process.returncode if supervisor.process is not None else 1
         return _session_failed(
             f"El backend de {supervisor.plan.profile.display_name} "
             f"se detuvo solo (código {code}).",
@@ -600,7 +586,8 @@ def _reopen_ui(supervisor: ProcessSupervisor) -> UiEndReason | None:
         try:
             opener(f"{base_url}/")
         except Exception:
-            pass
+            # El backend sigue en marcha: no abrir la UI no tumba el launcher.
+            _log.debug("no se pudo abrir el navegador", exc_info=True)
         return UiEndReason.BROWSER_FALLBACK
     # Sin open_ui ni opener: no hay GUI real (fakes de smoke de main).
     return UiEndReason.BROWSER_FALLBACK
@@ -687,14 +674,17 @@ def _decide_change_environment(
                 try:
                     open_ui()
                 except Exception:
-                    pass
+                    # El backend sigue en marcha: no reabrir la UI no tumba
+                    # el launcher.
+                    _log.debug("no se pudo reabrir la UI", exc_info=True)
             else:
                 opener = getattr(supervisor, "browser_opener", None)
                 if callable(opener):
                     try:
                         opener(f"{supervisor.base_url}/")
                     except Exception:
-                        pass
+                        # Igual que arriba: best-effort, el backend sigue.
+                        _log.debug("no se pudo reabrir el navegador", exc_info=True)
         return None
 
     # Ack de Producción antes de apagar el backend actual.
@@ -712,15 +702,13 @@ def _decide_change_environment(
         return None
     except (ProfileError, OSError) as exc:
         print(
-            f"No se pudo confirmar Producción ({exc}). "
-            "Se mantiene el ambiente actual.",
+            f"No se pudo confirmar Producción ({exc}). Se mantiene el ambiente actual.",
             flush=True,
         )
         return None
     if not acknowledged:
         print(
-            "Cambio a Producción cancelado. "
-            "Se mantiene el ambiente actual.",
+            "Cambio a Producción cancelado. Se mantiene el ambiente actual.",
             flush=True,
         )
         return None
@@ -732,9 +720,7 @@ def _decide_change_environment(
         "antes de abrir el otro ambiente…",
         flush=True,
     )
-    cancelled = startup_ui.stop_for_switch(
-        current, selected, lambda: supervisor.stop()
-    )
+    cancelled = startup_ui.stop_for_switch(current, selected, lambda: supervisor.stop())
     if cancelled:
         print(
             f"Cambio a {_display_name(selected)} cancelado; "
@@ -786,9 +772,7 @@ def _session_failed(
     chooser) cuando se llegó desde el chooser, o ``code``.
     """
     report_failure(message)
-    action = failure_prompt(
-        message, environment=environment, can_choose=can_choose
-    )
+    action = failure_prompt(message, environment=environment, can_choose=can_choose)
     if action is FailureAction.RETRY:
         return Retry(environment)
     return None if can_choose else code

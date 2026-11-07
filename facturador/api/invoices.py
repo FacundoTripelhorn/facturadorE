@@ -99,9 +99,7 @@ def invoice_pdf(
     # incompleto, versión desconocida y PdfLayoutError (no entra en una
     # página A4).
     try:
-        pdf = get_or_render_invoice_pdf(
-            inv, items, service.config.paths.pdf_dir
-        )
+        pdf = get_or_render_invoice_pdf(inv, items, service.config.paths.pdf_dir)
     except ValueError as exc:
         raise ConflictError(str(exc)) from exc
     filename = invoice_pdf_filename(inv)

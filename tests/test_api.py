@@ -161,12 +161,12 @@ def test_authorize_asigna_numeracion_de_arca_y_guarda_cae(api, arca):
     assert r.status_code == 200, r.text
     factura = r.json()
     assert factura["status"] == "authorized"
-    assert factura["arca_id"] == 1          # FEXGetLast_ID + 1
-    assert factura["cbte_nro"] == 1         # FEXGetLast_CMP + 1
+    assert factura["arca_id"] == 1  # FEXGetLast_ID + 1
+    assert factura["cbte_nro"] == 1  # FEXGetLast_CMP + 1
     assert factura["cae"] == "76100000000001"
     assert factura["cae_fch_vto"] == "20260713"
     assert arca.calls["FEXAuthorize"] == 1
-    assert arca.calls["FEXGetCMP"] == 1     # verificación post-emisión
+    assert arca.calls["FEXGetCMP"] == 1  # verificación post-emisión
 
 
 def test_authorize_es_idempotente(api, arca):
@@ -230,8 +230,8 @@ def test_timeout_sin_emision_reintenta_con_mismo_id(api, arca):
     arca.authorize_mode = "ok"
     retry = api.post(f"/invoices/{draft['id']}/authorize").json()
     assert retry["status"] == "authorized"
-    assert retry["arca_id"] == arca_id_original      # mismo Id idempotente
-    assert retry["cbte_nro"] == cbte_nro_original    # mismos datos
+    assert retry["arca_id"] == arca_id_original  # mismo Id idempotente
+    assert retry["cbte_nro"] == cbte_nro_original  # mismos datos
     assert arca.issued[(19, 1, cbte_nro_original)]["arca_id"] == arca_id_original
 
 
@@ -599,9 +599,7 @@ def test_el_ambiente_de_la_factura_sale_del_perfil_no_del_request(api, arca):
     """El environment es auditoría inmutable sellada por el perfil: no es
     input del request, y mandarlo igual se ignora."""
     _crear_cliente(api)
-    r = api.post(
-        "/invoices", json={"imp_total": "1500.00", "environment": "prod"}
-    )
+    r = api.post("/invoices", json={"imp_total": "1500.00", "environment": "prod"})
     assert r.status_code == 201, r.text
     fila = repo.get_invoice(api.conn, r.json()["id"])
     assert fila["environment"] == "homo"  # el del perfil del api fixture
@@ -661,7 +659,8 @@ def test_authorize_con_respuesta_html_queda_a_reconciliar(api, arca, monkeypatch
     _crear_cliente(api)
     draft = _crear_draft(api)
     monkeypatch.setattr(
-        arca, "_fexauthorize",
+        arca,
+        "_fexauthorize",
         lambda body: httpx.Response(
             502, text="<!DOCTYPE html><html>Bad Gateway<br></html>"
         ),

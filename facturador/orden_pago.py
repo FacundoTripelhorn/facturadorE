@@ -99,9 +99,7 @@ def normalizar_cuenta(nombre: str) -> str:
     ``"Cobros Sur S.A."`` → ``"cobrossursa"``, ``"Recaudadora"`` → ``"recaudadora"``.
     """
     sin_acentos = (
-        unicodedata.normalize("NFKD", nombre)
-        .encode("ascii", "ignore")
-        .decode("ascii")
+        unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode("ascii")
     )
     return re.sub(r"[^a-z0-9]", "", sin_acentos.lower())
 

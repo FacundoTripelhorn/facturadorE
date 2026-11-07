@@ -162,9 +162,7 @@ def migrate(
     Toda la corrida (crear ``schema_migrations`` + DDL + registros) ocurre
     en una sola transacción. Ante error: rollback y ``MigrationError``.
     """
-    ordered = _validate_migrations(
-        migrations if migrations is not None else MIGRATIONS
-    )
+    ordered = _validate_migrations(migrations if migrations is not None else MIGRATIONS)
     start_version = current_version(conn)
     pending = [m for m in ordered if m.version > start_version]
     if not pending:

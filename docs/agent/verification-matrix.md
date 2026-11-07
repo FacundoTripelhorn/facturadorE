@@ -17,15 +17,16 @@ need full confidence (or before opening a PR):
 | Step | Command | When required |
 |------|---------|---------------|
 | 1 | `uv run ruff check .` or `./scripts/agent/lint.sh` | Any Python change |
-| 2 | `uv run mypy` or `./scripts/agent/typecheck.sh` | Any Python change |
-| 3 | `uv run pytest` or `./scripts/agent/test.sh` | Any behavior change |
+| 2 | `uv run ruff format --check .` (also run by `./scripts/agent/lint.sh`; fix with `uv run ruff format .`) | Any Python change |
+| 3 | `uv run mypy` or `./scripts/agent/typecheck.sh` | Any Python change |
+| 4 | `uv run pytest` or `./scripts/agent/test.sh` | Any behavior change |
 
 **Helper scripts** under `scripts/agent/` wrap the same `uv` commands so agents
 do not need to guess tooling. Run `./scripts/agent/doctor.sh` for a full
-environment check: Python and `uv` versions, `uv sync`, then lint, typecheck,
-and tests in order.
+environment check: Python and `uv` versions, `uv sync`, then lint (ruff check
+and format check), typecheck, and tests in order.
 
-CI runs `uv sync --frozen` then the same three steps in
+CI runs `uv sync --frozen` then the same four steps in
 `.github/workflows/ci.yml` (`checks` job). A separate `docker` job runs
 `docker build -t facturador:ci .` — add that locally only when `Dockerfile`,
 `docker-compose.yml`, or `docker/entrypoint.sh` change.
@@ -196,6 +197,7 @@ When opening a PR, a short verification block helps reviewers:
 ## Verification
 
 - [x] `uv run ruff check .`
+- [x] `uv run ruff format --check .`
 - [x] `uv run mypy`
 - [x] `uv run pytest` (136 passed)
 - [ ] `docker build` — not applicable

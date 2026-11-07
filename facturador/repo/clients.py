@@ -69,9 +69,7 @@ def get_client(conn: sqlite3.Connection, client_id: str) -> sqlite3.Row | None:
 
 
 def get_default_client(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM clients WHERE is_default = 1 LIMIT 1"
-    ).fetchone()
+    return conn.execute("SELECT * FROM clients WHERE is_default = 1 LIMIT 1").fetchone()
 
 
 def list_clients(conn: sqlite3.Connection) -> list[sqlite3.Row]:

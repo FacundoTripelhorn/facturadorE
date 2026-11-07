@@ -98,10 +98,7 @@ def test_origins_inesperados_rechazados_en_post(origin):
 
 def test_get_no_valida_origin():
     assert (
-        check_origin_headers(
-            "GET", "http://evil.example", None, DEFAULT_PORT
-        )
-        is None
+        check_origin_headers("GET", "http://evil.example", None, DEFAULT_PORT) is None
     )
 
 
@@ -116,9 +113,7 @@ def test_post_con_referer_loopback_pasa():
 
 
 def test_post_con_referer_externo_rechazado():
-    err = check_origin_headers(
-        "POST", None, "http://evil.example/attack", DEFAULT_PORT
-    )
+    err = check_origin_headers("POST", None, "http://evil.example/attack", DEFAULT_PORT)
     assert err == "Referer no permitido"
 
 
@@ -161,15 +156,11 @@ def test_docker_public_port_en_allowlist_junto_al_listen(monkeypatch):
     assert ports == frozenset({DEFAULT_PORT, 8400})
     assert check_host_header("localhost:8400", ports) is None
     assert check_host_header(f"127.0.0.1:{DEFAULT_PORT}", ports) is None
-    assert check_origin_headers(
-        "POST", "http://localhost:8400", None, ports
-    ) is None
+    assert check_origin_headers("POST", "http://localhost:8400", None, ports) is None
     assert check_host_header("localhost:8411", ports) is not None
 
 
-def test_middleware_acepta_host_del_publish_docker(
-    test_profile, test_config, arca
-):
+def test_middleware_acepta_host_del_publish_docker(test_profile, test_config, arca):
     """Browser en puerto host distinto del bind interno (Docker mapping)."""
     listen = DEFAULT_PORT
     public = 8400
@@ -260,9 +251,7 @@ def test_middleware_respeta_puerto_custom(test_profile, test_config, arca):
     client = TestClient(app, base_url=loopback_base_url(port))
 
     assert client.get("/health").status_code == 200
-    bad = client.get(
-        "/health", headers={"Host": f"127.0.0.1:{DEFAULT_PORT}"}
-    )
+    bad = client.get("/health", headers={"Host": f"127.0.0.1:{DEFAULT_PORT}"})
     assert bad.status_code == 400
     good_origin = client.post(
         "/clients",

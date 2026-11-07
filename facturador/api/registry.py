@@ -24,7 +24,5 @@ def catch_up(service: ServiceDep) -> dict:
             }
             for g in report.gaps
         ],
-        "last_cmp": {
-            f"{pv}:{tipo}": n for (pv, tipo), n in report.last_cmp.items()
-        },
+        "last_cmp": {f"{pv}:{tipo}": n for (pv, tipo), n in report.last_cmp.items()},
     }

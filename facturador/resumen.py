@@ -99,9 +99,7 @@ def resumir(anio: int, comprobantes: Iterable[Comprobante]) -> Resumen:
         fila.cliente = cbte["cliente"]
         fila.total.sumar(importe)
 
-    ordenadas = sorted(
-        monedas.values(), key=lambda m: (-m.anual.cantidad, m.moneda)
-    )
+    ordenadas = sorted(monedas.values(), key=lambda m: (-m.anual.cantidad, m.moneda))
     posicion = {m.moneda: i for i, m in enumerate(ordenadas)}
     por_cliente = sorted(
         clientes.values(),

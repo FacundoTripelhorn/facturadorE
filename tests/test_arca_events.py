@@ -148,9 +148,7 @@ def test_aviso_nuevo_banner_y_contador(api, arca):
     )
 
 
-def test_marcar_leido_saca_el_banner_y_queda_en_el_desplegable(
-    api, arca, test_config
-):
+def test_marcar_leido_saca_el_banner_y_queda_en_el_desplegable(api, arca, test_config):
     arca.events = [("39", "Mantenimiento el sabado"), ("40", "Otro aviso")]
     _llamada_wsfex(api)
 
@@ -313,15 +311,17 @@ def test_archivo_viejo_o_con_entradas_raras(tmp_path):
     path = tmp_path / "arca-events.json"
     # Formato anterior (sin first_seen ni read) y basura mezclada.
     path.write_text(
-        json.dumps({
-            "events": [
-                {"code": "39", "msg": "x"},
-                "basura",
-                {"read": "si"},
-                {"code": "0", "msg": "OK"},
-            ],
-            "seen_at": "2026-01-02T03:04:05+00:00",
-        }),
+        json.dumps(
+            {
+                "events": [
+                    {"code": "39", "msg": "x"},
+                    "basura",
+                    {"read": "si"},
+                    {"code": "0", "msg": "OK"},
+                ],
+                "seen_at": "2026-01-02T03:04:05+00:00",
+            }
+        ),
         encoding="utf-8",
     )
     avisos = load_events(path).events
@@ -373,10 +373,7 @@ def test_autorizada_con_observaciones_es_amarilla(api, arca):
     html = api.get(f"/facturas/{invoice_id}").text
     assert 'class="panel aviso"' in html
     assert "autorizada con observaciones" in html
-    assert (
-        "Observaciones de ARCA:</strong> El campo Incoterms se informa vacio"
-        in html
-    )
+    assert "Observaciones de ARCA:</strong> El campo Incoterms se informa vacio" in html
     assert 'id="ver-pdf"' in html  # el PDF sigue disponible
 
 

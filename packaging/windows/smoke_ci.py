@@ -67,12 +67,16 @@ def _puerto_ocupado(exe: Path) -> None:
     ocupante.listen()
     try:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-            env = dict(
-                os.environ, FACTURADOR_APP_DATA=tmp, FACTURADOR_NO_DIALOGS="1"
-            )
+            env = dict(os.environ, FACTURADOR_APP_DATA=tmp, FACTURADOR_NO_DIALOGS="1")
             argv = [
-                str(exe), "--env", "homo", "--no-browser",
-                "--port", str(PORT_OCUPADO), "--timeout", "60",
+                str(exe),
+                "--env",
+                "homo",
+                "--no-browser",
+                "--port",
+                str(PORT_OCUPADO),
+                "--timeout",
+                "60",
             ]
             resultado = subprocess.run(argv, env=env, timeout=120)
             assert resultado.returncode != 0, resultado.returncode

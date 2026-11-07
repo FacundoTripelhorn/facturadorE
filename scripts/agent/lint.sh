@@ -5,3 +5,4 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 uv run ruff check .
+uv run ruff format --check .

@@ -21,8 +21,7 @@ _HOMO_DESCRIPTION = (
     "sin emitir comprobantes con valor fiscal."
 )
 _PROD_DESCRIPTION = (
-    "Emisión fiscal real. Los comprobantes que autorices tienen "
-    "validez fiscal."
+    "Emisión fiscal real. Los comprobantes que autorices tienen validez fiscal."
 )
 
 

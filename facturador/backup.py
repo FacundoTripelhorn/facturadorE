@@ -172,9 +172,7 @@ def encrypt_age(plaintext: bytes, out_path: Path) -> None:
             "FiloSottile.age (Windows) / brew install age (macOS)."
         )
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["age", "-p", "-o", str(out_path)], input=plaintext, check=True
-    )
+    subprocess.run(["age", "-p", "-o", str(out_path)], input=plaintext, check=True)
 
 
 def upload_s3(archive: Path, bucket: str, prefix: str) -> str:
@@ -204,9 +202,7 @@ def _environment_from_db(conn: sqlite3.Connection) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--env", help="ambiente del perfil a respaldar (homo | prod)"
-    )
+    parser.add_argument("--env", help="ambiente del perfil a respaldar (homo | prod)")
     parser.add_argument(
         "--root", help="raíz explícita del perfil (alternativa a --env)"
     )

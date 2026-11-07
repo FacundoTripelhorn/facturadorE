@@ -77,9 +77,7 @@ def certificate_pair_is_usable(profile: EnvironmentProfile) -> bool:
         return False
     try:
         cert_pem, key_pem = read_live_certificate_pair(profile.paths)
-        validate_certificate_pair(
-            cert_pem, key_pem, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, key_pem, environment=profile.environment)
     except CertificateError:
         return False
     return True
@@ -200,9 +198,7 @@ def reconcile_setup_state(
         try:
             on_became_ready()
         except Exception:
-            logger.exception(
-                "Callback on_became_ready falló; el setup quedó en ready"
-            )
+            logger.exception("Callback on_became_ready falló; el setup quedó en ready")
     return state
 
 
@@ -220,8 +216,6 @@ def make_setup_state_provider(
     """
 
     def get_state() -> SetupState:
-        return reconcile_setup_state(
-            profile, conn, on_became_ready=on_became_ready
-        )
+        return reconcile_setup_state(profile, conn, on_became_ready=on_became_ready)
 
     return get_state

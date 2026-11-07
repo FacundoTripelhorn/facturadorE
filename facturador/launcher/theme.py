@@ -132,7 +132,8 @@ def sistema_en_oscuro() -> bool:
 
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _CLAVE_TEMA) as clave:
             valor, _ = winreg.QueryValueEx(clave, _VALOR_TEMA)
-    except Exception:
+    except OSError:
+        # Clave/valor ausente o ilegible: tema claro por defecto.
         return False
     return valor == 0
 
@@ -154,6 +155,8 @@ def barra_de_titulo_oscura(root: Any) -> None:
             ctypes.sizeof(valor),
         )
     except Exception:
+        # Puramente cosmético (Windows viejo, sin DWM, ventana sin hwnd):
+        # la barra queda clara y la ventana funciona igual.
         return
 
 

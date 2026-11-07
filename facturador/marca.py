@@ -150,9 +150,7 @@ def subpaths(d: str) -> list[list[Punto]]:
         else:  # A
             rx, ry, rot, grande, barrido, x, y = args
             nuevo = (x, y)
-            actual.extend(
-                _arco(pos, rx, ry, rot, bool(grande), bool(barrido), nuevo)
-            )
+            actual.extend(_arco(pos, rx, ry, rot, bool(grande), bool(barrido), nuevo))
         pos = nuevo
     if actual:
         resultado.append(actual)
