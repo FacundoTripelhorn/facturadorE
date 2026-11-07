@@ -22,6 +22,7 @@ sobre la validez fiscal; cancelar vuelve al chooser sin arrancar.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -39,6 +40,8 @@ from .production_ack import ensure_production_acknowledged
 from .progress import StartupCancelled, StartupUI, StartupWindow, close_window
 from .supervisor import LauncherError, ProcessSupervisor
 from .window import UiEndReason
+
+_log = logging.getLogger(__name__)
 
 # Inyectable en tests: reemplaza la pantalla/menú del chooser.
 _ChooseFn = Callable[..., ArcaEnvironment | None]
@@ -387,6 +390,8 @@ def _run_session(
     try:
         supervisor.open_browser = want_ui
     except Exception:
+        # Solo los supervisores falsos de tests pueden rechazar el atributo;
+        # el real siempre lo acepta.
         pass
 
     plan = result.plan
@@ -581,7 +586,8 @@ def _reopen_ui(supervisor: ProcessSupervisor) -> UiEndReason | None:
         try:
             opener(f"{base_url}/")
         except Exception:
-            pass
+            # El backend sigue en marcha: no abrir la UI no tumba el launcher.
+            _log.debug("no se pudo abrir el navegador", exc_info=True)
         return UiEndReason.BROWSER_FALLBACK
     # Sin open_ui ni opener: no hay GUI real (fakes de smoke de main).
     return UiEndReason.BROWSER_FALLBACK
@@ -668,14 +674,17 @@ def _decide_change_environment(
                 try:
                     open_ui()
                 except Exception:
-                    pass
+                    # El backend sigue en marcha: no reabrir la UI no tumba
+                    # el launcher.
+                    _log.debug("no se pudo reabrir la UI", exc_info=True)
             else:
                 opener = getattr(supervisor, "browser_opener", None)
                 if callable(opener):
                     try:
                         opener(f"{supervisor.base_url}/")
                     except Exception:
-                        pass
+                        # Igual que arriba: best-effort, el backend sigue.
+                        _log.debug("no se pudo reabrir el navegador", exc_info=True)
         return None
 
     # Ack de Producción antes de apagar el backend actual.
