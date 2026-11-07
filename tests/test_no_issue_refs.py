@@ -68,7 +68,10 @@ def _menciona_tracker_propio(linea: str) -> bool:
 def _tracked_files() -> list[Path]:
     try:
         out = subprocess.run(
-            ["git", "ls-files"], cwd=_ROOT, capture_output=True, text=True,
+            ["git", "ls-files"],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
             check=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError):

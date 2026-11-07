@@ -144,9 +144,7 @@ def test_authorize_ui_exige_csrf(api, arca):
         f"/ui/facturas/{invoice_id}/authorize",
         follow_redirects=False,
     )
-    _assert_csrf_html_403(
-        missing, recovery_href=f"/facturas/{invoice_id}/revisar"
-    )
+    _assert_csrf_html_403(missing, recovery_href=f"/facturas/{invoice_id}/revisar")
 
     # Referer same-origin gana al mapeo (p.ej. reintento desde el detalle).
     from facturador.api.localhost_policy import loopback_base_url
@@ -157,9 +155,7 @@ def test_authorize_ui_exige_csrf(api, arca):
         headers={"Referer": f"{base}/facturas/{invoice_id}"},
         follow_redirects=False,
     )
-    _assert_csrf_html_403(
-        from_detalle, recovery_href=f"/facturas/{invoice_id}"
-    )
+    _assert_csrf_html_403(from_detalle, recovery_href=f"/facturas/{invoice_id}")
 
     ok = api.post(
         f"/ui/facturas/{invoice_id}/authorize",
@@ -231,15 +227,11 @@ def test_csrf_recovery_href_referer_y_mapeo():
         == f"/facturas/{invoice_id}"
     )
     assert (
-        csrf_recovery_href(
-            _req("/ui/clientes", referer=f"{base}/ui/clientes")
-        )
+        csrf_recovery_href(_req("/ui/clientes", referer=f"{base}/ui/clientes"))
         == "/clientes"
     )
     assert (
-        csrf_recovery_href(
-            _req("/ui/clientes", referer="http://evil.example/clientes")
-        )
+        csrf_recovery_href(_req("/ui/clientes", referer="http://evil.example/clientes"))
         == "/clientes"
     )
     assert csrf_recovery_href(_req("/ui/facturas")) == "/"
@@ -269,11 +261,7 @@ def test_csrf_rejected_fuera_de_ui_sigue_siendo_json():
         "client": ("127.0.0.1", 123),
         "server": ("127.0.0.1", 8399),
     }
-    response = asyncio.run(
-        csrf_rejected_handler(Request(scope), CsrfRejected())
-    )
+    response = asyncio.run(csrf_rejected_handler(Request(scope), CsrfRejected()))
     assert response.status_code == 403
     assert response.headers["content-type"].startswith("application/json")
-    assert response.body == (
-        b'{"detail":"' + CSRF_JSON_DETAIL.encode() + b'"}'
-    )
+    assert response.body == (b'{"detail":"' + CSRF_JSON_DETAIL.encode() + b'"}')

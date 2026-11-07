@@ -168,9 +168,7 @@ def test_api_rechaza_cotizacion_patologica(api_con_cliente, valor):
 )
 def test_api_rechaza_items_fuera_de_formato(api_con_cliente, campo, valor, etiqueta):
     item = {"pro_ds": "Servicio", "pro_precio_uni": "100.00", campo: valor}
-    r = api_con_cliente.post(
-        "/invoices", json={"imp_total": "100.00", "items": [item]}
-    )
+    r = api_con_cliente.post("/invoices", json={"imp_total": "100.00", "items": [item]})
     assert r.status_code == 422
     assert etiqueta in _detalle(r)
 
@@ -204,9 +202,7 @@ def test_api_acepta_los_maximos(api_con_cliente):
 def test_total_del_item_con_mas_de_dos_decimales_es_422(api_con_cliente):
     # 3 × 0.333333 = 0.999999: ARCA recibe Pro_total_item con 2 decimales.
     item = {"pro_ds": "Servicio", "pro_precio_uni": "0.333333", "pro_qty": "3"}
-    r = api_con_cliente.post(
-        "/invoices", json={"imp_total": "1.00", "items": [item]}
-    )
+    r = api_con_cliente.post("/invoices", json={"imp_total": "1.00", "items": [item]})
     assert r.status_code == 422
     assert "Ítem 1 (cantidad × precio)" in _detalle(r)
     assert "El total del ítem excede el formato de ARCA" in _detalle(r)
@@ -219,9 +215,7 @@ def test_total_del_item_con_demasiados_enteros_es_422(api_con_cliente):
         "pro_qty": "100",
     }
     # 999999999999 × 100 tiene 14 enteros; imp_total en sí es válido.
-    r = api_con_cliente.post(
-        "/invoices", json={"imp_total": "1.00", "items": [item]}
-    )
+    r = api_con_cliente.post("/invoices", json={"imp_total": "1.00", "items": [item]})
     assert r.status_code == 422
     assert "Ítem 1 (cantidad × precio)" in _detalle(r)
     assert "hasta 13 enteros y 2 decimales" in _detalle(r)

@@ -513,9 +513,7 @@ def reconstruct_register(
     for offset in range(0, len(work), batch_size):
         batch = work[offset : offset + batch_size]
         # Fetch fuera de transacción.
-        fetched: list[
-            tuple[PvTipoTarget, int, CmpRecord | None]
-        ] = []
+        fetched: list[tuple[PvTipoTarget, int, CmpRecord | None]] = []
         for target, nro in batch:
             record = _fetch_cmp_with_retries(
                 wsfex,
@@ -539,9 +537,7 @@ def reconstruct_register(
         ) -> None:
             for target, nro, record in _fetched:
                 if record is None:
-                    gap = RegistryGap(
-                        target.punto_venta, target.cbte_tipo, nro
-                    )
+                    gap = RegistryGap(target.punto_venta, target.cbte_tipo, nro)
                     _note_gap(c, gap)
                     report.gaps.append(gap)
                     continue

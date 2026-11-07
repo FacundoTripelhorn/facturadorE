@@ -282,17 +282,13 @@ class InvoiceService:
     def run_seed_backup_now(self) -> SeedBackupState:
         """Disparo manual / flush del seed backup."""
         if self.seed_backup is None:
-            raise ConflictError(
-                "Seed backup no está habilitado en este proceso."
-            )
+            raise ConflictError("Seed backup no está habilitado en este proceso.")
         return self.seed_backup.backup_now()
 
     def replace_seed_recipients(self, text: str) -> SeedBackupState:
         """Actualiza recipients.txt local y dispara backup."""
         if self.seed_backup is None:
-            raise ConflictError(
-                "Seed backup no está habilitado en este proceso."
-            )
+            raise ConflictError("Seed backup no está habilitado en este proceso.")
         return self.seed_backup.replace_recipients(text)
 
     # ------------------------------------------------------------------
@@ -324,9 +320,7 @@ class InvoiceService:
     def _validate_code(self, kind: str, code: object, campo: str) -> None:
         codigos = {row["code"] for row in self.get_params(kind)}
         if str(code) not in codigos:
-            raise DomainError(
-                f"{campo}={code} no está en la tabla '{kind}' de ARCA"
-            )
+            raise DomainError(f"{campo}={code} no está en la tabla '{kind}' de ARCA")
 
     def _param_description(self, kind: str, code: object) -> str:
         """Descripción de un código ARCA al momento del snapshot.
@@ -560,9 +554,7 @@ class InvoiceService:
             )
 
     def _profile(self) -> EnvironmentProfile:
-        return EnvironmentProfile(
-            environment=self.config.env, paths=self.config.paths
-        )
+        return EnvironmentProfile(environment=self.config.env, paths=self.config.paths)
 
     def _resolve_fiscal_cuit(self) -> str:
         """CUIT sellado del perfil; ConflictError si la identidad no cierra."""
@@ -609,9 +601,7 @@ class InvoiceService:
 
     # --- Orden de pago del banco -----------------------------------------
 
-    def facturas_para_orden_pago(
-        self, invoice_ids: Sequence[str]
-    ) -> list[sqlite3.Row]:
+    def facturas_para_orden_pago(self, invoice_ids: Sequence[str]) -> list[sqlite3.Row]:
         """Facturas de una orden de pago, ordenadas por número ascendente.
 
         Solo autorizadas y de un solo cliente; la UI ya lo impide, pero el
@@ -622,21 +612,16 @@ class InvoiceService:
             raise DomainError("Elegí al menos una factura autorizada.")
         if len(ids) > MAX_FACTURAS_ORDEN_PAGO:
             raise DomainError(
-                f"Una orden de pago admite hasta {MAX_FACTURAS_ORDEN_PAGO} "
-                "facturas."
+                f"Una orden de pago admite hasta {MAX_FACTURAS_ORDEN_PAGO} facturas."
             )
         facturas = [self.get_invoice(i, reconcile=False) for i in ids]
         if any(f["status"] != InvoiceStatus.AUTHORIZED for f in facturas):
-            raise ConflictError(
-                "La orden de pago solo admite facturas autorizadas."
-            )
+            raise ConflictError("La orden de pago solo admite facturas autorizadas.")
         if not mismo_cliente(facturas):
             raise DomainError("Elegí facturas de un solo cliente.")
         return sorted(facturas, key=lambda f: (f["cbte_nro"], f["punto_venta"]))
 
-    def pdf_facturas_orden_pago(
-        self, invoice_ids: Sequence[str]
-    ) -> tuple[str, bytes]:
+    def pdf_facturas_orden_pago(self, invoice_ids: Sequence[str]) -> tuple[str, bytes]:
         """(nombre, PDF) con las Facturas E unidas en orden ascendente.
 
         Cada factura sale del mismo render (y cache) que la descarga
@@ -647,9 +632,7 @@ class InvoiceService:
         for f in facturas:
             items = repo.get_invoice_items(self.conn, f["id"])
             try:
-                pdf = get_or_render_invoice_pdf(
-                    f, items, self.config.paths.pdf_dir
-                )
+                pdf = get_or_render_invoice_pdf(f, items, self.config.paths.pdf_dir)
             except ValueError as exc:
                 raise ConflictError(
                     f"No se pudo generar el PDF de "
@@ -674,9 +657,7 @@ class InvoiceService:
         self.facturas_para_orden_pago(invoice_ids)
         try:
             if not archivos:
-                raise OrdenPagoError(
-                    "Subí al menos un PDF de la cuenta recaudadora."
-                )
+                raise OrdenPagoError("Subí al menos un PDF de la cuenta recaudadora.")
             if len(numeros) != len(archivos):
                 raise OrdenPagoError(
                     "Cada PDF de la cuenta recaudadora necesita su número."
@@ -701,13 +682,9 @@ class InvoiceService:
         """
         inv = self.get_invoice(invoice_id, reconcile=False)
         if inv["status"] != InvoiceStatus.AUTHORIZED:
-            raise DomainError(
-                "Solo se puede constatar una factura autorizada con CAE"
-            )
+            raise DomainError("Solo se puede constatar una factura autorizada con CAE")
         if inv["cbte_tipo"] != CBTE_TIPO_FACTURA_E:
-            raise DomainError(
-                "La constatación in-app solo cubre Factura E (tipo 19)"
-            )
+            raise DomainError("La constatación in-app solo cubre Factura E (tipo 19)")
         cuit_raw = inv["cuit_emisor"]
         if cuit_raw:
             cuit_emisor = int(cuit_raw)
@@ -715,9 +692,7 @@ class InvoiceService:
             # Snapshot sin CUIT fiscal (legado): caer al CUIT del certificado vivo.
             cuit_emisor = self.wsfex.cuit
         try:
-            req = WscdcClient.request_from_invoice_row(
-                inv, cuit_emisor=cuit_emisor
-            )
+            req = WscdcClient.request_from_invoice_row(inv, cuit_emisor=cuit_emisor)
         except WscdcError as exc:
             if exc.code == "local":
                 raise DomainError(exc.message) from exc
@@ -756,9 +731,7 @@ class InvoiceService:
         if not (cae.isdigit() and len(cae) == 14):
             raise DomainError("El CAE debe tener 14 dígitos")
         if not doc_nro_receptor.isdigit():
-            raise DomainError(
-                "Doc. receptor: ingresar la CUIT país (solo números)"
-            )
+            raise DomainError("Doc. receptor: ingresar la CUIT país (solo números)")
         # Identidad fiscal ANTES de WSCDC: resolver sella el CUIT
         # del perfil si esta es su primera operación fiscal, y después exige
         # sello/cert consistentes. Leer el cert directo saltaría ese control.
@@ -819,8 +792,7 @@ class InvoiceService:
                 continue
             except (WsfexError, httpx.HTTPError, OSError) as exc:
                 raise ArcaUnavailableError(
-                    f"ARCA no disponible al consultar CMP {pv}/{cbte_tipo}/{nro}: "
-                    f"{exc}"
+                    f"ARCA no disponible al consultar CMP {pv}/{cbte_tipo}/{nro}: {exc}"
                 ) from exc
             invoices.append(_cmp_record_to_arca_out(record, fallback_nro=nro))
         return ArcaInvoicesOut(
@@ -966,9 +938,7 @@ class InvoiceService:
             raise ArcaUnavailableError(f"ARCA no disponible: {exc}") from exc
 
         # Antes de asignar número / persistir raw_request / llamar FEXAuthorize.
-        self._assert_local_registry_consistent(
-            inv, last_cmp, force_desync=force_desync
-        )
+        self._assert_local_registry_consistent(inv, last_cmp, force_desync=force_desync)
 
         cbte_nro = last_cmp + 1
         wsfex_invoice = row_to_wsfex_invoice(
@@ -1169,9 +1139,7 @@ class InvoiceService:
             last_error=None,
             raw_response=json.dumps({"reconciled_from": "FEXGetCMP", **registrado}),
         )
-        logger.info(
-            "Factura %s reconciliada vía FEXGetCMP: CAE recuperado", inv["id"]
-        )
+        logger.info("Factura %s reconciliada vía FEXGetCMP: CAE recuperado", inv["id"])
         return self._reload(inv["id"])
 
 
@@ -1202,9 +1170,7 @@ def _optional_int(value: str | None) -> int | None:
     return int(value)
 
 
-def _cmp_record_to_arca_out(
-    record: CmpRecord, *, fallback_nro: int
-) -> ArcaInvoiceOut:
+def _cmp_record_to_arca_out(record: CmpRecord, *, fallback_nro: int) -> ArcaInvoiceOut:
     f = record.fields
     cbte_tipo = _optional_int(f.get("Cbte_tipo") or f.get("Cbte_Tipo")) or 0
     punto_venta = _optional_int(f.get("Punto_vta")) or 0

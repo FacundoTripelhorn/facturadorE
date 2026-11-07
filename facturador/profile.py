@@ -88,8 +88,7 @@ def resolve_app_data_root() -> Path:
         # a arrancar que resolver perfiles en una raíz inesperada.
         if not PurePosixPath(expanded).is_absolute():
             raise ProfileError(
-                "XDG_DATA_HOME debe ser una ruta absoluta; "
-                f"valor inválido: {xdg!r}"
+                f"XDG_DATA_HOME debe ser una ruta absoluta; valor inválido: {xdg!r}"
             )
         return Path(expanded) / "facturadorE"
     return Path.home() / ".local" / "share" / "facturadorE"
@@ -262,11 +261,7 @@ def resolve_isolated_profiles(
     app_data_root: Path | None = None,
 ) -> tuple[EnvironmentProfile, EnvironmentProfile]:
     """Resuelve ambos perfiles y valida el aislamiento entre raíces."""
-    homo = EnvironmentProfile.resolve(
-        ArcaEnvironment.HOMO, app_data_root=app_data_root
-    )
-    prod = EnvironmentProfile.resolve(
-        ArcaEnvironment.PROD, app_data_root=app_data_root
-    )
+    homo = EnvironmentProfile.resolve(ArcaEnvironment.HOMO, app_data_root=app_data_root)
+    prod = EnvironmentProfile.resolve(ArcaEnvironment.PROD, app_data_root=app_data_root)
     ensure_profile_roots_differ(homo, prod)
     return homo, prod

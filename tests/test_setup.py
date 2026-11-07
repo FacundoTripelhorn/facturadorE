@@ -157,9 +157,7 @@ def test_point_of_sale_required_sin_puntos_venta(tmp_path, test_cert_and_key):
     conn = db.connect(profile.paths.db)
     save_settings(
         conn,
-        Settings(
-            emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo", puntos_venta=())
-        ),
+        Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente="homo", puntos_venta=())),
     )
     set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
     assert evaluate_setup_state(profile, conn) is SetupState.POINT_OF_SALE_REQUIRED

@@ -176,9 +176,7 @@ def _banner_homo(pdf: _ComprobanteV1, y: float) -> float:
     pdf.set_text_color(*_HOMO_RED)
     pdf.set_font("sans", "B", 10)
     pdf.set_xy(_LEFT, y)
-    pdf.cell(
-        _WIDTH, alto, "COMPROBANTE DE HOMOLOGACIÓN — SIN VALOR FISCAL", align="C"
-    )
+    pdf.cell(_WIDTH, alto, "COMPROBANTE DE HOMOLOGACIÓN — SIN VALOR FISCAL", align="C")
     pdf.set_text_color(*_INK)
     return y + alto + 3
 
@@ -204,9 +202,7 @@ def _cabecera(
     yl = pdf.get_y() + 3
     yl = pdf.campo(_LEFT, col_w, yl, "Razón Social:", emisor.razon_social)
     yl = pdf.campo(_LEFT, col_w, yl, "Domicilio Comercial:", emisor.domicilio)
-    yl = pdf.campo(
-        _LEFT, col_w, yl, "Condición frente al IVA:", emisor.condicion_iva
-    )
+    yl = pdf.campo(_LEFT, col_w, yl, "Condición frente al IVA:", emisor.condicion_iva)
 
     # Columna derecha: datos del comprobante. En el comprobante real la
     # leyenda de exento cierra esta columna (no es una banda centrada).
@@ -218,9 +214,7 @@ def _cabecera(
     yr = pdf.get_y() + 3
     nro = f"{inv['punto_venta']:05d}-{inv['cbte_nro']:08d}"
     yr = pdf.campo(xr, col_w, yr, "Compr. Nro:", nro)
-    yr = pdf.campo(
-        xr, col_w, yr, "Fecha de Emisión:", _fecha_larga(inv["fecha_cbte"])
-    )
+    yr = pdf.campo(xr, col_w, yr, "Fecha de Emisión:", _fecha_larga(inv["fecha_cbte"]))
     yr = pdf.campo(xr, col_w, yr, "CUIT:", str(cuit_emisor))
     yr = pdf.campo(xr, col_w, yr, "Ingresos Brutos:", emisor.iibb)
     yr = pdf.campo(
@@ -347,9 +341,7 @@ def _tabla_items(
         pdf.set_font("sans", "", 9)
         x += w_cant
         pdf.set_xy(x, y_fila)
-        pdf.cell(
-            w_pu - _CELL_PAD, _lh(9), _num(item["pro_precio_uni"], 6), align="R"
-        )
+        pdf.cell(w_pu - _CELL_PAD, _lh(9), _num(item["pro_precio_uni"], 6), align="R")
         x += w_pu
         pdf.set_xy(x, y_fila)
         pdf.cell(
@@ -490,11 +482,7 @@ register_pdf_renderer(1, _render_pdf_v1)
 
 
 def _pdf_render_version(inv: sqlite3.Row) -> int:
-    version = (
-        inv["pdf_render_version"]
-        if "pdf_render_version" in inv.keys()
-        else None
-    )
+    version = inv["pdf_render_version"] if "pdf_render_version" in inv.keys() else None
     if version is None:
         raise ValueError(
             f"La factura {inv['id']} no tiene pdf_render_version; "

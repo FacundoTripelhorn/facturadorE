@@ -104,8 +104,7 @@ def test_resumir_por_cliente_ordena_por_total_dentro_de_cada_moneda():
         ],
     )
     filas = [
-        (f.cliente, f.moneda, f.total.importe, f.total.cantidad)
-        for f in r.por_cliente
+        (f.cliente, f.moneda, f.total.importe, f.total.cantidad) for f in r.por_cliente
     ]
     assert filas == [
         ("Grande", "DOL", Decimal("900.00"), 1),

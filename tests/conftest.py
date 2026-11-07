@@ -147,9 +147,7 @@ def seed_settings(conn, ambiente: str = "homo") -> None:
     debe coincidir con el perfil del backend bajo prueba."""
     from facturador.settings import Emisor, Settings, save_settings, set_active_emisor
 
-    save_settings(
-        conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente=ambiente))
-    )
+    save_settings(conn, Settings(emisor=Emisor(**EMISOR_PRUEBA, ambiente=ambiente)))
     from facturador import repo
 
     set_active_emisor(conn, repo.list_emisores(conn)[0]["id"])
@@ -159,16 +157,28 @@ def seed_params(conn) -> None:
     """Cache arca_params fresco con los códigos usados en los tests."""
     from facturador import repo
 
-    repo.replace_params(conn, "moneda", [
-        {"code": "DOL", "description": "Dolar Estadounidense"},
-        {"code": "PES", "description": "Pesos Argentinos"},
-    ])
+    repo.replace_params(
+        conn,
+        "moneda",
+        [
+            {"code": "DOL", "description": "Dolar Estadounidense"},
+            {"code": "PES", "description": "Pesos Argentinos"},
+        ],
+    )
     repo.replace_params(conn, "pais", [{"code": "225", "description": "URUGUAY"}])
-    repo.replace_params(conn, "cuit_pais", [
-        {"code": "55000002002", "description": "URUGUAY - Persona Juridica"},
-    ])
+    repo.replace_params(
+        conn,
+        "cuit_pais",
+        [
+            {"code": "55000002002", "description": "URUGUAY - Persona Juridica"},
+        ],
+    )
     repo.replace_params(conn, "idioma", [{"code": "1", "description": "Espanol"}])
     repo.replace_params(conn, "umed", [{"code": "7", "description": "unidades"}])
-    repo.replace_params(conn, "cbte_tipo", [
-        {"code": "19", "description": "Facturas de Exportacion"},
-    ])
+    repo.replace_params(
+        conn,
+        "cbte_tipo",
+        [
+            {"code": "19", "description": "Facturas de Exportacion"},
+        ],
+    )

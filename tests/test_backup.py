@@ -42,8 +42,10 @@ def perfil(tmp_path) -> ProfilePaths:
 
 def _members(tar_bytes):
     with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:gz") as tar:
-        return {m.name: tar.extractfile(m).read() if m.isfile() else None
-                for m in tar.getmembers()}
+        return {
+            m.name: tar.extractfile(m).read() if m.isfile() else None
+            for m in tar.getmembers()
+        }
 
 
 def test_snapshot_es_una_db_consistente(perfil):

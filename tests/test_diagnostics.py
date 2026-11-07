@@ -181,9 +181,7 @@ def test_backup_sin_recipients_es_aviso(api):
     "contenido",
     ["", "# laptop vieja, dada de baja\n\n", "clave-que-no-es-age\n"],
 )
-def test_recipients_sin_claves_validas_es_aviso_aunque_el_estado_sea_ok(
-    api, contenido
-):
+def test_recipients_sin_claves_validas_es_aviso_aunque_el_estado_sea_ok(api, contenido):
     """Vacío, solo comentarios o mal formado: el backup real no puede cifrar,
     aunque el último estado guardado diga ok. El error de lectura (con la
     ruta y el contenido) no se muestra."""
@@ -199,9 +197,7 @@ def test_recipients_sin_claves_validas_es_aviso_aunque_el_estado_sea_ok(
 
 
 def test_avisos_de_arca_vigentes_son_aviso(api):
-    record_events(
-        _profile(api).paths.arca_events, [("12", "Mantenimiento el domingo")]
-    )
+    record_events(_profile(api).paths.arca_events, [("12", "Mantenimiento el domingo")])
     avisos = _chequeo(diagnosticar_perfil(_profile(api), api.conn), "Avisos de ARCA")
     assert avisos.nivel is Nivel.AVISO
     assert avisos.detalle == "12: Mantenimiento el domingo"
@@ -274,7 +270,8 @@ def test_no_expone_rutas_ni_secretos(api, arca, test_cert_and_key):
 def test_arca_con_respuesta_html_bloquea_sin_error_500(api, arca, monkeypatch):
     """Un proxy caído devuelve HTML: la página muestra ARCA caído, no un 500."""
     monkeypatch.setattr(
-        arca, "_fexdummy",
+        arca,
+        "_fexdummy",
         lambda body: httpx.Response(
             502, text="<!DOCTYPE html><html>Bad Gateway<br></html>"
         ),
@@ -284,9 +281,7 @@ def test_arca_con_respuesta_html_bloquea_sin_error_500(api, arca, monkeypatch):
     assert "ARCA no responde" in r.text
 
 
-def test_numeracion_con_respuesta_vacia_bloquea_sin_error_500(
-    api, arca, monkeypatch
-):
+def test_numeracion_con_respuesta_vacia_bloquea_sin_error_500(api, arca, monkeypatch):
     monkeypatch.setattr(
         arca, "_fexgetlast_cmp", lambda body: httpx.Response(200, text="")
     )
@@ -319,6 +314,7 @@ def test_certificado_de_otro_cuit_que_el_sellado_bloquea(api):
 def test_base_danada_no_corta_la_pagina(api, monkeypatch):
     """Si una tabla está dañada, los chequeos que la leen se muestran
     bloqueados y la página responde igual (sin 500)."""
+
     def roto(*args, **kwargs):
         raise sqlite3.DatabaseError("database disk image is malformed")
 

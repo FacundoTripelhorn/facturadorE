@@ -21,12 +21,34 @@ from facturador.arca.wsfex import (
 
 # Orden de secuencia del ClsFEXRequest según el WSDL real (2026-07).
 WSDL_ORDER = [
-    "Id", "Fecha_cbte", "Cbte_Tipo", "Punto_vta", "Cbte_nro", "Tipo_expo",
-    "Permiso_existente", "Permisos", "Dst_cmp", "Cliente", "Cuit_pais_cliente",
-    "Domicilio_cliente", "Id_impositivo", "Moneda_Id", "Moneda_ctz",
-    "CanMisMonExt", "Obs_comerciales", "Imp_total", "Obs", "Cmps_asoc",
-    "Forma_pago", "Incoterms", "Incoterms_Ds", "Idioma_cbte", "Items",
-    "Opcionales", "Fecha_pago", "Actividades",
+    "Id",
+    "Fecha_cbte",
+    "Cbte_Tipo",
+    "Punto_vta",
+    "Cbte_nro",
+    "Tipo_expo",
+    "Permiso_existente",
+    "Permisos",
+    "Dst_cmp",
+    "Cliente",
+    "Cuit_pais_cliente",
+    "Domicilio_cliente",
+    "Id_impositivo",
+    "Moneda_Id",
+    "Moneda_ctz",
+    "CanMisMonExt",
+    "Obs_comerciales",
+    "Imp_total",
+    "Obs",
+    "Cmps_asoc",
+    "Forma_pago",
+    "Incoterms",
+    "Incoterms_Ds",
+    "Idioma_cbte",
+    "Items",
+    "Opcionales",
+    "Fecha_pago",
+    "Actividades",
 ]
 
 
@@ -221,8 +243,14 @@ CMP_REGISTRADO = _soap(
 def test_verify_issued_ok(test_config):
     client = _client(test_config, lambda r: httpx.Response(200, text=CMP_REGISTRADO))
     resultado = AuthResult(
-        cae="76123456789012", cae_fch_vto="20260713", arca_id=1, cbte_nro=1,
-        cbte_tipo=19, punto_vta=1, fecha_cbte="20260703", reproceso="N",
+        cae="76123456789012",
+        cae_fch_vto="20260713",
+        arca_id=1,
+        cbte_nro=1,
+        cbte_tipo=19,
+        punto_vta=1,
+        fecha_cbte="20260703",
+        reproceso="N",
         motivos_obs=None,
     )
     assert client.verify_issued(_invoice(), resultado) == []
@@ -231,8 +259,14 @@ def test_verify_issued_ok(test_config):
 def test_verify_issued_detecta_discrepancias(test_config):
     client = _client(test_config, lambda r: httpx.Response(200, text=CMP_REGISTRADO))
     resultado = AuthResult(
-        cae="OTRO_CAE", cae_fch_vto="20260713", arca_id=1, cbte_nro=1,
-        cbte_tipo=19, punto_vta=1, fecha_cbte="20260703", reproceso="N",
+        cae="OTRO_CAE",
+        cae_fch_vto="20260713",
+        arca_id=1,
+        cbte_nro=1,
+        cbte_tipo=19,
+        punto_vta=1,
+        fecha_cbte="20260703",
+        reproceso="N",
         motivos_obs=None,
     )
     problemas = client.verify_issued(_invoice(imp_total=Decimal("100.00")), resultado)

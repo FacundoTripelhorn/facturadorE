@@ -82,8 +82,8 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Config:
-    env: ArcaEnvironment   # inmutable: fijado al construir, nunca re-leído
-    paths: ProfilePaths    # ÚNICA fuente de paths de runtime
+    env: ArcaEnvironment  # inmutable: fijado al construir, nunca re-leído
+    paths: ProfilePaths  # ÚNICA fuente de paths de runtime
 
     @property
     def wsaa_url(self) -> str:
@@ -163,8 +163,7 @@ def load_config(profile: EnvironmentProfile) -> Config:
         raise ConfigError(str(exc)) from exc
     except OSError as exc:
         raise ConfigError(
-            "No se pudo guardar la confirmación de Producción: "
-            f"{exc}"
+            f"No se pudo guardar la confirmación de Producción: {exc}"
         ) from exc
     config = Config(env=profile.environment, paths=profile.paths)
     validate_config(config)

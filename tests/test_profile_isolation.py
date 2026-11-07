@@ -111,9 +111,7 @@ def isolated_pair(tmp_path, test_cert_and_key):
 
 
 def _crear_cliente(world: ProfileWorld, razon: str) -> dict:
-    r = world.client.post(
-        "/clients", json={**CLIENTE_BASE, "razon_social": razon}
-    )
+    r = world.client.post("/clients", json={**CLIENTE_BASE, "razon_social": razon})
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -121,9 +119,7 @@ def _crear_cliente(world: ProfileWorld, razon: str) -> dict:
 def _autorizar_factura(world: ProfileWorld, monto: str = "1500.00") -> dict:
     draft = world.client.post("/invoices", json={"imp_total": monto})
     assert draft.status_code == 201, draft.text
-    r = world.client.post(
-        f"/invoices/{draft.json()['id']}/authorize?force_desync=true"
-    )
+    r = world.client.post(f"/invoices/{draft.json()['id']}/authorize?force_desync=true")
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -281,12 +277,8 @@ def test_artefactos_de_runtime_solo_bajo_el_perfil_seleccionado(isolated_pair):
 
     # Marcadores de aislamiento en onboarding.json DESPUÉS de rutas HTTP que
     # reconcilian el setup (el onboarding reescribe el archivo al tocar /params).
-    homo.profile.paths.onboarding.write_text(
-        '{"setup":"homo-only"}', encoding="utf-8"
-    )
-    prod.profile.paths.onboarding.write_text(
-        '{"setup":"prod-only"}', encoding="utf-8"
-    )
+    homo.profile.paths.onboarding.write_text('{"setup":"homo-only"}', encoding="utf-8")
+    prod.profile.paths.onboarding.write_text('{"setup":"prod-only"}', encoding="utf-8")
 
     assert "homo-only" in homo.profile.paths.onboarding.read_text(encoding="utf-8")
     assert "prod-only" in prod.profile.paths.onboarding.read_text(encoding="utf-8")
@@ -352,9 +344,7 @@ def test_cambio_de_ambiente_no_reusa_db_ni_cliente_arca(isolated_pair):
     assert read_change_environment_request(homo.profile.paths) is None
 
     # Tras el reinicio el launcher arranca el perfil destino (nuevo proceso).
-    plan = plan_backend_launch(
-        ArcaEnvironment.PROD, app_data_root=app_data, port=8411
-    )
+    plan = plan_backend_launch(ArcaEnvironment.PROD, app_data_root=app_data, port=8411)
     assert plan.profile.paths.root == prod.profile.paths.root
     assert plan.env["ARCA_ENV"] == "prod"
     assert plan.env["FACTURADOR_APP_DATA"] == str(app_data)

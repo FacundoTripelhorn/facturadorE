@@ -113,9 +113,7 @@ def _snapshot_from_seed(
         emisor_domicilio=str(chosen.get("domicilio") or ""),
         emisor_condicion_iva=str(chosen.get("condicion_iva") or ""),
         emisor_iibb=str(chosen.get("iibb") or ""),
-        emisor_inicio_actividades=str(
-            chosen.get("inicio_actividades") or ""
-        ),
+        emisor_inicio_actividades=str(chosen.get("inicio_actividades") or ""),
     )
 
 
@@ -208,9 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Restaurar perfil: seed cifrado + rebuild desde ARCA."
     )
-    parser.add_argument(
-        "--env", help="ambiente del perfil destino (homo | prod)"
-    )
+    parser.add_argument("--env", help="ambiente del perfil destino (homo | prod)")
     parser.add_argument(
         "--root", help="raíz explícita del perfil destino (alternativa a --env)"
     )
@@ -244,9 +240,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if not args.env:
-            raise BackupError(
-                "Indicar --env homo|prod (perfil destino del restore)."
-            )
+            raise BackupError("Indicar --env homo|prod (perfil destino del restore).")
         paths = resolve_profile_paths(args.env, args.root, create=True)
         profile = EnvironmentProfile(
             environment=parse_environment(args.env), paths=paths
@@ -277,14 +271,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         for gap in report.gaps:
             print(
-                f"  gap: PV {gap.punto_venta} tipo {gap.cbte_tipo} "
-                f"nro {gap.cbte_nro}"
+                f"  gap: PV {gap.punto_venta} tipo {gap.cbte_tipo} nro {gap.cbte_nro}"
             )
         for (pv, tipo), last in sorted(report.last_cmp.items()):
             start, end = report.ranges.get((pv, tipo), (0, 0))
-            print(
-                f"  PV {pv} tipo {tipo}: rango {start}..{end}, last_CMP={last}"
-            )
+            print(f"  PV {pv} tipo {tipo}: rango {start}..{end}, last_CMP={last}")
         return 0
     except (
         BackupError,
@@ -310,9 +301,7 @@ def run_restore(
 ) -> ReconstructReport:
     """Entrypoint programático (launcher)."""
     paths = resolve_profile_paths(env, root, create=True)
-    profile = EnvironmentProfile(
-        environment=parse_environment(env), paths=paths
-    )
+    profile = EnvironmentProfile(environment=parse_environment(env), paths=paths)
     archive = seed_path or seed_archive_path(paths)
     wsfex = wsfex_factory(profile) if wsfex_factory else None
     return restore_profile_from_seed(

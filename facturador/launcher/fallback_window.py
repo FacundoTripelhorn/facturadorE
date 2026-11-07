@@ -123,9 +123,7 @@ def show_browser_fallback_window(
             v,
             v.pie,
             _REGISTRO,
-            command=lambda: _intentar(
-                lambda: open_file(registro), "abrir el registro"
-            ),
+            command=lambda: _intentar(lambda: open_file(registro), "abrir el registro"),
         ).pack(side="right", padx=(0, v.px(8 - 2 * MARGEN)))
 
     v.tecla("<Escape>", lambda _e: v.terminar())

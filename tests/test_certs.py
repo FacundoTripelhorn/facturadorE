@@ -38,9 +38,7 @@ def _build_pair(
     key: rsa.RSAPrivateKey | None = None,
 ) -> tuple[bytes, bytes, rsa.RSAPrivateKey]:
     """Construye un par PEM autofirmado con el formato de subject de ARCA."""
-    private_key = key or rsa.generate_private_key(
-        public_exponent=65537, key_size=2048
-    )
+    private_key = key or rsa.generate_private_key(public_exponent=65537, key_size=2048)
     attrs = [
         x509.NameAttribute(NameOID.COUNTRY_NAME, "AR"),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Test"),
@@ -84,9 +82,7 @@ def profile(tmp_path: Path) -> EnvironmentProfile:
 
 def test_par_valido_devuelve_metadata_segura(profile: EnvironmentProfile):
     cert_pem, key_pem, _ = _build_pair()
-    meta = validate_certificate_pair(
-        cert_pem, key_pem, environment=profile.environment
-    )
+    meta = validate_certificate_pair(cert_pem, key_pem, environment=profile.environment)
 
     assert isinstance(meta, CertificateMetadata)
     assert meta.cuit == VALID_CUIT
@@ -132,17 +128,13 @@ def test_par_desparejado_rechazado(profile: EnvironmentProfile):
 def test_sin_cuit_en_subject_rechazado(profile: EnvironmentProfile):
     cert_pem, key_pem, _ = _build_pair(include_cuit_serial=False)
     with pytest.raises(CertificateError, match="serialNumber=CUIT"):
-        validate_certificate_pair(
-            cert_pem, key_pem, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, key_pem, environment=profile.environment)
 
 
 def test_serial_number_sin_prefijo_cuit_rechazado(profile: EnvironmentProfile):
     cert_pem, key_pem, _ = _build_pair(serial_number=VALID_CUIT)
     with pytest.raises(CertificateError, match="serialNumber=CUIT"):
-        validate_certificate_pair(
-            cert_pem, key_pem, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, key_pem, environment=profile.environment)
 
 
 def test_certificado_vencido_rechazado(profile: EnvironmentProfile):
@@ -177,9 +169,7 @@ def test_clave_con_passphrase_rechazada(profile: EnvironmentProfile):
         serialization.BestAvailableEncryption(b"secreto"),
     )
     with pytest.raises(CertificateError, match="passphrase") as exc_info:
-        validate_certificate_pair(
-            cert_pem, encrypted, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, encrypted, environment=profile.environment)
     assert "secreto" not in str(exc_info.value)
     assert encrypted.decode(errors="replace") not in str(exc_info.value)
 
@@ -214,9 +204,7 @@ def test_clave_ed25519_rechazada(profile: EnvironmentProfile):
         serialization.NoEncryption(),
     )
     with pytest.raises(CertificateError, match="RSA o EC"):
-        validate_certificate_pair(
-            cert_pem, key_pem, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, key_pem, environment=profile.environment)
     with pytest.raises(CertificateError, match="RSA o EC"):
         store_certificate_pair(profile, cert_pem, key_pem)
     assert not profile.paths.cert.exists()
@@ -358,9 +346,7 @@ def test_stores_concurrentes_dejan_par_consistente(profile: EnvironmentProfile):
     live_key = profile.paths.key.read_bytes()
     # Debe ser exactamente uno de los pares enviados (no un cruce).
     assert (live_cert, live_key) in {(c, k) for c, k, _ in pairs}
-    validate_certificate_pair(
-        live_cert, live_key, environment=profile.environment
-    )
+    validate_certificate_pair(live_cert, live_key, environment=profile.environment)
     leftovers = list(profile.paths.secrets_dir.glob(".*"))
     assert leftovers == []
 
@@ -516,9 +502,7 @@ def test_store_rechaza_cuit_distinto_del_sello(profile: EnvironmentProfile):
     """El sello en settings también bloquea otro CUIT (sin cert vivo)."""
     new_cert, new_key, _ = _build_pair(cuit=OTHER_CUIT)
     with pytest.raises(CertificateError, match="sellado al CUIT"):
-        store_certificate_pair(
-            profile, new_cert, new_key, sealed_cuit=VALID_CUIT
-        )
+        store_certificate_pair(profile, new_cert, new_key, sealed_cuit=VALID_CUIT)
     assert not profile.paths.cert.exists()
     assert not profile.paths.key.exists()
 
@@ -541,14 +525,10 @@ def test_errores_nunca_incluyen_material_de_clave(profile: EnvironmentProfile):
     # Inyectar un fragmento único de la key en un PEM roto para detectar fugas.
     marker = b"MARKER_PRIVATE_MATERIAL_9f3a"
     broken = (
-        b"-----BEGIN PRIVATE KEY-----\n"
-        + marker
-        + b"\n-----END PRIVATE KEY-----\n"
+        b"-----BEGIN PRIVATE KEY-----\n" + marker + b"\n-----END PRIVATE KEY-----\n"
     )
     with pytest.raises(CertificateError) as exc_info:
-        validate_certificate_pair(
-            cert_pem, broken, environment=profile.environment
-        )
+        validate_certificate_pair(cert_pem, broken, environment=profile.environment)
     message = str(exc_info.value)
     assert "MARKER_PRIVATE_MATERIAL_9f3a" not in message
     assert key_pem.decode() not in message

@@ -47,6 +47,7 @@ class InvoiceSource(enum.StrEnum):
     WSFEX = "wsfex"
     IMPORTED = "imported"
 
+
 # Endpoints de ARCA por ambiente (design.md §1.3). NO son configurables por
 # separado: Config los deriva del único flag ARCA_ENV (checklist §2.1.1
 # punto 1), imposible mezclar cert de homo con URL de prod por construcción.
@@ -76,7 +77,7 @@ SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/"
 
 # Tipos de comprobante de exportación (FEXGetPARAM_Cbte_Tipo)
 CBTE_TIPO_FACTURA_E = 19
-CBTE_TIPO_NOTA_DEBITO_E = 20   # fuera de alcance hoy; modelado desde el día 1 (§6.4)
+CBTE_TIPO_NOTA_DEBITO_E = 20  # fuera de alcance hoy; modelado desde el día 1 (§6.4)
 CBTE_TIPO_NOTA_CREDITO_E = 21
 
 # Tipos de exportación (FEXGetPARAM_Tipo_Expo)

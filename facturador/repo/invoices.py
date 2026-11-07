@@ -87,9 +87,7 @@ def create_invoice(
 
 
 def get_invoice(conn: sqlite3.Connection, invoice_id: str) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM invoices WHERE id = ?", (invoice_id,)
-    ).fetchone()
+    return conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
 
 
 def get_invoice_items(conn: sqlite3.Connection, invoice_id: str) -> list[sqlite3.Row]:
@@ -111,8 +109,7 @@ def list_invoices(
         where = f" WHERE status IN ({', '.join('?' * len(statuses))})"
         params = tuple(statuses)
     return conn.execute(
-        f"SELECT * FROM invoices{where}"
-        " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM invoices{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
         (*params, limit, offset),
     ).fetchall()
 
@@ -241,8 +238,7 @@ def delete_draft(conn: sqlite3.Connection, invoice_id: str) -> bool:
             (invoice_id, InvoiceStatus.DRAFT),
         )
         cursor = conn.execute(
-            "DELETE FROM invoices WHERE id = ? AND status = ?"
-            " AND raw_request IS NULL",
+            "DELETE FROM invoices WHERE id = ? AND status = ? AND raw_request IS NULL",
             (invoice_id, InvoiceStatus.DRAFT),
         )
     return cursor.rowcount == 1

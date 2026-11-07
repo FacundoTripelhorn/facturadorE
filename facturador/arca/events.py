@@ -83,13 +83,15 @@ def record_events(path: Path, events: list[tuple[str, str]]) -> None:
             if any(e["id"] == event_id for e in vigentes):
                 continue
             previo = previos.get(event_id)
-            vigentes.append({
-                "id": event_id,
-                "code": code,
-                "msg": msg,
-                "first_seen": (previo or {}).get("first_seen") or ahora,
-                "read": bool(previo and previo["read"]),
-            })
+            vigentes.append(
+                {
+                    "id": event_id,
+                    "code": code,
+                    "msg": msg,
+                    "first_seen": (previo or {}).get("first_seen") or ahora,
+                    "read": bool(previo and previo["read"]),
+                }
+            )
         _write(path, vigentes, ahora)
 
 
@@ -144,13 +146,15 @@ def _leer(path: Path) -> tuple[list[dict[str, Any]], str | None]:
         if code.strip() in _SIN_NOVEDADES:
             continue
         first_seen = e.get("first_seen")
-        entries.append({
-            "id": _event_id(code, msg),
-            "code": code,
-            "msg": msg,
-            "first_seen": first_seen if isinstance(first_seen, str) else None,
-            "read": e.get("read") is True,
-        })
+        entries.append(
+            {
+                "id": _event_id(code, msg),
+                "code": code,
+                "msg": msg,
+                "first_seen": first_seen if isinstance(first_seen, str) else None,
+                "read": e.get("read") is True,
+            }
+        )
     return entries, seen_at if isinstance(seen_at, str) else None
 
 
@@ -169,8 +173,7 @@ def _fecha(valor: object) -> dt.datetime | None:
 def _write(path: Path, entries: list[dict[str, Any]], seen_at: str | None) -> bool:
     payload = {
         "events": [
-            {k: e[k] for k in ("code", "msg", "first_seen", "read")}
-            for e in entries
+            {k: e[k] for k in ("code", "msg", "first_seen", "read")} for e in entries
         ],
         "seen_at": seen_at,
     }

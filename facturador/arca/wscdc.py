@@ -81,9 +81,7 @@ def _findtext_local(root: ET.Element, name: str) -> str | None:
     return None
 
 
-def _collect_code_msg(
-    root: ET.Element, item_tag: str
-) -> tuple[tuple[str, str], ...]:
+def _collect_code_msg(root: ET.Element, item_tag: str) -> tuple[tuple[str, str], ...]:
     """Recoge pares (Code, Msg) de elementos ``Err`` / ``Obs`` / ``Evt``."""
     out: list[tuple[str, str]] = []
     for elem in root.iter():
@@ -179,8 +177,7 @@ class WscdcClient:
             if fault is not None:
                 raise WscdcError(
                     fault.findtext(".//faultcode", default="?") or "?",
-                    fault.findtext(".//faultstring", default=response.text[:500])
-                    or "",
+                    fault.findtext(".//faultstring", default=response.text[:500]) or "",
                 )
             raise WscdcError(str(response.status_code), f"HTTP {response.status_code}")
 
