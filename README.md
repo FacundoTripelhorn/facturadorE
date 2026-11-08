@@ -331,6 +331,7 @@ registro local quedó detrás de ARCA.
 uv sync                      # instala también el grupo dev
 uv run pytest                # tests (usan un ARCA falso; no requieren red ni certificado)
 uv run ruff check .          # lint
+uv run ruff format --check . # formato (aplicar con: uv run ruff format .)
 uv run mypy                  # type check
 ```
 

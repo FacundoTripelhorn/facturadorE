@@ -71,12 +71,8 @@ def test_for_testing_construye_perfil_aislado(tmp_path):
 
 def test_resolve_usa_subdirectorios_por_ambiente_bajo_app_data(tmp_path):
     app_data = tmp_path / "FacturadorE"
-    homo = EnvironmentProfile.resolve(
-        ArcaEnvironment.HOMO, app_data_root=app_data
-    )
-    prod = EnvironmentProfile.resolve(
-        ArcaEnvironment.PROD, app_data_root=app_data
-    )
+    homo = EnvironmentProfile.resolve(ArcaEnvironment.HOMO, app_data_root=app_data)
+    prod = EnvironmentProfile.resolve(ArcaEnvironment.PROD, app_data_root=app_data)
 
     assert homo.paths.root == app_data / "homo"
     assert prod.paths.root == app_data / "prod"

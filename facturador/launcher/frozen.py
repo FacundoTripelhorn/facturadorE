@@ -91,6 +91,7 @@ def set_window_icon(root: object) -> None:
     try:
         root.iconbitmap(default=str(icon))  # type: ignore[attr-defined]
     except Exception:
+        # Cosmético: sin ícono la ventana funciona igual.
         return
 
 

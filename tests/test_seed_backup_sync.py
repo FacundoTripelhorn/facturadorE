@@ -53,9 +53,7 @@ AGE_KEY_A = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
 
 @pytest.fixture
 def profile_conn(tmp_path):
-    profile = EnvironmentProfile.for_testing(
-        ArcaEnvironment.HOMO, tmp_path / "profile"
-    )
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "profile")
     profile.paths.ensure_layout()
     conn = db.connect(profile.paths.db)
     seal_fiscal_cuit(conn, TEST_CUIT)
@@ -119,9 +117,7 @@ def test_s3_failure_keeps_config_and_marks_failed(profile_conn):
         seed_backup=_coord(
             profile,
             conn,
-            runner=lambda: (_ for _ in ()).throw(
-                S3SeedPermanentError("S3 down")
-            ),
+            runner=lambda: (_ for _ in ()).throw(S3SeedPermanentError("S3 down")),
             debounce_s=60.0,
         ),
     )
@@ -240,9 +236,7 @@ def test_service_triggers_on_config_events_not_non_default_client(profile_conn):
         coord.shutdown()
 
 
-def test_authorize_does_not_trigger_seed_backup(
-    test_cert_and_key, tmp_path
-):
+def test_authorize_does_not_trigger_seed_backup(test_cert_and_key, tmp_path):
     profile = EnvironmentProfile.for_testing(
         ArcaEnvironment.HOMO, tmp_path / "auth-profile"
     )
@@ -316,9 +310,7 @@ def test_run_seed_backup_uploads_to_memory_store(profile_conn):
         pytest.skip("age not installed")
     profile, conn = profile_conn
     store = MemoryObjectStore()
-    uri = run_seed_backup(
-        conn, profile.paths, environment="homo", store=store
-    )
+    uri = run_seed_backup(conn, profile.paths, environment="homo", store=store)
     assert uri is not None
     assert uri.startswith("s3://test-bucket/")
     assert any(k.endswith("seed.age") for (_, k) in store.objects)
@@ -335,9 +327,7 @@ def test_api_status_and_manual_backup(test_cert_and_key, tmp_path):
     seed_params(conn)
     seed_settings(conn)
     write_recipients_file(profile.paths, AGE_KEY_A + "\n")
-    repo.save_settings(
-        conn, {"backup_s3_bucket": "bucket", "backup_s3_prefix": "pfx"}
-    )
+    repo.save_settings(conn, {"backup_s3_bucket": "bucket", "backup_s3_prefix": "pfx"})
 
     calls = {"n": 0}
 
@@ -359,9 +349,7 @@ def test_api_status_and_manual_backup(test_cert_and_key, tmp_path):
         wsaa=FakeWsaa(),
         http=httpx.Client(transport=httpx.MockTransport(arca.handler)),
     )
-    app = create_app(
-        profile, config=config, conn=conn, wsfex=wsfex, seed_backup=coord
-    )
+    app = create_app(profile, config=config, conn=conn, wsfex=wsfex, seed_backup=coord)
     with TestClient(app, base_url=loopback_base_url()) as client:
         r = client.get("/backup/seed")
         assert r.status_code == 200
@@ -446,9 +434,7 @@ def test_backup_worker_uses_dedicated_db_connection(profile_conn):
         connect=connect_factory,
     )
     try:
-        with patch(
-            "facturador.seed_backup_sync.run_seed_backup", tracking_run
-        ):
+        with patch("facturador.seed_backup_sync.run_seed_backup", tracking_run):
             state = coord.backup_now()
         assert state.status is SeedBackupStatus.OK
         assert len(opened) == 1

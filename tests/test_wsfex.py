@@ -168,8 +168,11 @@ def test_cache_de_params_en_sqlite(tmp_path):
     ("status", "cuerpo", "error"),
     [
         # HTML real de un proxy: no es XML bien formado.
-        (502, "<!DOCTYPE html><html><body>Bad Gateway<br></body></html>",
-         httpx.HTTPStatusError),
+        (
+            502,
+            "<!DOCTYPE html><html><body>Bad Gateway<br></body></html>",
+            httpx.HTTPStatusError,
+        ),
         # HTML que sí parsea como XML, pero sin SOAP Fault.
         (502, "<html><body>Bad Gateway</body></html>", httpx.HTTPStatusError),
         (503, "", httpx.HTTPStatusError),

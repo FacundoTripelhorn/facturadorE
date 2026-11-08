@@ -73,9 +73,7 @@ def _botones(root: tkinter.Misc) -> dict[str, tkinter.Misc]:
 
 def test_selector_abre_el_preseleccionado(programar):
     programar(lambda root: _botones(root)["Abrir Producción"].invocar())
-    elegido = prompt_environment_gui(
-        ENVIRONMENT_OPTIONS, selected=ArcaEnvironment.PROD
-    )
+    elegido = prompt_environment_gui(ENVIRONMENT_OPTIONS, selected=ArcaEnvironment.PROD)
     assert elegido is ArcaEnvironment.PROD
 
 

@@ -574,9 +574,7 @@ class Tarjeta(Control):
             margen=m,
             anillo=p.pil("acento") if self.con_foco else None,
         )
-        circulo(
-            img, m + self._pad_x, self._punto_y, self._punto_d, p.pil(self._punto)
-        )
+        circulo(img, m + self._pad_x, self._punto_y, self._punto_d, p.pil(self._punto))
         self.itemconfigure(self._titulo_id, fill=v.color("tinta"))
         self.itemconfigure(self._descripcion_id, fill=v.color("tinta-suave"))
         if self._etiqueta is not None and self._etiqueta_id is not None:
@@ -687,8 +685,13 @@ def _panel(
     tinta = v.color(f"{tono}-tinta")
     if titulo:
         item = canvas.create_text(
-            x, y, anchor="nw", text=titulo, font=v.fuente(14, negrita=True),
-            fill=tinta, width=ancho_texto,
+            x,
+            y,
+            anchor="nw",
+            text=titulo,
+            font=v.fuente(14, negrita=True),
+            fill=tinta,
+            width=ancho_texto,
         )
         caja_titulo = canvas.bbox(item)
         y = (caja_titulo[3] if caja_titulo else y) + v.px(6)
@@ -707,9 +710,7 @@ def _panel(
         borde=p.pil(f"{tono}-borde"),
     )
     if con_icono:
-        icono = icono_error(
-            lado_icono, color=p.pil(tono), fondo=p.pil(f"{tono}-fondo")
-        )
+        icono = icono_error(lado_icono, color=p.pil(tono), fondo=p.pil(f"{tono}-fondo"))
         img.paste(icono, (pad_x, pad_y + v.px(1)))
     fondo_id = canvas.create_image(0, 0, anchor="nw", image=v.foto(img))
     canvas.tag_lower(fondo_id)

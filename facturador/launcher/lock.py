@@ -231,10 +231,7 @@ def _held_message(holder: LockHolder) -> str:
         "homo": "Homologación",
         "prod": "Producción",
     }.get(holder.environment, holder.environment)
-    return (
-        f"FacturadorE ({env_label}) ya está en marcha "
-        f"en {holder.base_url}/."
-    )
+    return f"FacturadorE ({env_label}) ya está en marcha en {holder.base_url}/."
 
 
 def _holder_from_payload(payload: Any) -> LockHolder | None:

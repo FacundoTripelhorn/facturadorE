@@ -47,9 +47,7 @@ def dialogs_enabled() -> bool:
     """False con terminal, bajo pytest o con ``FACTURADOR_NO_DIALOGS``: un
     diálogo modal sin nadie que lo cierre colgaría el proceso (smoke del exe
     en CI)."""
-    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get(
-        "FACTURADOR_NO_DIALOGS"
-    ):
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("FACTURADOR_NO_DIALOGS"):
         return False
     return not has_interactive_terminal()
 
@@ -69,11 +67,7 @@ def app_version() -> str:
 def technical_detail(message: str, environment: ArcaEnvironment | None) -> str:
     """Lo que copia "Copiar detalle técnico"."""
     ambiente = _TITULOS[environment] if environment is not None else "sin elegir"
-    return (
-        f"FacturadorE {app_version()}\n"
-        f"Ambiente: {ambiente}\n"
-        f"Error: {message}\n"
-    )
+    return f"FacturadorE {app_version()}\nAmbiente: {ambiente}\nError: {message}\n"
 
 
 def prompt_failure(

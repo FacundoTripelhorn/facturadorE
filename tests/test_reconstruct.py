@@ -44,9 +44,7 @@ from tests.conftest import EMISOR_PRUEBA, TEST_CUIT, install_test_cert_pair
 
 @pytest.fixture
 def profile_wsfex(tmp_path, test_cert_and_key):
-    profile = EnvironmentProfile.for_testing(
-        ArcaEnvironment.HOMO, tmp_path / "perfil"
-    )
+    profile = EnvironmentProfile.for_testing(ArcaEnvironment.HOMO, tmp_path / "perfil")
     cert_pem, key_pem = test_cert_and_key
     install_test_cert_pair(profile.paths, cert_pem, key_pem)
     conn = connect(profile.paths.db)
@@ -73,9 +71,7 @@ def profile_wsfex(tmp_path, test_cert_and_key):
 
 
 def _snapshot(conn: sqlite3.Connection) -> ProfileSnapshot:
-    return profile_snapshot_from_conn(
-        conn, environment="homo", cuit_emisor=TEST_CUIT
-    )
+    return profile_snapshot_from_conn(conn, environment="homo", cuit_emisor=TEST_CUIT)
 
 
 def _seed_envelope(*, environment: str = "homo", cuit: str = TEST_CUIT) -> dict:
@@ -143,9 +139,7 @@ def test_get_cmp_record_parses_items(profile_wsfex):
 def test_full_rebuild_single_transaction(profile_wsfex):
     _profile, conn, wsfex, arca = profile_wsfex
     for n in (1, 2, 3):
-        arca.seed_issued(
-            tipo=19, pv=1, nro=n, arca_id=100 + n, imp_total=f"{n}00.00"
-        )
+        arca.seed_issued(tipo=19, pv=1, nro=n, arca_id=100 + n, imp_total=f"{n}00.00")
     conn.execute(
         "INSERT INTO invoices ("
         " id, cbte_tipo, punto_venta, cbte_nro, status, source,"
@@ -177,8 +171,7 @@ def test_full_rebuild_single_transaction(profile_wsfex):
     assert [r["cbte_nro"] for r in rows] == [1, 2, 3]
     assert all(r["source"] == "wsfex" and r["status"] == "authorized" for r in rows)
     assert (
-        conn.execute("SELECT COUNT(*) FROM invoices WHERE id='old'").fetchone()[0]
-        == 0
+        conn.execute("SELECT COUNT(*) FROM invoices WHERE id='old'").fetchone()[0] == 0
     )
 
 
@@ -275,9 +268,7 @@ def test_partial_batch_then_rerun_succeeds(profile_wsfex):
     assert report.inserted == 4
     nros = [
         r["cbte_nro"]
-        for r in conn.execute(
-            "SELECT cbte_nro FROM invoices ORDER BY cbte_nro"
-        )
+        for r in conn.execute("SELECT cbte_nro FROM invoices ORDER BY cbte_nro")
     ]
     assert nros == [1, 2, 3, 4]
 
@@ -360,9 +351,7 @@ def test_catch_up_appends_only_missing(profile_wsfex):
     arca.seed_issued(tipo=19, pv=1, nro=3, arca_id=403)
     arca.seed_issued(tipo=19, pv=1, nro=4, arca_id=404)
 
-    report = catch_up_register(
-        profile, wsfex, retries=1, abort_on_any_gap=False
-    )
+    report = catch_up_register(profile, wsfex, retries=1, abort_on_any_gap=False)
     assert report.mode is ReconstructMode.CATCH_UP
     assert report.inserted == 2
     # Dedicated conn wrote; re-read via fixture conn.
@@ -506,9 +495,7 @@ def test_restore_apply_seed_then_rebuild(profile_wsfex):
     assert inv["cliente"] == "From ARCA"
 
 
-def test_launcher_restore_refuses_when_lock_held(
-    profile_wsfex, tmp_path, monkeypatch
-):
+def test_launcher_restore_refuses_when_lock_held(profile_wsfex, tmp_path, monkeypatch):
     from facturador.constants import ArcaEnvironment
     from facturador.launcher.lock import ProfileLock
     from facturador.launcher.restore_flow import run_launcher_restore
@@ -578,9 +565,7 @@ def test_launcher_restore_refuses_displaced_orphan_backend(
             "facturador.launcher.restore_flow.EnvironmentProfile.resolve",
             lambda env, app_data_root=None: profile,
         )
-        monkeypatch.setattr(
-            "facturador.launcher.restore_flow.run_restore", _no_restore
-        )
+        monkeypatch.setattr("facturador.launcher.restore_flow.run_restore", _no_restore)
         code = run_launcher_restore(
             ArcaEnvironment.HOMO,
             identity_path=tmp_path / "missing-identity.txt",

@@ -33,9 +33,7 @@ _UI_PREFIX = "/ui/"
 
 # Mensajes genéricos: nunca incluyen el valor del token.
 CSRF_JSON_DETAIL: Final = "CSRF token ausente o inválido"
-CSRF_UI_MESSAGE: Final = (
-    "La sesión expiró — recargá la página e intentá de nuevo."
-)
+CSRF_UI_MESSAGE: Final = "La sesión expiró — recargá la página e intentá de nuevo."
 
 
 class CsrfRejected(Exception):
@@ -105,9 +103,7 @@ async def enforce_csrf(request: Request) -> None:
 
 def _set_cookie_header(token: str) -> str:
     # Sin Secure: HTTP localhost. HttpOnly + SameSite=Strict mitigan XSS/CSRF.
-    return (
-        f"{CSRF_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict"
-    )
+    return f"{CSRF_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict"
 
 
 class CsrfCookieMiddleware:

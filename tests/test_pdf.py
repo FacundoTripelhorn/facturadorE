@@ -142,8 +142,7 @@ def test_pdf_inline_por_defecto_y_attachment_al_descargar(api, arca):
 
     assert inline.headers["content-disposition"] == f'inline; filename="{filename}"'
     assert (
-        descarga.headers["content-disposition"]
-        == f'attachment; filename="{filename}"'
+        descarga.headers["content-disposition"] == f'attachment; filename="{filename}"'
     )
     assert descarga.content == inline.content
 
@@ -210,9 +209,7 @@ def test_pdf_inexistente_es_404(api):
     assert api.get("/invoices/inexistente/pdf").status_code == 404
 
 
-def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
-    api, arca, monkeypatch
-):
+def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(api, arca, monkeypatch):
     """Editar el mismo emisor tras autorizar no muda el PDF."""
     factura = _factura_autorizada(api)
     emisor_id = repo.get_invoice(api.conn, factura["id"])["emisor_id"]
@@ -237,9 +234,7 @@ def test_el_pdf_usa_el_snapshot_del_emisor_no_la_fila_viva(
         capturado["items"] = items
         return b"%PDF-fake"
 
-    monkeypatch.setattr(
-        "facturador.pdf.render.render_invoice_pdf", fake_render
-    )
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", fake_render)
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
     assert r.status_code == 200, r.text
@@ -278,9 +273,7 @@ def test_el_pdf_conserva_el_emisor_activo_al_momento_de_emitir(api, arca, monkey
         capturado["inv"] = inv
         return b"%PDF-fake"
 
-    monkeypatch.setattr(
-        "facturador.pdf.render.render_invoice_pdf", fake_render
-    )
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", fake_render)
     r = api.get(f"/invoices/{factura['id']}/pdf")
 
     assert r.status_code == 200, r.text
@@ -408,9 +401,7 @@ def test_editar_cliente_params_y_settings_no_cambia_inputs_del_render(
         capturado["items"] = [dict(i) for i in items]
         return b"%PDF-fake"
 
-    monkeypatch.setattr(
-        "facturador.pdf.render.render_invoice_pdf", fake_render
-    )
+    monkeypatch.setattr("facturador.pdf.render.render_invoice_pdf", fake_render)
     r = api.get(f"/invoices/{factura['id']}/pdf")
     assert r.status_code == 200, r.text
 
@@ -434,9 +425,7 @@ def test_pdf_usa_solo_snapshot_sin_lookups_externos(api, arca):
     """render_invoice_pdf(inv, items) sin kwargs de params/emisor."""
     factura = _factura_autorizada(api)
     # Envenenar el cache: si el render lo leyera, el HTML saldría mutado.
-    repo.replace_params(
-        api.conn, "pais", [{"code": "225", "description": "XX-MUTADO"}]
-    )
+    repo.replace_params(api.conn, "pais", [{"code": "225", "description": "XX-MUTADO"}])
     inv = repo.get_invoice(api.conn, factura["id"])
     items = repo.get_invoice_items(api.conn, factura["id"])
 
@@ -473,19 +462,19 @@ def test_pdf_contiene_los_datos_del_comprobante(api, arca):
     assert "ID Impositivo: RUT 219999830019" in texto
     # Paridad con el comprobante real de Comprobantes en Línea:
     assert "Destino del Comprobante: URUGUAY" in texto
-    assert "(URUGUAY - Persona Juridica)" in texto        # CUIT País con descripción
+    assert "(URUGUAY - Persona Juridica)" in texto  # CUIT País con descripción
     assert "Divisa: USD - Dolar Estadounidense" in texto  # divisa con descripción
-    assert "Compr. Nro: 00001-00000001" in texto          # rótulo real, con la "r"
+    assert "Compr. Nro: 00001-00000001" in texto  # rótulo real, con la "r"
     assert "Forma de Pago: WIRE TRANSFER" in texto
     assert "Incoterms:" in texto
     # Descripción con el código adelante, como imprime Comprobantes en Línea.
     assert "0001 - Servicios de desarrollo de software" in texto
     # U. Medida no es columna propia: va como sub-línea bajo la cantidad.
     assert "U. Medida: unidades" in texto
-    assert "1500,00" in texto                             # importes con coma, 2 dec
-    assert "1,000000" in texto                            # cantidad con 6 decimales
-    assert "1500,000000" in texto                         # precio unit. con 6 dec
-    assert "Tipo de Cambio: 1145.569000" in texto         # cotización: punto, 6 dec
+    assert "1500,00" in texto  # importes con coma, 2 dec
+    assert "1,000000" in texto  # cantidad con 6 decimales
+    assert "1500,000000" in texto  # precio unit. con 6 dec
+    assert "Tipo de Cambio: 1145.569000" in texto  # cotización: punto, 6 dec
     assert "Importe Total: USD 1500,00" in texto
     assert "IVA EXENTO OPERACIÓN DE EXPORTACIÓN" in texto
     assert "FACTURA DE EXPORTACIÓN" in texto
@@ -493,7 +482,7 @@ def test_pdf_contiene_los_datos_del_comprobante(api, arca):
     assert "Comprobante Autorizado" in texto
     assert "CAE N°: 76100000000001" in texto
     assert "Fecha de Vto. de CAE:" in texto
-    assert "SIN VALOR FISCAL" in texto                    # marca de homologación
+    assert "SIN VALOR FISCAL" in texto  # marca de homologación
     # QR RG 4892 incrustado como imagen.
     assert len(PdfReader(io.BytesIO(pdf)).pages[0].images) == 1
 
@@ -522,9 +511,7 @@ def test_datos_hostiles_se_imprimen_literales(api, arca):
 
 def test_caracteres_fuera_de_latin1_se_imprimen(api, arca):
     """La fuente embebida (Liberation Sans) cubre UTF-8 más allá de Latin-1."""
-    factura = _factura_autorizada(
-        api, razon_social="Łódź Spółka — Žilina s.r.o. €"
-    )
+    factura = _factura_autorizada(api, razon_social="Łódź Spółka — Žilina s.r.o. €")
 
     texto = _texto(_pdf_de(api, factura))
 
@@ -563,9 +550,7 @@ def test_baseline_incluye_snapshot_de_render(tmp_path):
     try:
         migrate(conn, migrations=MIGRATIONS[:1])
         inv_cols = {r[1] for r in conn.execute("PRAGMA table_info(invoices)")}
-        item_cols = {
-            r[1] for r in conn.execute("PRAGMA table_info(invoice_items)")
-        }
+        item_cols = {r[1] for r in conn.execute("PRAGMA table_info(invoice_items)")}
         for name in (
             "dst_cmp_ds",
             "cuit_pais_cliente_ds",
@@ -648,9 +633,7 @@ def test_cache_hit_no_vuelve_a_renderizar(api, arca, test_config, monkeypatch):
     assert r.content == b"%PDF-desde-cache"
 
 
-def test_borrar_cache_no_pierde_registro_fiscal(
-    api, arca, test_config, monkeypatch
-):
+def test_borrar_cache_no_pierde_registro_fiscal(api, arca, test_config, monkeypatch):
     """Borrar pdfs/ no toca CAE ni fila en SQLite; se regenera."""
     factura = _factura_autorizada(api)
     invoice_id = factura["id"]
@@ -726,9 +709,7 @@ def test_cache_write_es_atomico(api, arca, test_config, monkeypatch):
     assert list(test_config.paths.pdf_dir.glob(".*.tmp")) == []
 
 
-def test_cache_write_fallido_no_deja_pdf_parcial(
-    api, arca, test_config, monkeypatch
-):
+def test_cache_write_fallido_no_deja_pdf_parcial(api, arca, test_config, monkeypatch):
     """Si el replace falla, el path final no existe (nada que servir a medias)."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])
@@ -776,9 +757,7 @@ def test_renders_concurrentes_del_mismo_comprobante_renderizan_una_vez(
     results: list[bytes] = []
 
     def pedir() -> None:
-        results.append(
-            get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir)
-        )
+        results.append(get_or_render_invoice_pdf(inv, [], test_config.paths.pdf_dir))
 
     primero = threading.Thread(target=pedir)
     primero.start()
@@ -793,9 +772,7 @@ def test_renders_concurrentes_del_mismo_comprobante_renderizan_una_vez(
     assert results == [b"%PDF-una-vez", b"%PDF-una-vez"]
 
 
-def test_render_fallido_libera_el_lock_y_reintenta(
-    api, arca, test_config, monkeypatch
-):
+def test_render_fallido_libera_el_lock_y_reintenta(api, arca, test_config, monkeypatch):
     """Si el render falla, el próximo pedido vuelve a intentar."""
     factura = _factura_autorizada(api)
     inv = repo.get_invoice(api.conn, factura["id"])

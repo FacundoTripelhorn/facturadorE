@@ -58,11 +58,12 @@ Run from the repo root after `uv sync`:
 |---|---|
 | Install / refresh deps | `uv sync` (commits `uv.lock` when deps change) |
 | Lint | `uv run ruff check .` |
+| Format | `uv run ruff format --check .` (apply with `uv run ruff format .`) |
 | Types | `uv run mypy` |
 | Tests | `uv run pytest` |
 
 Tests use an in-process ARCA fake (`tests/arca_fake.py`); no network or real
-credentials required. CI runs `uv sync --frozen` then the same three checks
+credentials required. CI runs `uv sync --frozen` then the same lint, format, types and test checks
 (see `.github/workflows/ci.yml`).
 For narrower scopes by task type, see
 [`docs/agent/verification-matrix.md`](docs/agent/verification-matrix.md).

@@ -25,9 +25,7 @@ from .lock import LockHolder, ProfileLock, ProfileLockHeld
 _RESTORE_LOCK_PORT = 1
 
 
-def _backend_session_healthy(
-    holder: LockHolder, expected: ArcaEnvironment
-) -> bool:
+def _backend_session_healthy(holder: LockHolder, expected: ArcaEnvironment) -> bool:
     """True si ``holder`` sirve ``/health`` OK en el ambiente esperado.
 
     Misma semántica que ``ProcessSupervisor._holder_session_healthy``:
@@ -53,8 +51,7 @@ def _backend_session_healthy(
     if not isinstance(payload, dict):
         return False
     return (
-        payload.get("status") == "ok"
-        and payload.get("environment") == expected.value
+        payload.get("status") == "ok" and payload.get("environment") == expected.value
     )
 
 
@@ -69,18 +66,14 @@ def run_launcher_restore(
 ) -> int:
     """Stop-gated restore: refuses if the profile lock is held (backend live)."""
     try:
-        profile = EnvironmentProfile.resolve(
-            environment, app_data_root=app_data_root
-        )
+        profile = EnvironmentProfile.resolve(environment, app_data_root=app_data_root)
     except ProfileError as exc:
         print_fn(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
     lock = ProfileLock(profile.paths.launcher_lock)
     try:
-        lock.acquire(
-            port=_RESTORE_LOCK_PORT, environment=environment.value
-        )
+        lock.acquire(port=_RESTORE_LOCK_PORT, environment=environment.value)
     except ProfileLockHeld as exc:
         print_fn(
             "ERROR: el backend de este perfil está en marcha. "
@@ -93,9 +86,7 @@ def run_launcher_restore(
     try:
         # Launcher muerto + flock libre + backend huérfano sano: no wipe.
         displaced = lock.displaced_holder
-        if displaced is not None and _backend_session_healthy(
-            displaced, environment
-        ):
+        if displaced is not None and _backend_session_healthy(displaced, environment):
             lock.restore_displaced_holder()
             print_fn(
                 f"ERROR: FacturadorE ({profile.display_name}) ya está "

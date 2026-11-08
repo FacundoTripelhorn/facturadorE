@@ -4,6 +4,7 @@ Servida solo en localhost (design.md §2.5)."""
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -35,6 +36,8 @@ from .localhost_policy import (
 )
 from .setup_guard import SetupGuardMiddleware
 from .upload_limit import UploadLimitMiddleware
+
+logger = logging.getLogger(__name__)
 
 _ERROR_STATUS = {
     NotFoundError: 404,
@@ -106,8 +109,9 @@ def create_app(
         try:
             coordinator.retry_if_pending()
         except Exception:
-            # Cinturón: retry_if_pending ya no debería propagar.
-            pass
+            # Cinturón: retry_if_pending ya no debería propagar, y un backup
+            # fallido nunca debe impedir que la app arranque.
+            logger.exception("Falló el reintento de seed backup al arrancar")
         yield
         coordinator.shutdown()
 

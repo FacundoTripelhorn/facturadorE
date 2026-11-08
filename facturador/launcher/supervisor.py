@@ -110,9 +110,7 @@ class ProcessSupervisor:
     )
     _lock: ProfileLock | None = field(default=None, init=False, repr=False)
     _reused: bool = field(default=False, init=False, repr=False)
-    _last_ui_result: UiOpenResult | None = field(
-        default=None, init=False, repr=False
-    )
+    _last_ui_result: UiOpenResult | None = field(default=None, init=False, repr=False)
 
     @property
     def plan(self) -> BackendLaunchPlan:
@@ -203,9 +201,7 @@ class ProcessSupervisor:
                 # context manager) deben ver base_url/plan del puerto real.
                 self._plan = reused_plan
                 # Solo opener no bloqueante acá (título / interrupt en open_ui).
-                self._open_browser_if_needed(
-                    reused.base_url, allow_blocking=False
-                )
+                self._open_browser_if_needed(reused.base_url, allow_blocking=False)
                 return LaunchResult(plan=reused_plan, reused=True)
 
         try:
@@ -313,9 +309,7 @@ class ProcessSupervisor:
         self._open_browser_if_needed(url_base, allow_blocking=True)
         return self._last_ui_result
 
-    def _open_browser_if_needed(
-        self, base_url: str, *, allow_blocking: bool
-    ) -> None:
+    def _open_browser_if_needed(self, base_url: str, *, allow_blocking: bool) -> None:
         if not self.open_browser:
             return
         url = f"{base_url.rstrip('/')}/"
@@ -324,9 +318,7 @@ class ProcessSupervisor:
                 # Opener inyectado (tests / --custom): no bloquea; equivalente
                 # al fallback de navegador para el ciclo de vida en __main__.
                 self.browser_opener(url)
-                self._last_ui_result = UiOpenResult(
-                    reason=UiEndReason.BROWSER_FALLBACK
-                )
+                self._last_ui_result = UiOpenResult(reason=UiEndReason.BROWSER_FALLBACK)
                 return
 
             if not allow_blocking:
@@ -384,8 +376,7 @@ class ProcessSupervisor:
             proc = subprocess.Popen(plan.command, **kwargs)
         except OSError as exc:
             raise LauncherError(
-                f"No se pudo iniciar el backend de {plan.profile.display_name}: "
-                f"{exc}"
+                f"No se pudo iniciar el backend de {plan.profile.display_name}: {exc}"
             ) from exc
         # Drenar stdout en background: si el PIPE se llena, el hijo se cuelga
         # y el readiness nunca llega.
@@ -444,9 +435,7 @@ class ProcessSupervisor:
         try:
             with urllib.request.urlopen(url, timeout=1.0) as response:
                 if response.status != 200:
-                    raise LauncherError(
-                        f"Readiness devolvió HTTP {response.status}"
-                    )
+                    raise LauncherError(f"Readiness devolvió HTTP {response.status}")
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             raise LauncherError(f"Readiness devolvió HTTP {exc.code}") from exc
@@ -466,9 +455,7 @@ class ProcessSupervisor:
         status = payload.get("status")
         environment = payload.get("environment")
         if status != "ok":
-            raise LauncherError(
-                f"Readiness no OK (status={status!r})."
-            )
+            raise LauncherError(f"Readiness no OK (status={status!r}).")
         if environment != expected.value:
             raise LauncherError(
                 f"El backend arrancó en {environment!r}, pero el launcher "

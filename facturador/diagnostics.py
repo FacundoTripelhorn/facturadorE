@@ -116,7 +116,8 @@ def _protegido(
 
 def _sin_base(titulo: str) -> Chequeo:
     return Chequeo(
-        titulo, Nivel.BLOQUEA,
+        titulo,
+        Nivel.BLOQUEA,
         "No se pudo leer la base de datos.",
         Accion("Ver el chequeo «Base de datos»."),
     )
@@ -139,27 +140,32 @@ def _certificado(
     try:
         meta = load_certificate_metadata(profile)
     except CertificateError:
-        return Chequeo(titulo, Nivel.BLOQUEA, "El certificado instalado no se "
-                       "puede leer.", subir)
+        return Chequeo(
+            titulo, Nivel.BLOQUEA, "El certificado instalado no se puede leer.", subir
+        )
     if meta is None:
         return Chequeo(titulo, Nivel.BLOQUEA, "No hay certificado instalado.", subir)
 
     vence = meta.not_valid_after
     if vence <= ahora:
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
-            f"CUIT {meta.cuit}. Venció el {_fecha(vence)}.", renovar,
+            titulo,
+            Nivel.BLOQUEA,
+            f"CUIT {meta.cuit}. Venció el {_fecha(vence)}.",
+            renovar,
         )
     if meta.not_valid_before > ahora:
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             f"CUIT {meta.cuit}. Todavía no es válido (desde el "
             f"{_fecha(meta.not_valid_before)}).",
             subir,
         )
     if not certificate_pair_is_usable(profile):
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             f"CUIT {meta.cuit}. El certificado y la clave no forman un par "
             "válido, o la clave tiene permisos demasiado abiertos.",
             subir,
@@ -170,7 +176,8 @@ def _certificado(
     sellado = get_sealed_fiscal_cuit(conn)
     if sellado is not None and sellado != meta.cuit:
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             f"El certificado es del CUIT {meta.cuit}, pero este perfil emite "
             f"con el CUIT {sellado}.",
             subir,
@@ -180,8 +187,10 @@ def _certificado(
     detalle = f"CUIT {meta.cuit}. Vence el {_fecha(vence)}."
     if dias < CERT_AVISO_DIAS:
         return Chequeo(
-            titulo, Nivel.AVISO,
-            f"{detalle} Quedan {dias} días.", renovar,
+            titulo,
+            Nivel.AVISO,
+            f"{detalle} Quedan {dias} días.",
+            renovar,
         )
     return Chequeo(titulo, Nivel.OK, detalle)
 
@@ -208,24 +217,37 @@ def _emisor_y_puntos_de_venta(
         return [Chequeo("Emisor", Nivel.BLOQUEA, "No hay emisor activo.", configurar)]
     emisor = load_settings(conn).emisor
     if emisor.ambiente != profile.environment.value:
-        return [Chequeo(
-            "Emisor", Nivel.BLOQUEA,
-            "El emisor activo es de otro ambiente.", configurar,
-        )]
+        return [
+            Chequeo(
+                "Emisor",
+                Nivel.BLOQUEA,
+                "El emisor activo es de otro ambiente.",
+                configurar,
+            )
+        ]
     if not emisor.completo:
-        return [Chequeo(
-            "Emisor", Nivel.BLOQUEA,
-            f"{emisor.razon_social or 'Sin razón social'}: faltan datos del "
-            "encabezado del comprobante.",
-            configurar,
-        )]
+        return [
+            Chequeo(
+                "Emisor",
+                Nivel.BLOQUEA,
+                f"{emisor.razon_social or 'Sin razón social'}: faltan datos del "
+                "encabezado del comprobante.",
+                configurar,
+            )
+        ]
     chequeos = [Chequeo("Emisor", Nivel.OK, emisor.razon_social)]
     if not emisor.puntos_venta:
-        chequeos.append(Chequeo(
-            "Puntos de venta", Nivel.BLOQUEA, "El emisor no tiene puntos de venta.",
-            Accion("Agregar un punto de venta en Configuración.",
-                   enlace="/configuracion"),
-        ))
+        chequeos.append(
+            Chequeo(
+                "Puntos de venta",
+                Nivel.BLOQUEA,
+                "El emisor no tiene puntos de venta.",
+                Accion(
+                    "Agregar un punto de venta en Configuración.",
+                    enlace="/configuracion",
+                ),
+            )
+        )
     else:
         pvs = ", ".join(str(pv) for pv in emisor.puntos_venta)
         chequeos.append(Chequeo("Puntos de venta", Nivel.OK, pvs))
@@ -242,13 +264,15 @@ def _base_de_datos(conn: sqlite3.Connection) -> Chequeo:
     esperada = latest_version()
     if integridad != "ok":
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             "La verificación de integridad encontró errores.",
             Accion("Restaurar el perfil desde el backup (ver README, Backups)."),
         )
     if version != esperada:
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             f"Esquema v{version}; esta versión de la app espera v{esperada}.",
             Accion("Usar la versión de la app que corresponde a este perfil."),
         )
@@ -263,7 +287,8 @@ def _pendientes(conn: sqlite3.Connection) -> Chequeo:
     titulo = "Comprobantes a reconciliar"
     if n:
         return Chequeo(
-            titulo, Nivel.AVISO,
+            titulo,
+            Nivel.AVISO,
             f"{n} sin respuesta concluyente de ARCA.",
             Accion("Abrirlos para reconciliar con ARCA.", enlace="/comprobantes"),
         )
@@ -272,39 +297,46 @@ def _pendientes(conn: sqlite3.Connection) -> Chequeo:
 
 def _backup(profile: EnvironmentProfile, conn: sqlite3.Connection) -> Chequeo:
     titulo = "Backup"
-    configurar = Accion("Configurar el bucket en Configuración, Backups.",
-                        enlace="/configuracion")
+    configurar = Accion(
+        "Configurar el bucket en Configuración, Backups.", enlace="/configuracion"
+    )
     if not load_settings(conn).backup_s3_bucket:
         return Chequeo(
-            titulo, Nivel.AVISO,
+            titulo,
+            Nivel.AVISO,
             "Solo local: sin bucket S3, perder esta máquina obliga a "
             "reconfigurar el perfil a mano.",
             configurar,
         )
     if not _hay_recipients_validos(profile):
         return Chequeo(
-            titulo, Nivel.AVISO,
+            titulo,
+            Nivel.AVISO,
             "No hay claves age válidas en recipients.txt: el backup no se "
             "puede cifrar.",
             Accion("Agregar las claves públicas (ver README, Backups)."),
         )
     estado = load_seed_backup_state(conn)
-    ultimo = f" Último backup: {estado.last_success_at[:10]}." if (
-        estado.last_success_at
-    ) else ""
+    ultimo = (
+        f" Último backup: {estado.last_success_at[:10]}."
+        if (estado.last_success_at)
+        else ""
+    )
     if estado.status is SeedBackupStatus.OK:
         return Chequeo(titulo, Nivel.OK, f"Al día.{ultimo}")
     if estado.status is SeedBackupStatus.FAILED:
         # El texto del error puede traer rutas locales: no se muestra.
         return Chequeo(
-            titulo, Nivel.AVISO,
+            titulo,
+            Nivel.AVISO,
             f"Falló el último intento de subida.{ultimo}",
             Accion("Revisar el log; se reintenta al abrir la app."),
         )
     if estado.status is SeedBackupStatus.PENDING:
         return Chequeo(titulo, Nivel.AVISO, f"Hay cambios sin subir.{ultimo}")
     return Chequeo(
-        titulo, Nivel.AVISO,
+        titulo,
+        Nivel.AVISO,
         "Todavía no se subió ningún backup: se sube al cambiar la configuración.",
     )
 
@@ -324,7 +356,8 @@ def _avisos_arca(profile: EnvironmentProfile) -> Chequeo:
     if not eventos:
         return Chequeo("Avisos de ARCA", Nivel.OK, "Ninguno vigente.")
     return Chequeo(
-        "Avisos de ARCA", Nivel.AVISO,
+        "Avisos de ARCA",
+        Nivel.AVISO,
         " · ".join(f"{e.code}: {e.msg}" for e in eventos),
     )
 
@@ -344,26 +377,39 @@ def diagnosticar_arca(
     except sqlite3.DatabaseError:
         return [_sin_base("ARCA")]
     if not listo:
-        return [Chequeo(
-            "ARCA", Nivel.BLOQUEA,
-            "No se puede verificar hasta completar la configuración inicial.",
-            Accion("Terminar la configuración inicial.", enlace="/setup"),
-        )]
+        return [
+            Chequeo(
+                "ARCA",
+                Nivel.BLOQUEA,
+                "No se puede verificar hasta completar la configuración inicial.",
+                Accion("Terminar la configuración inicial.", enlace="/setup"),
+            )
+        ]
     try:
         estado = wsfex.dummy()
     except (WsfexError, httpx.HTTPError) as exc:
-        return [Chequeo(
-            "Conexión con ARCA", Nivel.BLOQUEA, f"ARCA no responde: {exc}",
-            Accion("Reintentar en unos minutos; ver si ARCA anunció mantenimiento."),
-        )]
+        return [
+            Chequeo(
+                "Conexión con ARCA",
+                Nivel.BLOQUEA,
+                f"ARCA no responde: {exc}",
+                Accion(
+                    "Reintentar en unos minutos; ver si ARCA anunció mantenimiento."
+                ),
+            )
+        ]
     # dummy() devuelve solo appserver/dbserver/authserver: los avisos que
     # ARCA agregue a la respuesta no cuentan como caída.
     servidores = ", ".join(f"{k}: {v}" for k, v in sorted(estado.items()))
     if len(estado) < 3 or any(v.upper() != "OK" for v in estado.values()):
-        return [Chequeo(
-            "Conexión con ARCA", Nivel.BLOQUEA, servidores or "Respuesta vacía.",
-            Accion("Reintentar en unos minutos."),
-        )]
+        return [
+            Chequeo(
+                "Conexión con ARCA",
+                Nivel.BLOQUEA,
+                servidores or "Respuesta vacía.",
+                Accion("Reintentar en unos minutos."),
+            )
+        ]
     chequeos = [Chequeo("Conexión con ARCA", Nivel.OK, servidores)]
     for pv in puntos_venta:
         try:
@@ -379,7 +425,9 @@ def _numeracion(conn: sqlite3.Connection, wsfex: WsfexClient, pv: int) -> Cheque
         ultimo_arca = wsfex.get_last_cmp(pv, CBTE_TIPO_FACTURA_E)
     except WsaaError as exc:
         return Chequeo(
-            titulo, Nivel.BLOQUEA, f"No se pudo autenticar con ARCA: {exc}",
+            titulo,
+            Nivel.BLOQUEA,
+            f"No se pudo autenticar con ARCA: {exc}",
             Accion("Verificar que el certificado esté asociado al servicio wsfex."),
         )
     except (WsfexError, httpx.HTTPError) as exc:
@@ -389,13 +437,15 @@ def _numeracion(conn: sqlite3.Connection, wsfex: WsfexClient, pv: int) -> Cheque
         return Chequeo(titulo, Nivel.OK, f"Último comprobante {local}, igual en ARCA.")
     if ultimo_arca > local:
         return Chequeo(
-            titulo, Nivel.BLOQUEA,
+            titulo,
+            Nivel.BLOQUEA,
             f"ARCA va por el {ultimo_arca} y el registro local por el {local}: "
             "hay comprobantes emitidos desde otro lado.",
             Accion("Sincronizar desde ARCA", post="/ui/registry/catch-up"),
         )
     return Chequeo(
-        titulo, Nivel.BLOQUEA,
+        titulo,
+        Nivel.BLOQUEA,
         f"El registro local va por el {local} pero ARCA por el {ultimo_arca}: "
         "no emitir hasta investigar.",
     )

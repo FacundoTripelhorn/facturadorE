@@ -63,12 +63,8 @@ def test_backend_en_el_exe_relanza_el_mismo_exe(congelado, tmp_path):
 def test_main_despacha_backend_o_launcher(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTURADOR_APP_DATA", str(tmp_path))
     llamadas: list[object] = []
-    monkeypatch.setattr(
-        "facturador.__main__.main", lambda: llamadas.append("backend")
-    )
-    monkeypatch.setattr(
-        launcher_main, "main", lambda argv: llamadas.append(argv) or 7
-    )
+    monkeypatch.setattr("facturador.__main__.main", lambda: llamadas.append("backend"))
+    monkeypatch.setattr(launcher_main, "main", lambda argv: llamadas.append(argv) or 7)
 
     assert frozen.main([frozen.BACKEND_FLAG]) == 0
     assert frozen.main(["--env", "homo"]) == 7

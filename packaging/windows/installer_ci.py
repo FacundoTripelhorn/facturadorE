@@ -79,7 +79,11 @@ def main(instalador: Path) -> int:
     datos = local / APP
     acceso = (
         Path(os.environ["APPDATA"])
-        / "Microsoft" / "Windows" / "Start Menu" / "Programs" / f"{APP}.lnk"
+        / "Microsoft"
+        / "Windows"
+        / "Start Menu"
+        / "Programs"
+        / f"{APP}.lnk"
     )
     assert not destino.exists(), f"{destino} ya existe: no se pisa una instalación"
 

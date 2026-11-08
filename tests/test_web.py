@@ -101,7 +101,7 @@ def test_home_precarga_cliente_default_y_cotizacion(api, arca):
     # Cotización ARCA del día, informativa, en formato argentino.
     assert formato_importe(arca.ctz) in r.text
     assert formato_importe(arca.ctz) == "1.145,5690"
-    assert "Monto (USD)" in r.text            # DOL se muestra como USD
+    assert "Monto (USD)" in r.text  # DOL se muestra como USD
     assert "htmx.min.js" in r.text
 
 
@@ -110,7 +110,7 @@ def test_home_es_solo_emision_sin_listado(api, arca):
     r = api.get("/")
     assert "Generar borrador" in r.text
     assert 'href="/comprobantes"' in r.text
-    assert "<table" not in r.text             # el registro no vive acá
+    assert "<table" not in r.text  # el registro no vive acá
 
 
 def test_static_htmx_se_sirve_local(api):
@@ -125,7 +125,7 @@ def test_static_htmx_se_sirve_local(api):
 def test_generar_redirige_a_revision_sin_tocar_arca(api, arca):
     _crear_cliente_por_form(api)
     invoice_id = _generar_borrador(api)
-    assert arca.calls["FEXAuthorize"] == 0    # NADA viajó a ARCA todavía
+    assert arca.calls["FEXAuthorize"] == 0  # NADA viajó a ARCA todavía
 
     r = api.get(f"/facturas/{invoice_id}/revisar")
     assert r.status_code == 200
@@ -166,11 +166,11 @@ def test_confirmar_autoriza_y_muestra_detalle(api, arca):
 
     detalle = api.get(f"/facturas/{invoice_id}")
     assert "autorizada" in detalle.text
-    assert "76100000000001" in detalle.text   # CAE
+    assert "76100000000001" in detalle.text  # CAE
     assert "/pdf" in detalle.text
     assert "Lo enviado a ARCA" in detalle.text
-    assert "<input" not in detalle.text       # read-only: sin inputs
-    assert "Generar" not in detalle.text      # sin form de nueva factura
+    assert "<input" not in detalle.text  # read-only: sin inputs
+    assert "Generar" not in detalle.text  # sin form de nueva factura
 
 
 def test_detalle_autorizado_ofrece_ver_y_descargar_el_pdf_sin_salir_de_la_app(
@@ -266,9 +266,7 @@ def test_constatacion_muestra_desajuste(api, arca):
     assert "107" in r.text
 
 
-def test_constatacion_html_outage_es_503_operador(
-    test_config, test_profile, arca
-):
+def test_constatacion_html_outage_es_503_operador(test_config, test_profile, arca):
     """Página HTML 502 de WSCDC → 503 en UI, no 500 por ParseError."""
     from facturador import db
     from facturador.api import create_app
@@ -428,9 +426,7 @@ def test_constatacion_manual_rechaza_importe_no_finito(api, arca):
     "importe",
     ["12345678901234,00", "1,234", "99999999999999999999999999999999999999,5"],
 )
-def test_constatacion_manual_rechaza_importe_fuera_de_formato_arca(
-    api, arca, importe
-):
+def test_constatacion_manual_rechaza_importe_fuera_de_formato_arca(api, arca, importe):
     """El formato ARCA ImpTotal (13 enteros + 2 decimales) los rechaza antes
     de armar el request, sin renderizar el número."""
     r = api.post(
@@ -560,9 +556,9 @@ def test_db_desactualizada_reabre_revision_con_force(api, arca):
         f"/ui/facturas/{invoice_id}/authorize",
         data=with_csrf(api),
     )
-    assert r.status_code == 409               # re-render de la revisión
+    assert r.status_code == 409  # re-render de la revisión
     assert "desactualizado" in r.text
-    assert "force=true" in r.text             # botón para forzar a conciencia
+    assert "force=true" in r.text  # botón para forzar a conciencia
 
     retry = _autorizar(api, invoice_id, query="?force=true")
     assert retry.status_code == 303
@@ -642,7 +638,7 @@ def test_unknown_ofrece_reintento_en_el_detalle(api, arca):
 
     detalle = api.get(f"/facturas/{invoice_id}")
     assert "A reconciliar" in detalle.text
-    assert "Reintentar" in detalle.text       # reproceso idempotente
+    assert "Reintentar" in detalle.text  # reproceso idempotente
 
     listado = api.get("/comprobantes?estado=atencion")
     assert "Ver detalle" in listado.text
@@ -668,7 +664,7 @@ def test_comprobantes_filtra_por_tab(api, arca):
 
     borradores = api.get("/comprobantes?estado=borradores")
     assert "Revisar" in borradores.text
-    assert "76100000000001" not in borradores.text   # la autorizada no aparece
+    assert "76100000000001" not in borradores.text  # la autorizada no aparece
 
     autorizadas = api.get("/comprobantes?estado=autorizadas")
     assert "76100000000001" in autorizadas.text
@@ -682,9 +678,7 @@ def test_comprobantes_filtra_por_tab(api, arca):
 
 
 def test_datos_hostiles_quedan_escapados_en_el_frontend(api, arca):
-    _crear_cliente_por_form(
-        api, razon_social='PYME <script>alert(1)</script> & "CO"'
-    )
+    _crear_cliente_por_form(api, razon_social='PYME <script>alert(1)</script> & "CO"')
     home = api.get("/")
     assert "<script>alert(1)</script>" not in home.text
     assert "&lt;script&gt;" in home.text
@@ -704,8 +698,8 @@ def test_alta_y_edicion_de_cliente_por_form(api, arca):
     _crear_cliente_por_form(api)
     pagina = api.get("/clientes")
     assert "CLIENTE URUGUAY S.A." in pagina.text
-    assert "★" in pagina.text                 # marcado como default
-    assert "URUGUAY" in pagina.text           # select poblado del cache params
+    assert "★" in pagina.text  # marcado como default
+    assert "URUGUAY" in pagina.text  # select poblado del cache params
 
     cliente_id = api.get("/clients").json()[0]["id"]
     edit = api.get(f"/clientes?edit={cliente_id}")
@@ -713,9 +707,7 @@ def test_alta_y_edicion_de_cliente_por_form(api, arca):
 
     editado = {**CLIENTE_FORM, "client_id": cliente_id}
     editado["razon_social"] = "RENOMBRADO S.A."
-    r = api.post(
-        "/ui/clientes", data=with_csrf(api, editado), follow_redirects=False
-    )
+    r = api.post("/ui/clientes", data=with_csrf(api, editado), follow_redirects=False)
     assert r.status_code == 303
     assert api.get("/clients").json()[0]["razon_social"] == "RENOMBRADO S.A."
 
@@ -726,7 +718,8 @@ def test_alta_de_cliente_invalida_no_pierde_la_pagina(api, arca):
         data=with_csrf(api, {**CLIENTE_FORM, "pais_dst": "999"}),
     )
     assert r.status_code == 422
-    assert "pais_dst" in r.text               # error legible en la misma página
+    assert "pais_dst" in r.text  # error legible en la misma página
+
 
 def test_selects_pais_y_cuit_pais_ordenados_por_descripcion(api, arca):
     """País destino y CUIT país se listan A→Z por descripción, no por código."""
@@ -755,16 +748,12 @@ def test_selects_pais_y_cuit_pais_ordenados_por_descripcion(api, arca):
 
     html = api.get("/clientes").text
 
-    pais_block = re.search(
-        r'id="pais_dst".*?</select>', html, flags=re.DOTALL
-    )
+    pais_block = re.search(r'id="pais_dst".*?</select>', html, flags=re.DOTALL)
     assert pais_block is not None
     pais_labels = re.findall(r"<option[^>]*>\s*(.*?)\s*</option>", pais_block.group(0))
     assert pais_labels == ["BRASIL", "URUGUAY", "ZAMBIA"]
 
-    cuit_block = re.search(
-        r'id="cuit_pais".*?</select>', html, flags=re.DOTALL
-    )
+    cuit_block = re.search(r'id="cuit_pais".*?</select>', html, flags=re.DOTALL)
     assert cuit_block is not None
     cuit_labels = re.findall(r"<option[^>]*>\s*(.*?)\s*</option>", cuit_block.group(0))
     assert cuit_labels == [
@@ -772,7 +761,6 @@ def test_selects_pais_y_cuit_pais_ordenados_por_descripcion(api, arca):
         "URUGUAY - Persona Juridica",
         "ZAMBIA - Persona Juridica",
     ]
-
 
 
 # --- configuración (settings de dominio: viven en la DB) ---
@@ -1095,9 +1083,7 @@ def test_paginas_muestran_identidad_de_ambiente(
 ):
     """Píldora + título en lenguaje de negocio; franja solo en homologación;
     sin paths ni secretos."""
-    client, profile = _api_para_ambiente(
-        environment, tmp_path, test_cert_and_key, arca
-    )
+    client, profile = _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca)
     titulo = f"facturador — {label}"
     for path in _PAGINAS_NORMALES:
         r = client.get(path)
@@ -1162,9 +1148,7 @@ def test_produccion_muestra_avisos_de_seguridad_fiscal(
 def test_health_identifica_ambiente_sin_filtrar_secretos(
     environment, tmp_path, test_cert_and_key, arca
 ):
-    client, profile = _api_para_ambiente(
-        environment, tmp_path, test_cert_and_key, arca
-    )
+    client, profile = _api_para_ambiente(environment, tmp_path, test_cert_and_key, arca)
     r = client.get("/health")
     assert r.status_code == 200
     payload = r.json()
@@ -1242,9 +1226,7 @@ def test_setup_instala_certificado_y_muestra_metadata(
     assert status["ready"] is False
 
 
-def test_setup_emisor_onboarding_llega_a_ready(
-    tmp_path, test_cert_and_key, arca
-):
+def test_setup_emisor_onboarding_llega_a_ready(tmp_path, test_cert_and_key, arca):
     """Crear emisor en /setup activa y completa el perfil."""
     client, profile = _client_sin_certificados(tmp_path, arca, seed=False)
     cert_pem, key_pem = test_cert_and_key
@@ -1470,9 +1452,7 @@ def test_setup_emisor_rechaza_editar_emisor_de_otro_ambiente(
     assert row["razon_social"] == "LEGACY PROD S.A."
 
 
-def test_setup_emisor_rechaza_id_ajeno_al_onboarding(
-    tmp_path, test_cert_and_key, arca
-):
+def test_setup_emisor_rechaza_id_ajeno_al_onboarding(tmp_path, test_cert_and_key, arca):
     """Codex: no actualizar otro emisor del mismo perfil vía emisor_id."""
     from facturador import repo
     from facturador.settings import Emisor, Settings, save_settings
@@ -1509,9 +1489,7 @@ def test_setup_emisor_rechaza_id_ajeno_al_onboarding(
             )
         ),
     )
-    primero_id, segundo_id = (
-        row["id"] for row in repo.list_emisores(conn)[:2]
-    )
+    primero_id, segundo_id = (row["id"] for row in repo.list_emisores(conn)[:2])
 
     config = Config(env=ArcaEnvironment.HOMO, paths=profile.paths)
     wsfex = WsfexClient(

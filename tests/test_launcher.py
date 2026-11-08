@@ -189,9 +189,7 @@ def test_chooser_options_lenguaje_de_negocio_sin_jerga_interna(tmp_path):
     assert "fiscal" in prod_desc
     assert "real" in prod_desc
 
-    visible = " ".join(
-        f"{opt.title} {opt.description}" for opt in options
-    ).lower()
+    visible = " ".join(f"{opt.title} {opt.description}" for opt in options).lower()
     for term in _FORBIDDEN_CHOOSER_TERMS:
         assert term.lower() not in visible, term
 
@@ -836,9 +834,7 @@ def test_open_app_ui_no_avisa_si_la_ventana_abre():
     assert opened == []
 
 
-def test_supervisor_avisa_con_el_ambiente_si_la_ventana_no_abre(
-    tmp_path, monkeypatch
-):
+def test_supervisor_avisa_con_el_ambiente_si_la_ventana_no_abre(tmp_path, monkeypatch):
     """El supervisor le pasa a open_app_ui su aviso, con el ambiente."""
     from facturador.launcher import UiEndReason, UiOpenResult
     from facturador.launcher import supervisor as supervisor_mod
@@ -937,9 +933,7 @@ def test_supervisor_open_ui_usa_open_app_ui_inyectable(
         supervisor.stop()
 
 
-def test_supervisor_browser_opener_inyectado_no_bloquea(
-    tmp_path, test_cert_and_key
-):
+def test_supervisor_browser_opener_inyectado_no_bloquea(tmp_path, test_cert_and_key):
     """Opener inyectado se registra como fallback no bloqueante."""
     from facturador.launcher import UiEndReason
 
@@ -1278,9 +1272,7 @@ def test_read_lock_holder_no_lee_byte_sentinel_bloqueado(tmp_path, monkeypatch):
 
     path = tmp_path / "data" / "launcher.lock"
     path.parent.mkdir(parents=True)
-    path.write_bytes(
-        b'\0{"v":1,"pid":7,"port":8410,"environment":"homo"}\n'
-    )
+    path.write_bytes(b'\0{"v":1,"pid":7,"port":8410,"environment":"homo"}\n')
 
     original_open = Path.open
 
@@ -1543,9 +1535,7 @@ time.sleep(60)
         proc.wait(timeout=5)
 
 
-def test_supervisor_recupera_lock_stale_y_arranca(
-    tmp_path, test_cert_and_key
-):
+def test_supervisor_recupera_lock_stale_y_arranca(tmp_path, test_cert_and_key):
     """Leftover launcher.lock sin flock no bloquea un arranque limpio."""
     app_data = tmp_path / "appdata"
     profile = _perfil_con_certs(ArcaEnvironment.HOMO, app_data, test_cert_and_key)
@@ -1604,9 +1594,7 @@ def test_spawn_falla_libera_lock_para_reintentar(tmp_path):
     lock.release()
 
 
-def test_backend_huerfano_sano_falla_claro_sin_segundo_proceso(
-    tmp_path, monkeypatch
-):
+def test_backend_huerfano_sano_falla_claro_sin_segundo_proceso(tmp_path, monkeypatch):
     """Flock libre + /health OK (launcher muerto): no spawnea; mensaje claro."""
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -1802,9 +1790,7 @@ def test_handle_change_confirma_otro_ambiente_stop_antes_de_switch(tmp_path):
     assert order == ["clear", "stop"]
 
 
-def test_handle_change_a_prod_cancel_ack_mantiene_backend(
-    tmp_path, monkeypatch
-):
+def test_handle_change_a_prod_cancel_ack_mantiene_backend(tmp_path, monkeypatch):
     """Cancelar ack de Producción no apaga la sesión actual."""
     from facturador.launcher.__main__ import _handle_change_environment_request
     from facturador.launcher.switch import (
@@ -1921,9 +1907,7 @@ def test_main_switch_stop_antes_de_arrancar_destino_y_fallo_vuelve_chooser():
 
     events: list[tuple[str, str]] = []
     # 1ª = arranque homo; 2ª = chooser del cambio → prod; 3ª = tras fallo → homo.
-    picks = iter(
-        [ArcaEnvironment.HOMO, ArcaEnvironment.PROD, ArcaEnvironment.HOMO]
-    )
+    picks = iter([ArcaEnvironment.HOMO, ArcaEnvironment.PROD, ArcaEnvironment.HOMO])
     session_n = {"homo": 0}
 
     class _Proc:
@@ -2177,9 +2161,7 @@ def test_prompt_production_confirm_tty_acepta_y_cancela():
     )
 
 
-def test_main_primera_prod_pide_confirmacion_y_persiste(
-    tmp_path, monkeypatch
-):
+def test_main_primera_prod_pide_confirmacion_y_persiste(tmp_path, monkeypatch):
     from facturador.launcher.__main__ import main
 
     app_data = tmp_path / "appdata"
@@ -2214,14 +2196,10 @@ def test_main_primera_prod_pide_confirmacion_y_persiste(
     assert code == 0
     assert started == [ArcaEnvironment.PROD]
     assert confirms == [True]
-    assert is_production_acknowledged(
-        ProfilePaths(root=app_data / "prod")
-    )
+    assert is_production_acknowledged(ProfilePaths(root=app_data / "prod"))
 
 
-def test_main_cancelar_confirmacion_prod_vuelve_al_chooser(
-    tmp_path, monkeypatch
-):
+def test_main_cancelar_confirmacion_prod_vuelve_al_chooser(tmp_path, monkeypatch):
     from facturador.launcher.__main__ import main
 
     app_data = tmp_path / "appdata"
@@ -2292,9 +2270,7 @@ def test_main_prod_con_ack_previo_no_repregunta(tmp_path, monkeypatch):
 
     code = main(
         ["--env", "prod"],
-        choose=lambda: (_ for _ in ()).throw(
-            AssertionError("no debe abrir chooser")
-        ),
+        choose=lambda: (_ for _ in ()).throw(AssertionError("no debe abrir chooser")),
         confirm_production=lambda: (_ for _ in ()).throw(
             AssertionError("no debe re-preguntar")
         ),

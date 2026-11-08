@@ -55,18 +55,17 @@ def test_fresh_profile_creates_latest_schema(tmp_path: Path) -> None:
 def test_connect_is_idempotent_when_already_migrated(tmp_path: Path) -> None:
     path = tmp_path / "idem.db"
     first = db.connect(path)
-    first.execute(
-        "INSERT INTO settings (key, value) VALUES ('k', 'v')"
-    )
+    first.execute("INSERT INTO settings (key, value) VALUES ('k', 'v')")
     first.commit()
     first.close()
 
     second = db.connect(path)
     try:
         assert current_version(second) == latest_version()
-        assert second.execute(
-            "SELECT value FROM settings WHERE key = 'k'"
-        ).fetchone()[0] == "v"
+        assert (
+            second.execute("SELECT value FROM settings WHERE key = 'k'").fetchone()[0]
+            == "v"
+        )
     finally:
         second.close()
 
@@ -96,9 +95,7 @@ def test_older_schema_upgrades_in_order(tmp_path: Path) -> None:
         assert current_version(conn) == 3
         applied = [
             r["name"]
-            for r in conn.execute(
-                "SELECT name FROM schema_migrations ORDER BY version"
-            )
+            for r in conn.execute("SELECT name FROM schema_migrations ORDER BY version")
         ]
         assert applied == ["baseline", "add_marker", "seed_flag"]
         row = conn.execute(
@@ -118,9 +115,7 @@ def test_failed_migration_leaves_db_unchanged(tmp_path: Path) -> None:
     try:
         baseline = MIGRATIONS[0]
         migrate(conn, migrations=(baseline,))
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES ('keep', 'me')"
-        )
+        conn.execute("INSERT INTO settings (key, value) VALUES ('keep', 'me')")
         conn.commit()
         assert current_version(conn) == 1
 
@@ -138,12 +133,12 @@ def test_failed_migration_leaves_db_unchanged(tmp_path: Path) -> None:
 
         assert current_version(conn) == 1
         assert "marker" not in {
-            r[1]
-            for r in conn.execute("PRAGMA table_info(settings)").fetchall()
+            r[1] for r in conn.execute("PRAGMA table_info(settings)").fetchall()
         }
-        assert conn.execute(
-            "SELECT value FROM settings WHERE key = 'keep'"
-        ).fetchone()[0] == "me"
+        assert (
+            conn.execute("SELECT value FROM settings WHERE key = 'keep'").fetchone()[0]
+            == "me"
+        )
         assert _tables(conn) == BASELINE_TABLES
     finally:
         conn.close()

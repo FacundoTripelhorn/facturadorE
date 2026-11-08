@@ -30,9 +30,7 @@ def _make_ta_xml(
     sign="sig==",
     expiration: dt.datetime | None = None,
 ) -> str:
-    expiration = expiration or (
-        dt.datetime.now(dt.UTC) + dt.timedelta(hours=12)
-    )
+    expiration = expiration or (dt.datetime.now(dt.UTC) + dt.timedelta(hours=12))
     generation = dt.datetime.now(dt.UTC)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketResponse version="1.0">
@@ -123,9 +121,7 @@ def test_login_request_es_soap_valido_con_cms_base64(test_cert_and_key):
     der = sign_tra_cms(build_tra(), cert_pem, key_pem)
     body = build_login_request(der)
     root = ET.fromstring(body)
-    in0 = root.find(
-        ".//{http://wsaa.view.sua.dvadac.desein.afip.gov}in0"
-    )
+    in0 = root.find(".//{http://wsaa.view.sua.dvadac.desein.afip.gov}in0")
     assert base64.b64decode(in0.text) == der
 
 
@@ -142,9 +138,7 @@ def test_parseo_ta_ok():
 
 
 def test_ta_vencido_rechazado_al_parsear():
-    vencido = _make_ta_xml(
-        expiration=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1)
-    )
+    vencido = _make_ta_xml(expiration=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1))
     with pytest.raises(WsaaError, match="vencido"):
         parse_login_response(_make_soap_response(vencido), "homo")
 
@@ -193,11 +187,11 @@ def test_cache_descarta_ta_vencido(tmp_path):
 
 def test_cache_descarta_ta_de_otro_servicio_o_ambiente(tmp_path):
     cache = TicketCache(tmp_path / "ta.json")
-    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
-                       service="wsfe"))
+    cache.save(
+        _ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12), service="wsfe")
+    )
     assert cache.load("homo") is None
-    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12),
-                       env="prod"))
+    cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(hours=12), env="prod"))
     assert cache.load("homo") is None
 
 
@@ -225,16 +219,14 @@ def test_obtener_ta_reusar_y_renovar(test_config):
 
     client = _client_with_transport(test_config, handler)
 
-    primero = client.get_ticket()   # va a WSAA
-    segundo = client.get_ticket()   # sale del cache
+    primero = client.get_ticket()  # va a WSAA
+    segundo = client.get_ticket()  # sale del cache
     assert llamadas["n"] == 1
     assert primero == segundo
 
     # Forzar expiración: reescribir el cache con un TA al borde de vencer.
-    client.cache.save(
-        _ticket(dt.datetime.now(dt.UTC) + dt.timedelta(minutes=2))
-    )
-    client.get_ticket()             # renueva contra WSAA
+    client.cache.save(_ticket(dt.datetime.now(dt.UTC) + dt.timedelta(minutes=2)))
+    client.get_ticket()  # renueva contra WSAA
     assert llamadas["n"] == 2
 
 

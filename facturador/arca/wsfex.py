@@ -151,26 +151,26 @@ class InvoiceItem:
 class Invoice:
     """Factura E de exportación de servicios (caso canónico de design.md §0.1)."""
 
-    arca_id: int              # Id idempotente de FEXAuthorize
-    fecha_cbte: str           # AAAAMMDD
+    arca_id: int  # Id idempotente de FEXAuthorize
+    fecha_cbte: str  # AAAAMMDD
     punto_vta: int
     cbte_nro: int
-    dst_cmp: int              # país destino (código ARCA)
+    dst_cmp: int  # país destino (código ARCA)
     cliente: str
     cuit_pais_cliente: int
     domicilio_cliente: str
     id_impositivo: str
     moneda_ctz: Decimal
     imp_total: Decimal
-    fecha_pago: str           # AAAAMMDD; puede diferir de fecha_cbte
+    fecha_pago: str  # AAAAMMDD; puede diferir de fecha_cbte
     forma_pago: str
     items: list[InvoiceItem]
     cbte_tipo: int = CBTE_TIPO_FACTURA_E
     tipo_expo: int = TIPO_EXPO_SERVICIOS
-    permiso_existente: str = ""   # vacío para servicios
+    permiso_existente: str = ""  # vacío para servicios
     moneda_id: str = MONEDA_DOL
-    incoterms: str = ""       # vacío en servicios (§0.1)
-    idioma_cbte: int = 1      # español
+    incoterms: str = ""  # vacío en servicios (§0.1)
+    idioma_cbte: int = 1  # español
     obs: str = ""
 
     def validate(self) -> None:
@@ -203,7 +203,7 @@ class AuthResult:
     cbte_tipo: int
     punto_vta: int
     fecha_cbte: str
-    reproceso: str            # 'S' si ARCA devolvió un CAE ya emitido
+    reproceso: str  # 'S' si ARCA devolvió un CAE ya emitido
     motivos_obs: str | None
     events: list[tuple[str, str]] = field(default_factory=list)
 
@@ -211,9 +211,7 @@ class AuthResult:
 _SERVIDORES_DUMMY = ("appserver", "dbserver", "authserver")
 
 
-def _dec(
-    value: Decimal, formato: FormatoImporte, *, permite_cero: bool = False
-) -> str:
+def _dec(value: Decimal, formato: FormatoImporte, *, permite_cero: bool = False) -> str:
     """Importe → texto para ARCA. Valida el formato antes de serializar, así
     nada fuera de los límites del manual llega al XML (ni un exponente
     enorme llega a ``format``). ``permite_cero`` sigue a ARCA por campo."""
@@ -296,8 +294,11 @@ def parse_auth_result(result: ET.Element) -> AuthResult:
         cae_fch_vto=_findtext_local(result, "Fch_venc_Cae") or "",
         arca_id=int(_findtext_local(result, "Id") or 0),
         cbte_nro=int(_findtext_local(result, "Cbte_nro") or 0),
-        cbte_tipo=int(_findtext_local(result, "Cbte_tipo")
-                      or _findtext_local(result, "Cbte_Tipo") or 0),
+        cbte_tipo=int(
+            _findtext_local(result, "Cbte_tipo")
+            or _findtext_local(result, "Cbte_Tipo")
+            or 0
+        ),
         punto_vta=int(_findtext_local(result, "Punto_vta") or 0),
         fecha_cbte=_findtext_local(result, "Fecha_cbte") or "",
         reproceso=_findtext_local(result, "Reproceso") or "N",
@@ -421,9 +422,7 @@ class WsfexClient:
         # TLS verify activo (design.md §2.1.1 punto 5). En prod WSFEX, OpenSSL
         # SECLEVEL=1 acepta el DH 1024 de servicios1.afip.gov.ar;
         # homologación y WSAA siguen en defaults.
-        self.http = http or httpx.Client(
-            timeout=60.0, verify=wsfex_verify(config.env)
-        )
+        self.http = http or httpx.Client(timeout=60.0, verify=wsfex_verify(config.env))
         self._cuit: int | None = None
         self.last_events: list[tuple[str, str]] = []
 

@@ -34,17 +34,13 @@ EMISOR_UPDATE_FIELDS = (
 
 
 def get_emisor(conn: sqlite3.Connection, emisor_id: str) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM emisores WHERE id = ?", (emisor_id,)
-    ).fetchone()
+    return conn.execute("SELECT * FROM emisores WHERE id = ?", (emisor_id,)).fetchone()
 
 
 def list_emisores(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     # Sin parámetro de ambiente: todos los emisores de la DB son
     # del perfil.
-    return conn.execute(
-        "SELECT * FROM emisores ORDER BY created_at, id"
-    ).fetchall()
+    return conn.execute("SELECT * FROM emisores ORDER BY created_at, id").fetchall()
 
 
 def create_emisor(conn: sqlite3.Connection, data: dict) -> sqlite3.Row:

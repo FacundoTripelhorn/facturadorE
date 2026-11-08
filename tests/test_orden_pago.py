@@ -181,8 +181,7 @@ def tres_autorizadas(api, arca):
     cuenta recaudadora cargada en el cliente."""
     _crear_cliente_por_form(api, cuenta_recaudadora="Recaudadora")
     ids = [
-        _autorizada(api, imp_total=monto)
-        for monto in ("1000,00", "1500,50", "499,50")
+        _autorizada(api, imp_total=monto) for monto in ("1000,00", "1500,50", "499,50")
     ]
     return ids
 
@@ -241,16 +240,15 @@ def test_checkbox_lleva_el_cliente_para_detectar_mezcla(api, arca):
         factura = repo.get_invoice(api.conn, invoice_id)
         assert f'data-cliente="{factura["client_id"]}"' in html
         assert f'data-receptor="{identidad_receptor(factura)}"' in html
-    assert repo.get_invoice(api.conn, uno)["client_id"] != repo.get_invoice(
-        api.conn, otro
-    )["client_id"]
+    assert (
+        repo.get_invoice(api.conn, uno)["client_id"]
+        != repo.get_invoice(api.conn, otro)["client_id"]
+    )
 
 
 def _como_reconstruida(api, invoice_id: str) -> None:
     """Deja la factura como la deja el rebuild desde ARCA: sin client_id."""
-    api.conn.execute(
-        "UPDATE invoices SET client_id = NULL WHERE id = ?", (invoice_id,)
-    )
+    api.conn.execute("UPDATE invoices SET client_id = NULL WHERE id = ?", (invoice_id,))
     api.conn.commit()
 
 
@@ -327,8 +325,8 @@ def test_pantalla_lista_facturas_en_orden_y_suma_total(api, tres_autorizadas):
     html = r.text
     posiciones = [html.index(f"00001-0000000{n}") for n in (1, 2, 3)]
     assert posiciones == sorted(posiciones)
-    assert "USD 3.000,00" in html            # 1000 + 1500,50 + 499,50
-    assert 'value="Recaudadora"' in html            # precargada desde el cliente
+    assert "USD 3.000,00" in html  # 1000 + 1500,50 + 499,50
+    assert 'value="Recaudadora"' in html  # precargada desde el cliente
     assert "CLIENTE URUGUAY S.A." in html
     assert 'aria-label="Unir facturas E">Unir</button>' in html
     assert 'aria-label="Unir invoices recaudadora">Unir</button>' in html
@@ -379,9 +377,7 @@ def test_pantalla_sin_facturas_o_con_id_inexistente(api, tres_autorizadas):
 
 
 def test_descarga_facturas_e_une_en_orden_ascendente(api, tres_autorizadas):
-    r = api.get(
-        f"/orden-de-pago/facturas-e?{_ids_query(reversed(tres_autorizadas))}"
-    )
+    r = api.get(f"/orden-de-pago/facturas-e?{_ids_query(reversed(tres_autorizadas))}")
 
     assert r.status_code == 200, r.text
     assert r.headers["content-type"] == "application/pdf"

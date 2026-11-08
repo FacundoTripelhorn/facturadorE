@@ -82,9 +82,7 @@ def _object_key(prefix: str, cuit: str, env: str, filename: str) -> str:
     if not clean_cuit:
         raise SeedBackupError("CUIT vacío: no se puede armar la clave del seed.")
     if clean_env not in ("homo", "prod"):
-        raise SeedBackupError(
-            f"Ambiente inválido para la clave del seed: {env!r}"
-        )
+        raise SeedBackupError(f"Ambiente inválido para la clave del seed: {env!r}")
     return f"{clean_prefix}/{clean_cuit}/{clean_env}/{filename}"
 
 
@@ -302,9 +300,12 @@ def build_envelope(
 
 
 def serialize_envelope(envelope: Mapping[str, Any]) -> bytes:
-    return json.dumps(
-        envelope, ensure_ascii=False, sort_keys=True, indent=2
-    ).encode("utf-8") + b"\n"
+    return (
+        json.dumps(envelope, ensure_ascii=False, sort_keys=True, indent=2).encode(
+            "utf-8"
+        )
+        + b"\n"
+    )
 
 
 # Forma del envelope (allowlist). Rechaza claves de DB/comprobantes/secretos
@@ -351,12 +352,8 @@ _CLIENT_KEYS = frozenset(
 )
 # Claves que un seed anterior puede no traer (se agregaron después).
 _CLIENT_OPTIONAL_KEYS = frozenset({"cuenta_recaudadora"})
-_UI_KEYS = frozenset(
-    {"backup_s3_bucket", "backup_s3_prefix", "pdf_render_version"}
-)
-_MANIFEST_KEYS = frozenset(
-    {"schema_version", "device_id", "timestamp", "checksum"}
-)
+_UI_KEYS = frozenset({"backup_s3_bucket", "backup_s3_prefix", "pdf_render_version"})
+_MANIFEST_KEYS = frozenset({"schema_version", "device_id", "timestamp", "checksum"})
 
 # Solo marcadores de material privado real (PEM / age identity). No listar
 # nombres de archivo ni columnas de factura: un domicilio puede contenerlos.
@@ -397,9 +394,7 @@ def _assert_no_secret_markers(value: object, *, where: str) -> None:
     if isinstance(value, str):
         for marker in _SECRET_MARKERS:
             if marker in value:
-                raise SeedBackupError(
-                    f"El seed contiene material privado en {where}."
-                )
+                raise SeedBackupError(f"El seed contiene material privado en {where}.")
         return
     if isinstance(value, Mapping):
         for key, child in value.items():
@@ -463,9 +458,7 @@ def encrypt_to_recipients(
         raise SeedBackupError("Se necesita al menos un recipient age.")
     for recipient in recipients:
         if not recipient.startswith(_AGE_RECIPIENT_PREFIX):
-            raise SeedBackupError(
-                f"Recipient age inválido: {recipient[:32]!r}"
-            )
+            raise SeedBackupError(f"Recipient age inválido: {recipient[:32]!r}")
 
     import shutil
 

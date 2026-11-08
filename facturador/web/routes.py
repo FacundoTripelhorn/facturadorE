@@ -204,9 +204,7 @@ async def csrf_rejected_handler(
             },
             status_code=403,
         )
-    return JSONResponse(
-        status_code=403, content={"detail": CSRF_JSON_DETAIL}
-    )
+    return JSONResponse(status_code=403, content={"detail": CSRF_JSON_DETAIL})
 
 
 STATUS_LABELS = {
@@ -243,8 +241,8 @@ templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 templates.env.filters["moneda"] = lambda code: MONEDA_DISPLAY.get(code, code)
 # Importes en formato argentino (1.500,00); la API y ARCA siguen con punto.
 templates.env.filters["importe"] = formato_importe
-templates.env.filters["fecha"] = (
-    lambda aaaammdd: f"{aaaammdd[6:]}/{aaaammdd[4:6]}/{aaaammdd[:4]}"
+templates.env.filters["fecha"] = lambda aaaammdd: (
+    f"{aaaammdd[6:]}/{aaaammdd[4:6]}/{aaaammdd[:4]}"
 )
 
 
@@ -334,9 +332,7 @@ def home(request: Request, service: ServiceDep, aviso: str = ""):
 def _detalles_validacion(exc: ValidationError) -> str:
     """Mensajes de Pydantic para el form, sin el prefijo "Value error, " que
     Pydantic agrega a los errores de nuestros validadores."""
-    return "; ".join(
-        str(e["msg"]).removeprefix("Value error, ") for e in exc.errors()
-    )
+    return "; ".join(str(e["msg"]).removeprefix("Value error, ") for e in exc.errors())
 
 
 @router.post("/ui/facturas")
@@ -367,7 +363,8 @@ def generar_borrador(
         monto = parse_importe(imp_total)
     except ValueError as exc:
         return templates.TemplateResponse(
-            request, "home.html",
+            request,
+            "home.html",
             _contexto_form(service, error=f"Datos inválidos: monto {exc}"),
             status_code=422,
         )
@@ -383,7 +380,8 @@ def generar_borrador(
         draft = service.create_invoice(payload)
     except ValidationError as exc:
         return templates.TemplateResponse(
-            request, "home.html",
+            request,
+            "home.html",
             _contexto_form(
                 service, error=f"Datos inválidos: {_detalles_validacion(exc)}"
             ),
@@ -391,7 +389,9 @@ def generar_borrador(
         )
     except ServiceError as exc:
         return templates.TemplateResponse(
-            request, "home.html", _contexto_form(service, error=str(exc)),
+            request,
+            "home.html",
+            _contexto_form(service, error=str(exc)),
             status_code=422,
         )
     return RedirectResponse(f"/facturas/{draft['id']}/revisar", status_code=303)
@@ -513,7 +513,9 @@ def autorizar(
             # señalado por su tipo propio, no por el texto del mensaje;
             # cualquier otro conflicto se muestra sin botón de force.
             return _pagina_revisar(
-                request, service, inv,
+                request,
+                service,
+                inv,
                 error=str(exc),
                 force=isinstance(exc, StaleRegistryError),
             )
@@ -535,7 +537,9 @@ def catch_up_ui(
             inv = _factura_o_redirect(service, invoice_id)
             if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
                 return _pagina_revisar(
-                    request, service, inv,
+                    request,
+                    service,
+                    inv,
                     error=str(exc),
                     force=True,
                 )
@@ -739,9 +743,7 @@ def _constatar_manual(
     fecha_raw = fecha_cbte.strip()
     if "-" in fecha_raw:  # <input type=date> ISO → AAAAMMDD del portal/WS
         try:
-            fecha_raw = dt.datetime.strptime(fecha_raw, "%Y-%m-%d").strftime(
-                "%Y%m%d"
-            )
+            fecha_raw = dt.datetime.strptime(fecha_raw, "%Y-%m-%d").strftime("%Y%m%d")
         except ValueError:
             return fail("Fecha inválida.")
     try:
@@ -820,9 +822,7 @@ def comprobantes_resumen(request: Request, service: ServiceDep, anio: str = ""):
     # El selector ofrece los años con comprobantes; el elegido figura aunque
     # no tenga ninguno (el actual, por defecto) para no mostrar otro.
     opciones = sorted({*anios, elegido}, reverse=True)
-    resumen = resumir(
-        elegido, repo.list_authorized_in_year(service.conn, env, elegido)
-    )
+    resumen = resumir(elegido, repo.list_authorized_in_year(service.conn, env, elegido))
     return templates.TemplateResponse(
         request,
         "resumen.html",
@@ -1124,8 +1124,7 @@ async def guardar_emisor_setup(
             service,
             state=state,
             error=(
-                "Datos inválidos: el emisor no coincide con "
-                "el paso de setup en curso"
+                "Datos inválidos: el emisor no coincide con el paso de setup en curso"
             ),
             status_code=422,
         )
@@ -1324,9 +1323,7 @@ def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
     profile = request.app.state.profile
     # ARCA primero: cada respuesta actualiza los avisos guardados, que el
     # chequeo local lee después.
-    remotos = (
-        diagnosticar_arca(profile, service.conn, service.wsfex) if arca else None
-    )
+    remotos = diagnosticar_arca(profile, service.conn, service.wsfex) if arca else None
     locales = diagnosticar_perfil(profile, service.conn)
     return templates.TemplateResponse(
         request,
@@ -1341,8 +1338,9 @@ def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
 
 
 @router.get("/configuracion", response_class=HTMLResponse)
-def configuracion(request: Request, service: ServiceDep, edit: str | None = None,
-                  aviso: str = ""):
+def configuracion(
+    request: Request, service: ServiceDep, edit: str | None = None, aviso: str = ""
+):
     editando = repo.get_emisor(service.conn, edit) if edit else None
     avisos = {
         "guardado": "Emisor guardado.",

@@ -200,8 +200,10 @@ def format_recipients(
 ) -> str:
     """Render recipients.txt preserving prior comment lines when possible."""
     # Preserve existing file body and only append keys that are not present.
-    body = existing_text if existing_text.endswith("\n") or not existing_text else (
-        existing_text + "\n"
+    body = (
+        existing_text
+        if existing_text.endswith("\n") or not existing_text
+        else (existing_text + "\n")
     )
     present = set(parse_recipients(existing_text))
     for key in keys:
@@ -218,8 +220,7 @@ def validate_age_public_key(key: str) -> str:
     cleaned = key.strip()
     if not _AGE_PUBKEY_RE.fullmatch(cleaned):
         raise S3SeedConfigError(
-            f"Clave pública age inválida: {key!r} "
-            "(formato esperado: age1…)."
+            f"Clave pública age inválida: {key!r} (formato esperado: age1…)."
         )
     return cleaned
 
@@ -237,9 +238,7 @@ class MemoryObjectStore:
         try:
             return self.objects[(bucket, key)]
         except KeyError as exc:
-            raise S3SeedNotFoundError(
-                f"Object not found: s3://{bucket}/{key}"
-            ) from exc
+            raise S3SeedNotFoundError(f"Object not found: s3://{bucket}/{key}") from exc
 
 
 @runtime_checkable
@@ -357,9 +356,9 @@ class S3SeedAdapter:
         if not ciphertext:
             raise S3SeedConfigError("seed ciphertext must be non-empty")
         key = self.location.seed_key
-        self._with_retry("put_seed", lambda: self._store.put(
-            self.location.bucket, key, ciphertext
-        ))
+        self._with_retry(
+            "put_seed", lambda: self._store.put(self.location.bucket, key, ciphertext)
+        )
         return self.location.uri_for(SEED_OBJECT_NAME)
 
     def get_seed(self) -> bytes:
@@ -376,9 +375,7 @@ class S3SeedAdapter:
         key = self.location.recipients_key
         self._with_retry(
             "put_recipients",
-            lambda: self._store.put(
-                self.location.bucket, key, body.encode("utf-8")
-            ),
+            lambda: self._store.put(self.location.bucket, key, body.encode("utf-8")),
         )
         return self.location.uri_for(RECIPIENTS_OBJECT_NAME)
 
@@ -412,9 +409,7 @@ class S3SeedAdapter:
         existing = self.get_recipients(missing_ok=True)
         if key in parse_recipients(existing):
             return self.location.uri_for(RECIPIENTS_OBJECT_NAME)
-        updated = format_recipients(
-            [key], existing_text=existing, new_comment=comment
-        )
+        updated = format_recipients([key], existing_text=existing, new_comment=comment)
         return self.put_recipients(updated)
 
     def _with_retry[T](self, action: str, fn: Callable[[], T]) -> T:
@@ -450,6 +445,5 @@ class S3SeedAdapter:
                 ) from exc
         assert last_transient is not None
         raise S3SeedTransientError(
-            f"{action} failed after {self._max_attempts} attempts: "
-            f"{last_transient}"
+            f"{action} failed after {self._max_attempts} attempts: {last_transient}"
         ) from last_transient

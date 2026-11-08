@@ -40,8 +40,8 @@ class Emisor:
     id: str | None = None
     razon_social: str = ""
     domicilio: str = ""
-    iibb: str = ""                 # literal del comprobante, p.ej. "Exento"
-    inicio_actividades: str = ""   # DD/MM/AAAA, como lo imprime el comprobante
+    iibb: str = ""  # literal del comprobante, p.ej. "Exento"
+    inicio_actividades: str = ""  # DD/MM/AAAA, como lo imprime el comprobante
     condicion_iva: str = CONDICION_IVA_DEFAULT
     # Sello del perfil al crear: dato de contexto, NO elegible por
     # el usuario; el form/API no lo exponen.
@@ -72,7 +72,7 @@ class Emisor:
 @dataclass(frozen=True)
 class Settings:
     emisor: Emisor = Emisor()
-    backup_s3_bucket: str = ""    # vacío => el backup queda solo local
+    backup_s3_bucket: str = ""  # vacío => el backup queda solo local
     backup_s3_prefix: str = BACKUP_PREFIX_DEFAULT
 
 

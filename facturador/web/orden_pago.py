@@ -49,9 +49,7 @@ def _totales_por_moneda(facturas: list[sqlite3.Row]) -> list[tuple[str, Decimal]
     return list(totales.items())
 
 
-def _cuenta_del_cliente(
-    conn: sqlite3.Connection, facturas: list[sqlite3.Row]
-) -> str:
+def _cuenta_del_cliente(conn: sqlite3.Connection, facturas: list[sqlite3.Row]) -> str:
     """Cuenta recaudadora del cliente de la orden. Las facturas
     reconstruidas desde ARCA no tienen ``client_id``: vale cualquiera que sí."""
     client_id = next((f["client_id"] for f in facturas if f["client_id"]), None)
@@ -132,4 +130,3 @@ async def descargar_recaudadora(
         ids or [], cuenta, subidos, numeros or []
     )
     return _pdf(nombre, contenido)
-

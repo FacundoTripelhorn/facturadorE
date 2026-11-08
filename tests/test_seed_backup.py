@@ -109,8 +109,7 @@ def perfil_listo(tmp_path) -> tuple[ProfilePaths, sqlite3.Connection]:
         " 'inv-1', ?, 19, 4, 99, 'authorized', 'wsfex',"
         " '20260718', '20260718', 2, 225, 'X',"
         " 55000002002, '1', '100', 'homo',"
-        " 't', 't')"
-        ,
+        " 't', 't')",
         (emisor_id,),
     )
     conn.commit()
@@ -195,9 +194,7 @@ def test_encrypt_to_all_recipients_and_roundtrip(perfil_listo, tmp_path):
         encoding="utf-8",
     )
 
-    archive, envelope = create_encrypted_seed(
-        conn, paths, environment="homo"
-    )
+    archive, envelope = create_encrypted_seed(conn, paths, environment="homo")
     ciphertext = archive.read_bytes()
     assert archive == seed_archive_path(paths)
     assert ciphertext.startswith(b"age-encryption.org/v1")
@@ -312,9 +309,7 @@ def test_guardia_rechaza_clave_privada_pem_y_claves_extra(perfil_listo):
     seed = assemble_seed(conn, environment="homo")
     dirty = dict(seed)
     dirty["cbte_nro"] = 99
-    envelope = build_envelope(
-        dirty, build_manifest(seed, device_id="dev")
-    )
+    envelope = build_envelope(dirty, build_manifest(seed, device_id="dev"))
     with pytest.raises(SeedBackupError, match="no permitidas"):
         assert_seed_has_no_secrets(envelope)
 

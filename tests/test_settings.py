@@ -132,9 +132,7 @@ def test_la_config_de_backups_es_global_al_perfil(conn):
     assert s.emisor == Emisor()
 
 
-@pytest.mark.parametrize(
-    "corrupto", ["nueve", "[0]", '["7"]', "7", "[1.5]"]
-)
+@pytest.mark.parametrize("corrupto", ["nueve", "[0]", '["7"]', "7", "[1.5]"])
 def test_puntos_venta_corruptos_caen_al_default(conn, corrupto):
     save_settings(conn, Settings())
     emisor_id = repo.list_emisores(conn)[0]["id"]

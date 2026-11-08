@@ -102,9 +102,7 @@ def parse_envelope(
             f"Envelope incompleto: falta la clave {exc.args[0]!r}."
         ) from exc
     if not isinstance(raw_seed, Mapping) or not isinstance(raw_manifest, Mapping):
-        raise SeedBackupError(
-            "Envelope inválido: seed/manifest deben ser objetos."
-        )
+        raise SeedBackupError("Envelope inválido: seed/manifest deben ser objetos.")
     return dict(raw_seed), dict(raw_manifest)
 
 
@@ -192,9 +190,7 @@ def validate_seed_identity(
         raise SeedIdentityError("schema_version del seed inválido.") from exc
     app_schema = latest_version()
     if seed_schema < 1:
-        raise SeedIdentityError(
-            f"schema_version del seed inválido: {seed_schema}."
-        )
+        raise SeedIdentityError(f"schema_version del seed inválido: {seed_schema}.")
     if seed_schema > app_schema:
         raise SeedIdentityError(
             f"El seed pide schema_version={seed_schema} pero esta app solo "
@@ -203,9 +199,7 @@ def validate_seed_identity(
     try:
         manifest_schema = int(manifest["schema_version"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise SeedIdentityError(
-            "schema_version del manifiesto inválido."
-        ) from exc
+        raise SeedIdentityError("schema_version del manifiesto inválido.") from exc
     if manifest_schema != seed_schema:
         raise SeedIdentityError(
             f"schema_version del manifiesto ({manifest_schema}) no coincide "
@@ -219,8 +213,7 @@ def validate_seed_identity(
     actual = seed_checksum(seed)
     if actual != expected:
         raise SeedIdentityError(
-            "checksum del seed no coincide con el manifiesto "
-            "(integridad fallida)."
+            "checksum del seed no coincide con el manifiesto (integridad fallida)."
         )
     return accepted
 
@@ -315,12 +308,8 @@ def apply_seed(conn: sqlite3.Connection, seed: Mapping[str, Any]) -> None:
             "moneda_default": str(client.get("moneda_default") or "DOL"),
             "incoterms_default": str(client.get("incoterms_default") or ""),
             "idioma_default": int(client.get("idioma_default") or 1),
-            "forma_pago_default": str(
-                client.get("forma_pago_default") or ""
-            ),
-            "descripcion_default": str(
-                client.get("descripcion_default") or ""
-            ),
+            "forma_pago_default": str(client.get("forma_pago_default") or ""),
+            "descripcion_default": str(client.get("descripcion_default") or ""),
             # Opcional: los seeds anteriores no la traen.
             "cuenta_recaudadora": (
                 str(client.get("cuenta_recaudadora") or "").strip() or None
