@@ -34,9 +34,39 @@ class AgeIdentityError(RuntimeError):
     privada ni la salida de ``age-keygen``."""
 
 
+_BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+_BECH32_GEN = (0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
+
+
+def _bech32_checksum_ok(key: str) -> bool:
+    """Checksum bech32 (BIP-173) de una clave ``age1…`` ya en minúsculas.
+
+    age codifica las claves con bech32 (no bech32m): el polymod sobre el
+    HRP expandido más los datos tiene que dar 1. Una tecla cambiada o dos
+    caracteres invertidos lo rompen aunque el largo y el alfabeto sigan bien.
+    """
+    hrp, _, data = key.rpartition("1")
+    values = [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+    values += [_BECH32_CHARSET.index(c) for c in data]
+    chk = 1
+    for v in values:
+        top = chk >> 25
+        chk = (chk & 0x1FFFFFF) << 5 ^ v
+        for i, gen in enumerate(_BECH32_GEN):
+            if (top >> i) & 1:
+                chk ^= gen
+    return chk == 1
+
+
 def is_public_key(value: str) -> bool:
-    """¿Es una clave pública ``age1…`` nativa (X25519)?"""
-    return _PUBLIC_KEY.fullmatch(value.strip().lower()) is not None
+    """¿Es una clave pública ``age1…`` nativa (X25519) con checksum válido?
+
+    Sin el checksum, una clave con un typo pasaba la validación, quedaba en
+    ``recipients.txt`` y age rechazaba ese recipient: ningún backup se podía
+    cifrar, ni para las máquinas que estaban bien.
+    """
+    key = value.strip().lower()
+    return _PUBLIC_KEY.fullmatch(key) is not None and _bech32_checksum_ok(key)
 
 
 def _keygen(keygen_bin: str) -> str:

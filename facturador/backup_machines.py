@@ -86,7 +86,8 @@ def agregar_maquina(texto: str, *, nombre: str, clave: str) -> str:
     if not is_public_key(clave):
         raise MaquinasError(
             "La clave tiene que ser una clave pública age: empieza con "
-            "age1 y tiene 62 caracteres."
+            "age1, tiene 62 caracteres y se pega completa, tal como la "
+            "muestra la otra PC."
         )
     clave = clave.lower()
     if clave in parse_recipients(texto):

@@ -106,6 +106,8 @@ def test_agregar_normaliza_mayusculas():
         KEY_B[:-1],
         KEY_B + "q",
         KEY_B[:-1] + "b",  # fuera del alfabeto bech32
+        KEY_A[:-1] + "q",  # un typo: mismo largo y alfabeto, checksum roto
+        KEY_A[:10] + KEY_A[11] + KEY_A[10] + KEY_A[12:],  # dos letras invertidas
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9ok",
     ],
 )
