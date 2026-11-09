@@ -13,6 +13,7 @@ muestra.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -24,6 +25,8 @@ from pathlib import Path
 from .profile import ProfilePaths, machine_identity_path
 
 KEYGEN_BIN = "age-keygen"
+
+logger = logging.getLogger(__name__)
 
 # Clave pública X25519 nativa: "age1" + 58 caracteres bech32.
 _PUBLIC_KEY = re.compile(r"age1[02-9ac-hj-np-z]{58}")
@@ -77,6 +80,22 @@ def _keygen(keygen_bin: str) -> str:
             "FacturadorE; fuera del instalador hay que instalar age."
         )
     return found
+
+
+def _restringir(path: Path, mode: int) -> None:
+    """chmod best-effort. En un bind mount de Docker Desktop sobre Windows el
+    filesystem no acepta permisos POSIX: ahí se sigue (age-keygen ya escribe
+    la identidad con 600) en vez de dejar la máquina sin identidad. En un
+    disco local el chmod del dueño no falla, así que nada cambia."""
+    if sys.platform == "win32":
+        return
+    try:
+        path.chmod(mode)
+    except OSError:
+        logger.warning(
+            "El filesystem no acepta permisos POSIX; la identidad age queda "
+            "con los permisos que asigne el host."
+        )
 
 
 class MachineIdentity:
@@ -134,8 +153,7 @@ class MachineIdentity:
         keygen = _keygen(self._keygen_bin)
         folder = self._path.parent
         folder.mkdir(parents=True, exist_ok=True)
-        if sys.platform != "win32":
-            folder.chmod(0o700)
+        _restringir(folder, 0o700)
         if not self.exists():
             with tempfile.TemporaryDirectory(dir=folder) as tmp:
                 tmp_key = Path(tmp) / self._path.name
@@ -157,8 +175,7 @@ class MachineIdentity:
                     raise AgeIdentityError(
                         "age-keygen no pudo crear la identidad de esta máquina."
                     ) from exc
-                if sys.platform != "win32":
-                    tmp_key.chmod(0o600)
+                _restringir(tmp_key, 0o600)
                 try:
                     os.link(tmp_key, self._path)
                 except FileExistsError:

@@ -177,6 +177,19 @@ def test_crear_identidad_y_no_pisarla(tmp_path):
     assert sorted(p.name for p in identidad.path.parent.iterdir()) == ["key.txt"]
 
 
+@requires_age
+def test_crear_identidad_aunque_el_filesystem_no_acepte_chmod(tmp_path, monkeypatch):
+    # Bind mount de Docker Desktop sobre Windows: chmod falla con EPERM.
+    def sin_chmod(self, mode, *, follow_symlinks=True):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(Path, "chmod", sin_chmod)
+    identidad = MachineIdentity(tmp_path / "age" / "key.txt")
+    clave = identidad.create()
+    assert is_public_key(clave)
+    assert identidad.public_key() == clave
+
+
 # --- diagnóstico ---
 
 

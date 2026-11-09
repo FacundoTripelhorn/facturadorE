@@ -282,8 +282,10 @@ todas ellas. Todo se hace desde **Configuración → Backups**, sin terminal:
 
 1. **Esta máquina → Crear identidad de esta máquina.** La identidad queda en
    el app-data, fuera de los perfiles (`%LOCALAPPDATA%\FacturadorE\age\key.txt`
-   en Windows) y es una sola para los dos ambientes. La parte privada nunca
-   se muestra, no entra al seed y no sube a S3.
+   en Windows; con Docker, `<FACTURADOR_HOME>/age/key.txt` en el host, para
+   que sobreviva a recrear el contenedor) y es una sola para los dos
+   ambientes. La parte privada nunca se muestra, no entra al seed y no sube
+   a S3.
 2. **Agregar esta máquina** suma su clave pública a la lista del perfil.
 3. Para darle acceso a otra PC: copiar su clave pública (en esa PC,
    Configuración → Backups → Esta máquina) y pegarla en **Máquinas con acceso
