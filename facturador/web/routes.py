@@ -1347,7 +1347,7 @@ def _estado_backup(estado: SeedBackupState) -> dict[str, str]:
 
 
 def _contexto_backups(
-    service, *, form_nombre: str | None = None, form_clave: str = ""
+    service, *, form_nombre: str = "", form_clave: str = ""
 ) -> dict[str, object]:
     """Identidad de esta máquina, máquinas con acceso y estado del backup.
 
@@ -1369,7 +1369,9 @@ def _contexto_backups(
         "maquinas": maquinas,
         "error_maquinas": error_maquinas,
         "estado": _estado_backup(service.get_seed_backup_state()),
-        "form_nombre": nombre_del_equipo() if form_nombre is None else form_nombre,
+        # Vacío: casi siempre se pega la clave de OTRA PC, y con el nombre
+        # de esta como default era fácil guardarla con el nombre equivocado.
+        "form_nombre": form_nombre,
         "form_clave": form_clave,
     }
 

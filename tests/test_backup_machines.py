@@ -8,6 +8,7 @@ seed ni los objetos de S3.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -284,6 +285,17 @@ def test_pagina_sin_identidad_ofrece_crearla(backups):
     assert "Hacer backup ahora" not in r.text
     assert "passphrase" not in r.text
     assert "con las claves públicas" in r.text
+
+
+def test_el_nombre_de_otra_maquina_arranca_vacio(backups, monkeypatch):
+    # Casi siempre se pega la clave de OTRA PC: con el nombre de esta como
+    # default era fácil guardarla con el nombre equivocado.
+    monkeypatch.setattr("facturador.web.routes.nombre_del_equipo", lambda: "ESTA-PC")
+    r = backups.get("/configuracion")
+    assert r.status_code == 200
+    campo = re.search(r'id="maquina_nombre"[^>]*value="([^"]*)"', r.text)
+    assert campo is not None
+    assert campo.group(1) == ""
 
 
 @pytest.mark.parametrize(
