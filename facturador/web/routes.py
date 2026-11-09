@@ -421,6 +421,19 @@ def _factura_o_redirect(service, invoice_id: str, reconcile: bool = False):
         return None
 
 
+def _ir_a_factura(inv: sqlite3.Row | None, sufijo: str = "") -> RedirectResponse:
+    """Redirect al detalle (o ``/revisar``) de una factura que existe.
+
+    El id sale de la fila de la base, no del path: el destino es siempre
+    una factura real de este registro, y si no hay fila se va al listado.
+    """
+    if inv is None:
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"/facturas/{inv['id']}{sufijo}", status_code=HTTPStatus.SEE_OTHER
+    )
+
+
 @router.get("/facturas/{invoice_id}/revisar", response_class=HTMLResponse)
 def revisar(
     request: Request,
@@ -435,9 +448,7 @@ def revisar(
     if inv is None:
         return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] != InvoiceStatus.DRAFT:
-        return RedirectResponse(
-            f"/facturas/{invoice_id}", status_code=HTTPStatus.SEE_OTHER
-        )
+        return _ir_a_factura(inv)
     return _pagina_revisar(
         request,
         service,
@@ -484,9 +495,7 @@ def detalle(request: Request, service: ServiceDep, invoice_id: str):
     if inv is None:
         return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] == InvoiceStatus.DRAFT:
-        return RedirectResponse(
-            f"/facturas/{invoice_id}/revisar", status_code=HTTPStatus.SEE_OTHER
-        )
+        return _ir_a_factura(inv, "/revisar")
     return templates.TemplateResponse(
         request,
         "detalle.html",
@@ -519,7 +528,7 @@ def autorizar(
     force: bool = False,
 ):
     try:
-        service.authorize(invoice_id, force_desync=force)
+        autorizada = service.authorize(invoice_id, force_desync=force)
     except NotFoundError:
         return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     except ServiceError as exc:
@@ -535,10 +544,8 @@ def autorizar(
                 error=str(exc),
                 force=isinstance(exc, StaleRegistryError),
             )
-        return RedirectResponse(
-            f"/facturas/{invoice_id}", status_code=HTTPStatus.SEE_OTHER
-        )
-    return RedirectResponse(f"/facturas/{invoice_id}", status_code=HTTPStatus.SEE_OTHER)
+        return _ir_a_factura(inv)
+    return _ir_a_factura(autorizada)
 
 
 @router.post("/ui/registry/catch-up")
@@ -568,11 +575,9 @@ def catch_up_ui(
             f"/comprobantes?error={quote(str(exc), safe='')}",
             status_code=HTTPStatus.SEE_OTHER,
         )
-    if invoice_id:
-        return RedirectResponse(
-            f"/facturas/{invoice_id}/revisar?aviso=catchup&n={report.inserted}",
-            status_code=HTTPStatus.SEE_OTHER,
-        )
+    inv = _factura_o_redirect(service, invoice_id) if invoice_id else None
+    if inv is not None:
+        return _ir_a_factura(inv, f"/revisar?aviso=catchup&n={report.inserted}")
     return RedirectResponse(
         f"/comprobantes?aviso=catchup&n={report.inserted}",
         status_code=HTTPStatus.SEE_OTHER,
@@ -587,9 +592,7 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
         return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     except ServiceError:
         # Enviada/no descartable: el detalle explica el estado real.
-        return RedirectResponse(
-            f"/facturas/{invoice_id}", status_code=HTTPStatus.SEE_OTHER
-        )
+        return _ir_a_factura(_factura_o_redirect(service, invoice_id))
     return RedirectResponse("/?aviso=descartado", status_code=HTTPStatus.SEE_OTHER)
 
 
