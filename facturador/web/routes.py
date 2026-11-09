@@ -69,7 +69,7 @@ from ..schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
-from ..seed_backup_sync import SeedBackupState, SeedBackupStatus
+from ..seed_backup_sync import BackupDestination, SeedBackupState, SeedBackupStatus
 from ..service import (
     ArcaUnavailableError,
     ConflictError,
@@ -84,6 +84,11 @@ from ..settings import (
     get_active_emisor_id,
 )
 from ..setup import SetupState, reconcile_setup_state
+from .constants import (
+    AvisoConfiguracion,
+    ErrorConfiguracion,
+    EstadoBackupUI,
+)
 from .grafico import grafico_por_mes
 from .numeros import formato_importe, parse_importe
 
@@ -1307,43 +1312,42 @@ def _fecha_backup(iso: str | None) -> str | None:
     return momento.astimezone().strftime("%d/%m/%Y %H:%M")
 
 
+_DONDE_BACKUP: dict[str, str] = {
+    BackupDestination.S3: ", subido a S3",
+    BackupDestination.LOCAL: ", guardado solo en esta máquina (sin bucket S3)",
+}
+
+
+def _estado_ui(estado: EstadoBackupUI, detalle: str) -> dict[str, str]:
+    return {"badge": estado.badge, "titulo": estado.titulo, "detalle": detalle}
+
+
 def _estado_backup(estado: SeedBackupState) -> dict[str, str]:
     """Estado del último backup para la UI. El texto del último error no se
     muestra: puede traer rutas locales (queda en el log)."""
     ultimo = _fecha_backup(estado.last_success_at)
     # Un backup anterior a que se guardara el destino no dice dónde quedó:
     # no se adivina.
-    donde = {
-        "s3": ", subido a S3",
-        "local": ", guardado solo en esta máquina (sin bucket S3)",
-    }.get(estado.last_destination or "", "")
+    donde = _DONDE_BACKUP.get(estado.last_destination or "", "")
     previo = f" Último backup: {ultimo}{donde}." if ultimo else ""
     if estado.status is SeedBackupStatus.OK and ultimo:
-        return {
-            "badge": "ok",
-            "titulo": "Al día",
-            "detalle": f"Último backup: {ultimo}{donde}.",
-        }
+        return _estado_ui(EstadoBackupUI.AL_DIA, f"Último backup: {ultimo}{donde}.")
     if estado.status is SeedBackupStatus.FAILED:
         intento = _fecha_backup(estado.last_attempt_at)
         cuando = f" ({intento})" if intento else ""
-        return {
-            "badge": "error",
-            "titulo": "Error",
-            "detalle": f"Falló el último intento{cuando}; el detalle "
+        return _estado_ui(
+            EstadoBackupUI.ERROR,
+            f"Falló el último intento{cuando}; el detalle "
             f"quedó en el log de la app.{previo}",
-        }
+        )
     if estado.status is SeedBackupStatus.PENDING:
-        return {
-            "badge": "aviso",
-            "titulo": "Pendiente",
-            "detalle": f"Hay cambios sin respaldar.{previo}",
-        }
-    return {
-        "badge": "neutro",
-        "titulo": "Sin backup",
-        "detalle": "Todavía no se hizo ningún backup de este ambiente.",
-    }
+        return _estado_ui(
+            EstadoBackupUI.PENDIENTE, f"Hay cambios sin respaldar.{previo}"
+        )
+    return _estado_ui(
+        EstadoBackupUI.SIN_BACKUP,
+        "Todavía no se hizo ningún backup de este ambiente.",
+    )
 
 
 def _contexto_backups(
@@ -1423,18 +1427,22 @@ def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
     )
 
 
-_AVISOS_CONFIGURACION = {
-    "guardado": "Emisor guardado.",
-    "backup": "Configuración de backups guardada.",
-    "activado": "Emisor activo actualizado.",
-    "identidad": "Identidad de esta máquina creada.",
-    "maquina": "Máquina agregada. El backup se actualiza en unos segundos.",
-    "maquina_quitada": "Máquina quitada. El backup se actualiza en unos segundos.",
-    "backup_hecho": "Backup hecho.",
+_AVISOS_CONFIGURACION: dict[str, str] = {
+    AvisoConfiguracion.GUARDADO: "Emisor guardado.",
+    AvisoConfiguracion.BACKUP: "Configuración de backups guardada.",
+    AvisoConfiguracion.ACTIVADO: "Emisor activo actualizado.",
+    AvisoConfiguracion.IDENTIDAD: "Identidad de esta máquina creada.",
+    AvisoConfiguracion.MAQUINA: (
+        "Máquina agregada. El backup se actualiza en unos segundos."
+    ),
+    AvisoConfiguracion.MAQUINA_QUITADA: (
+        "Máquina quitada. El backup se actualiza en unos segundos."
+    ),
+    AvisoConfiguracion.BACKUP_HECHO: "Backup hecho.",
 }
-_ERRORES_CONFIGURACION = {
-    "backup": "No se pudo hacer el backup. El detalle quedó en el log de la "
-    "app; se reintenta al abrirla.",
+_ERRORES_CONFIGURACION: dict[str, str] = {
+    ErrorConfiguracion.BACKUP: "No se pudo hacer el backup. El detalle quedó en "
+    "el log de la app; se reintenta al abrirla.",
 }
 
 
@@ -1534,7 +1542,9 @@ async def guardar_emisor(
             error=str(exc),
             status_code=422,
         )
-    return RedirectResponse("/configuracion?aviso=guardado", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.GUARDADO}", status_code=303
+    )
 
 
 @router.post("/ui/emisores/{emisor_id}/activar")
@@ -1543,7 +1553,9 @@ def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
         service.activate_emisor(emisor_id)
     except ServiceError:
         return RedirectResponse("/configuracion", status_code=303)
-    return RedirectResponse("/configuracion?aviso=activado", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.ACTIVADO}", status_code=303
+    )
 
 
 @router.post("/ui/configuracion/backup", response_class=HTMLResponse)
@@ -1564,7 +1576,9 @@ def guardar_backup(
             request, service, error=f"Datos inválidos: {detalles}", status_code=422
         )
     service.update_backup_settings(payload)
-    return RedirectResponse("/configuracion?aviso=backup", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.BACKUP}", status_code=303
+    )
 
 
 @router.post("/ui/configuracion/backup/identidad", response_class=HTMLResponse)
@@ -1573,7 +1587,9 @@ def crear_identidad_maquina(request: Request, service: ServiceDep):
         service.create_machine_identity()
     except ServiceError as exc:
         return _pagina_configuracion(request, service, error=str(exc), status_code=422)
-    return RedirectResponse("/configuracion?aviso=identidad#backups", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.IDENTIDAD}#backups", status_code=303
+    )
 
 
 @router.post("/ui/configuracion/backup/esta-maquina", response_class=HTMLResponse)
@@ -1582,7 +1598,9 @@ def agregar_esta_maquina(request: Request, service: ServiceDep):
         service.add_this_machine(nombre_del_equipo())
     except ServiceError as exc:
         return _pagina_configuracion(request, service, error=str(exc), status_code=422)
-    return RedirectResponse("/configuracion?aviso=maquina#backups", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups", status_code=303
+    )
 
 
 @router.post("/ui/configuracion/backup/maquinas", response_class=HTMLResponse)
@@ -1602,7 +1620,9 @@ def agregar_maquina(
             status_code=422,
             backup=_contexto_backups(service, form_nombre=nombre, form_clave=clave),
         )
-    return RedirectResponse("/configuracion?aviso=maquina#backups", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups", status_code=303
+    )
 
 
 @router.post("/ui/configuracion/backup/maquinas/quitar", response_class=HTMLResponse)
@@ -1612,7 +1632,8 @@ def quitar_maquina(request: Request, service: ServiceDep, clave: str = Form(""))
     except ServiceError as exc:
         return _pagina_configuracion(request, service, error=str(exc), status_code=422)
     return RedirectResponse(
-        "/configuracion?aviso=maquina_quitada#backups", status_code=303
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
+        status_code=303,
     )
 
 
@@ -1626,9 +1647,12 @@ def hacer_backup_ahora(request: Request, service: ServiceDep):
         return _pagina_configuracion(request, service, error=str(exc), status_code=409)
     if estado.status is SeedBackupStatus.OK:
         return RedirectResponse(
-            "/configuracion?aviso=backup_hecho#backups", status_code=303
+            f"/configuracion?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
+            status_code=303,
         )
-    return RedirectResponse("/configuracion?error=backup#backups", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?error={ErrorConfiguracion.BACKUP}#backups", status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ LAST_SUCCESS_KEY = "seed_backup_last_success_at"
 LAST_ATTEMPT_KEY = "seed_backup_last_attempt_at"
 LAST_ERROR_KEY = "seed_backup_last_error"
 PENDING_REASON_KEY = "seed_backup_pending_reason"
-# Dónde quedó el último backup que salió bien: "s3" o "local".
+# Dónde quedó el último backup que salió bien (BackupDestination).
 LAST_DESTINATION_KEY = "seed_backup_last_destination"
 
 SEED_BACKUP_STATE_KEYS = frozenset(
@@ -66,6 +66,13 @@ SEED_BACKUP_STATE_KEYS = frozenset(
 )
 
 DEFAULT_DEBOUNCE_S = 1.0
+
+
+class BackupDestination(StrEnum):
+    """Dónde quedó el último backup que salió bien (``LAST_DESTINATION_KEY``)."""
+
+    S3 = "s3"
+    LOCAL = "local"
 
 
 class SeedBackupStatus(StrEnum):
@@ -156,7 +163,9 @@ def mark_seed_backup_pending(conn: sqlite3.Connection, reason: str) -> SeedBacku
 
 def _destination(result: str | None) -> str:
     """El runner devuelve la URI de S3 o el path local del seed."""
-    return "s3" if result and result.startswith("s3://") else "local"
+    if result and result.startswith("s3://"):
+        return BackupDestination.S3
+    return BackupDestination.LOCAL
 
 
 def _mark_success(
