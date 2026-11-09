@@ -627,6 +627,22 @@ def test_ui_catch_up_con_invoice_id_muestra_aviso_en_revisar(api, arca):
     assert "panel ok" in page.text
 
 
+@pytest.mark.parametrize("invoice_id", ["//evil.example", "no-existe", "../setup"])
+def test_ui_catch_up_con_invoice_id_que_no_existe_va_al_listado(api, arca, invoice_id):
+    # El redirect usa el id de la base: un valor del form que no es una
+    # factura del registro nunca termina en la URL de destino.
+    arca.seed_issued(tipo=19, pv=1, nro=1, arca_id=703)
+    arca.last_cmp[(1, 19)] = 1
+
+    r = api.post(
+        "/ui/registry/catch-up",
+        data=with_csrf(api, {"invoice_id": invoice_id}),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/comprobantes?aviso=catchup")
+
+
 # --- unknown: reintento desde el detalle ---
 
 

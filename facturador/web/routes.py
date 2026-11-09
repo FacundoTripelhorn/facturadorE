@@ -20,6 +20,7 @@ import datetime as dt
 import json
 import re
 import sqlite3
+from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,6 +41,7 @@ from ..api.csrf import (
 from ..api.deps import ServiceDep
 from ..arca.events import load_events, mark_read
 from ..arca.wsfex import WsfexError
+from ..backup_machines import nombre_del_equipo
 from ..certs import (
     CertificateError,
     CertificateMetadata,
@@ -68,6 +70,7 @@ from ..schemas import (
     EmisorUpdateIn,
     InvoiceCreate,
 )
+from ..seed_backup_sync import BackupDestination, SeedBackupState, SeedBackupStatus
 from ..service import (
     ArcaUnavailableError,
     ConflictError,
@@ -82,6 +85,11 @@ from ..settings import (
     get_active_emisor_id,
 )
 from ..setup import SetupState, reconcile_setup_state
+from .constants import (
+    AvisoConfiguracion,
+    ErrorConfiguracion,
+    EstadoBackupUI,
+)
 from .grafico import grafico_por_mes
 from .numeros import formato_importe, parse_importe
 
@@ -202,9 +210,11 @@ async def csrf_rejected_handler(
                 "message": CSRF_UI_MESSAGE,
                 "recovery_href": csrf_recovery_href(request),
             },
-            status_code=403,
+            status_code=HTTPStatus.FORBIDDEN,
         )
-    return JSONResponse(status_code=403, content={"detail": CSRF_JSON_DETAIL})
+    return JSONResponse(
+        status_code=HTTPStatus.FORBIDDEN, content={"detail": CSRF_JSON_DETAIL}
+    )
 
 
 STATUS_LABELS = {
@@ -357,7 +367,7 @@ def generar_borrador(
                 request,
                 "home.html",
                 _contexto_form(service, error="Punto de venta inválido"),
-                status_code=422,
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             )
     try:
         monto = parse_importe(imp_total)
@@ -366,7 +376,7 @@ def generar_borrador(
             request,
             "home.html",
             _contexto_form(service, error=f"Datos inválidos: monto {exc}"),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         payload = InvoiceCreate(
@@ -385,16 +395,18 @@ def generar_borrador(
             _contexto_form(
                 service, error=f"Datos inválidos: {_detalles_validacion(exc)}"
             ),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     except ServiceError as exc:
         return templates.TemplateResponse(
             request,
             "home.html",
             _contexto_form(service, error=str(exc)),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    return RedirectResponse(f"/facturas/{draft['id']}/revisar", status_code=303)
+    return RedirectResponse(
+        f"/facturas/{draft['id']}/revisar", status_code=HTTPStatus.SEE_OTHER
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +421,19 @@ def _factura_o_redirect(service, invoice_id: str, reconcile: bool = False):
         return None
 
 
+def _ir_a_factura(inv: sqlite3.Row | None, sufijo: str = "") -> RedirectResponse:
+    """Redirect al detalle (o ``/revisar``) de una factura que existe.
+
+    El id sale de la fila de la base, no del path: el destino es siempre
+    una factura real de este registro, y si no hay fila se va al listado.
+    """
+    if inv is None:
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"/facturas/{inv['id']}{sufijo}", status_code=HTTPStatus.SEE_OTHER
+    )
+
+
 @router.get("/facturas/{invoice_id}/revisar", response_class=HTMLResponse)
 def revisar(
     request: Request,
@@ -421,9 +446,9 @@ def revisar(
     estado ya tiene historia y se ve en el detalle."""
     inv = _factura_o_redirect(service, invoice_id)
     if inv is None:
-        return RedirectResponse("/comprobantes", status_code=303)
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] != InvoiceStatus.DRAFT:
-        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+        return _ir_a_factura(inv)
     return _pagina_revisar(
         request,
         service,
@@ -458,7 +483,7 @@ def _pagina_revisar(
             "aviso": aviso,
             "ofrecer_force": force,
         },
-        status_code=409 if error else 200,
+        status_code=HTTPStatus.CONFLICT if error else 200,
     )
 
 
@@ -468,9 +493,9 @@ def detalle(request: Request, service: ServiceDep, invoice_id: str):
     Reconcilia 'unknown' al mirarlo (lazy, igual que la API JSON)."""
     inv = _factura_o_redirect(service, invoice_id, reconcile=True)
     if inv is None:
-        return RedirectResponse("/comprobantes", status_code=303)
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] == InvoiceStatus.DRAFT:
-        return RedirectResponse(f"/facturas/{invoice_id}/revisar", status_code=303)
+        return _ir_a_factura(inv, "/revisar")
     return templates.TemplateResponse(
         request,
         "detalle.html",
@@ -503,9 +528,9 @@ def autorizar(
     force: bool = False,
 ):
     try:
-        service.authorize(invoice_id, force_desync=force)
+        autorizada = service.authorize(invoice_id, force_desync=force)
     except NotFoundError:
-        return RedirectResponse("/comprobantes", status_code=303)
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     except ServiceError as exc:
         inv = _factura_o_redirect(service, invoice_id)
         if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
@@ -519,8 +544,8 @@ def autorizar(
                 error=str(exc),
                 force=isinstance(exc, StaleRegistryError),
             )
-        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
-    return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
+        return _ir_a_factura(inv)
+    return _ir_a_factura(autorizada)
 
 
 @router.post("/ui/registry/catch-up")
@@ -548,15 +573,14 @@ def catch_up_ui(
 
         return RedirectResponse(
             f"/comprobantes?error={quote(str(exc), safe='')}",
-            status_code=303,
+            status_code=HTTPStatus.SEE_OTHER,
         )
-    if invoice_id:
-        return RedirectResponse(
-            f"/facturas/{invoice_id}/revisar?aviso=catchup&n={report.inserted}",
-            status_code=303,
-        )
+    inv = _factura_o_redirect(service, invoice_id) if invoice_id else None
+    if inv is not None:
+        return _ir_a_factura(inv, f"/revisar?aviso=catchup&n={report.inserted}")
     return RedirectResponse(
-        f"/comprobantes?aviso=catchup&n={report.inserted}", status_code=303
+        f"/comprobantes?aviso=catchup&n={report.inserted}",
+        status_code=HTTPStatus.SEE_OTHER,
     )
 
 
@@ -565,11 +589,11 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
     try:
         service.delete_draft(invoice_id)
     except NotFoundError:
-        return RedirectResponse("/comprobantes", status_code=303)
+        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
     except ServiceError:
         # Enviada/no descartable: el detalle explica el estado real.
-        return RedirectResponse(f"/facturas/{invoice_id}", status_code=303)
-    return RedirectResponse("/?aviso=descartado", status_code=303)
+        return _ir_a_factura(_factura_o_redirect(service, invoice_id))
+    return RedirectResponse("/?aviso=descartado", status_code=HTTPStatus.SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
@@ -602,7 +626,7 @@ def _pagina_constatacion(
     manual: dict[str, str] | None = None,
     resultado=None,
     error: str | None = None,
-    status_code: int = 200,
+    status_code: int = HTTPStatus.OK,
 ):
     facturas = repo.list_invoices(
         service.conn,
@@ -675,7 +699,7 @@ def ui_constatar(
                 service,
                 invoice_id=invoice_id,
                 error="La factura no existe.",
-                status_code=404,
+                status_code=HTTPStatus.NOT_FOUND,
             )
         except (DomainError, ArcaUnavailableError, ServiceError) as exc:
             return _pagina_constatacion(
@@ -683,7 +707,9 @@ def ui_constatar(
                 service,
                 invoice_id=invoice_id,
                 error=str(exc),
-                status_code=422 if isinstance(exc, DomainError) else 503,
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY
+                if isinstance(exc, DomainError)
+                else 503,
             )
         return _pagina_constatacion(
             request, service, invoice_id=invoice_id, resultado=resultado
@@ -721,7 +747,7 @@ def _constatar_manual(
         "doc_nro_receptor": doc_nro_receptor,
     }
 
-    def fail(mensaje: str, status_code: int = 422):
+    def fail(mensaje: str, status_code: int = HTTPStatus.UNPROCESSABLE_ENTITY):
         return _pagina_constatacion(
             request,
             service,
@@ -757,11 +783,11 @@ def _constatar_manual(
         )
     except (DomainError, ArcaUnavailableError, ServiceError) as exc:
         if isinstance(exc, ConflictError):
-            status = 409
+            status = HTTPStatus.CONFLICT
         elif isinstance(exc, DomainError):
-            status = 422
+            status = HTTPStatus.UNPROCESSABLE_ENTITY
         else:
-            status = 503
+            status = HTTPStatus.SERVICE_UNAVAILABLE
         return fail(str(exc), status)
     return _pagina_constatacion(
         request, service, modo_manual=True, manual=manual, resultado=resultado
@@ -858,7 +884,7 @@ def _pagina_clientes(
     service,
     editando=None,
     error: str | None = None,
-    status_code: int = 200,
+    status_code: int = HTTPStatus.OK,
 ):
     params: dict[str, list] = {}
     try:
@@ -930,8 +956,13 @@ def guardar_cliente(
             service.create_client(payload)
     except (ValidationError, ServiceError, CertificateError, OSError) as exc:
         # Mismo caso que GET /clientes: sin certs/params cache no debe 500.
-        return _pagina_clientes(request, service, error=str(exc), status_code=422)
-    return RedirectResponse("/clientes", status_code=303)
+        return _pagina_clientes(
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+    return RedirectResponse("/clientes", status_code=HTTPStatus.SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
@@ -976,7 +1007,7 @@ def _pagina_setup(
     emisor_editando=None,
     error: str | None = None,
     aviso: str | None = None,
-    status_code: int = 200,
+    status_code: int = HTTPStatus.OK,
 ):
     profile = request.app.state.profile
     if state is None:
@@ -1031,7 +1062,7 @@ async def instalar_certificado_setup(
             service,
             state=state,
             error="Hay que subir el certificado y la clave privada juntos.",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     try:
@@ -1043,7 +1074,7 @@ async def instalar_certificado_setup(
             service,
             state=state,
             error="No se pudieron leer los archivos subidos.",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     if not cert_bytes.strip() or not key_bytes.strip():
@@ -1052,7 +1083,7 @@ async def instalar_certificado_setup(
             service,
             state=state,
             error="El certificado y la clave privada no pueden estar vacíos.",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     try:
@@ -1068,11 +1099,11 @@ async def instalar_certificado_setup(
             service,
             state=state,
             error=str(exc),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     reconcile_setup_state(profile, service.conn)
-    return RedirectResponse("/setup?aviso=instalado", status_code=303)
+    return RedirectResponse("/setup?aviso=instalado", status_code=HTTPStatus.SEE_OTHER)
 
 
 @router.post("/ui/setup/emisor", response_class=HTMLResponse)
@@ -1091,7 +1122,7 @@ async def guardar_emisor_setup(
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.EMISOR_REQUIRED:
-        return RedirectResponse("/setup", status_code=303)
+        return RedirectResponse("/setup", status_code=HTTPStatus.SEE_OTHER)
 
     onboarding_row = _emisor_onboarding_row(service.conn, service.config.env)
     if onboarding_row is not None:
@@ -1105,7 +1136,7 @@ async def guardar_emisor_setup(
                     "Datos inválidos: el emisor no coincide con "
                     "el paso de setup en curso"
                 ),
-                status_code=422,
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             )
         existente = onboarding_row
         emisor_id = onboarding_row["id"]
@@ -1117,7 +1148,7 @@ async def guardar_emisor_setup(
                 service,
                 state=state,
                 error=_error_emisor_otro_ambiente(ajeno, service.config.env),
-                status_code=422,
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             )
         return _pagina_setup(
             request,
@@ -1126,7 +1157,7 @@ async def guardar_emisor_setup(
             error=(
                 "Datos inválidos: el emisor no coincide con el paso de setup en curso"
             ),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     else:
         existente = None
@@ -1139,7 +1170,7 @@ async def guardar_emisor_setup(
             state=state,
             emisor_editando=existente,
             error="Datos inválidos: el ambiente sale del perfil activo y no se envía",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         pvs = _parse_puntos_venta_form(puntos_venta)
@@ -1151,7 +1182,7 @@ async def guardar_emisor_setup(
             emisor_editando=existente,
             error="Datos inválidos: los puntos de venta deben ser números"
             " separados por coma",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         if emisor_id:
@@ -1185,7 +1216,7 @@ async def guardar_emisor_setup(
             state=state,
             emisor_editando=existente,
             error=f"Datos inválidos: {detalles}",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         service.activate_emisor(row["id"])
@@ -1196,7 +1227,7 @@ async def guardar_emisor_setup(
             state=state,
             emisor_editando=existente,
             error=str(exc),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     new_state = reconcile_setup_state(profile, service.conn)
@@ -1204,7 +1235,7 @@ async def guardar_emisor_setup(
         # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "emisor"
-    return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
+    return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)
 
 
 @router.post("/ui/setup/punto-venta", response_class=HTMLResponse)
@@ -1217,7 +1248,7 @@ async def guardar_punto_venta_setup(
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.POINT_OF_SALE_REQUIRED:
-        return RedirectResponse("/setup", status_code=303)
+        return RedirectResponse("/setup", status_code=HTTPStatus.SEE_OTHER)
 
     emisor_row = _emisor_onboarding_row(service.conn, service.config.env)
     if emisor_row is None:
@@ -1226,7 +1257,7 @@ async def guardar_punto_venta_setup(
             service,
             state=state,
             error="No hay emisor activo para configurar el punto de venta.",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     if emisor_row["ambiente"] != service.config.env:
         return _pagina_setup(
@@ -1234,7 +1265,7 @@ async def guardar_punto_venta_setup(
             service,
             state=state,
             error=_error_emisor_otro_ambiente(emisor_row, service.config.env),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         pvs = _parse_puntos_venta_form(puntos_venta)
@@ -1246,7 +1277,7 @@ async def guardar_punto_venta_setup(
             emisor_editando=emisor_row,
             error="Datos inválidos: los puntos de venta deben ser números"
             " separados por coma",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         payload = EmisorUpdateIn(
@@ -1265,7 +1296,7 @@ async def guardar_punto_venta_setup(
             state=state,
             emisor_editando=emisor_row,
             error=f"Datos inválidos: {detalles}",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         service.update_emisor(emisor_row["id"], payload)
@@ -1276,7 +1307,7 @@ async def guardar_punto_venta_setup(
             state=state,
             emisor_editando=emisor_row,
             error=str(exc),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
 
     new_state = reconcile_setup_state(profile, service.conn)
@@ -1284,12 +1315,93 @@ async def guardar_punto_venta_setup(
         # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
     aviso = "listo" if new_state is SetupState.READY else "punto_venta"
-    return RedirectResponse(f"/setup?aviso={aviso}", status_code=303)
+    return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
 # Configuración (settings de dominio: viven en la DB, no en el .env)
 # ---------------------------------------------------------------------------
+
+
+def _fecha_backup(iso: str | None) -> str | None:
+    """Fecha y hora local de un timestamp de backup (se guarda en UTC)."""
+    if not iso:
+        return None
+    try:
+        momento = dt.datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=dt.UTC)
+    return momento.astimezone().strftime("%d/%m/%Y %H:%M")
+
+
+_DONDE_BACKUP: dict[str, str] = {
+    BackupDestination.S3: ", subido a S3",
+    BackupDestination.LOCAL: ", guardado solo en esta máquina (sin bucket S3)",
+}
+
+
+def _estado_ui(estado: EstadoBackupUI, detalle: str) -> dict[str, str]:
+    return {"badge": estado.badge, "titulo": estado.titulo, "detalle": detalle}
+
+
+def _estado_backup(estado: SeedBackupState) -> dict[str, str]:
+    """Estado del último backup para la UI. El texto del último error no se
+    muestra: puede traer rutas locales (queda en el log)."""
+    ultimo = _fecha_backup(estado.last_success_at)
+    # Un backup anterior a que se guardara el destino no dice dónde quedó:
+    # no se adivina.
+    donde = _DONDE_BACKUP.get(estado.last_destination or "", "")
+    previo = f" Último backup: {ultimo}{donde}." if ultimo else ""
+    if estado.status is SeedBackupStatus.OK and ultimo:
+        return _estado_ui(EstadoBackupUI.AL_DIA, f"Último backup: {ultimo}{donde}.")
+    if estado.status is SeedBackupStatus.FAILED:
+        intento = _fecha_backup(estado.last_attempt_at)
+        cuando = f" ({intento})" if intento else ""
+        return _estado_ui(
+            EstadoBackupUI.ERROR,
+            f"Falló el último intento{cuando}; el detalle "
+            f"quedó en el log de la app.{previo}",
+        )
+    if estado.status is SeedBackupStatus.PENDING:
+        return _estado_ui(
+            EstadoBackupUI.PENDIENTE, f"Hay cambios sin respaldar.{previo}"
+        )
+    return _estado_ui(
+        EstadoBackupUI.SIN_BACKUP,
+        "Todavía no se hizo ningún backup de este ambiente.",
+    )
+
+
+def _contexto_backups(
+    service, *, form_nombre: str = "", form_clave: str = ""
+) -> dict[str, object]:
+    """Identidad de esta máquina, máquinas con acceso y estado del backup.
+
+    Solo claves públicas: la identidad privada nunca llega a la plantilla.
+    """
+    error_identidad = error_maquinas = None
+    try:
+        clave_propia = service.machine_public_key()
+    except DomainError as exc:
+        clave_propia, error_identidad = None, str(exc)
+    try:
+        maquinas = service.list_backup_machines()
+    except DomainError as exc:
+        maquinas, error_maquinas = [], str(exc)
+    return {
+        "clave_propia": clave_propia,
+        "error_identidad": error_identidad,
+        "propia_en_lista": any(m.clave == clave_propia for m in maquinas),
+        "maquinas": maquinas,
+        "error_maquinas": error_maquinas,
+        "estado": _estado_backup(service.get_seed_backup_state()),
+        # Vacío: casi siempre se pega la clave de OTRA PC, y con el nombre
+        # de esta como default era fácil guardarla con el nombre equivocado.
+        "form_nombre": form_nombre,
+        "form_clave": form_clave,
+    }
 
 
 def _pagina_configuracion(
@@ -1298,7 +1410,8 @@ def _pagina_configuracion(
     editando=None,
     error: str | None = None,
     aviso: str | None = None,
-    status_code: int = 200,
+    status_code: int = HTTPStatus.OK,
+    backup: dict[str, object] | None = None,
 ):
     activo_id = get_active_emisor_id(service.conn)
     return templates.TemplateResponse(
@@ -1311,6 +1424,7 @@ def _pagina_configuracion(
             "editando": editando,
             "error": error,
             "aviso": aviso,
+            "backup": backup or _contexto_backups(service),
         },
         status_code=status_code,
     )
@@ -1337,21 +1451,40 @@ def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
     )
 
 
+_AVISOS_CONFIGURACION: dict[str, str] = {
+    AvisoConfiguracion.GUARDADO: "Emisor guardado.",
+    AvisoConfiguracion.BACKUP: "Configuración de backups guardada.",
+    AvisoConfiguracion.ACTIVADO: "Emisor activo actualizado.",
+    AvisoConfiguracion.IDENTIDAD: "Identidad de esta máquina creada.",
+    AvisoConfiguracion.MAQUINA: (
+        "Máquina agregada. El backup se actualiza en unos segundos."
+    ),
+    AvisoConfiguracion.MAQUINA_QUITADA: (
+        "Máquina quitada. El backup se actualiza en unos segundos."
+    ),
+    AvisoConfiguracion.BACKUP_HECHO: "Backup hecho.",
+}
+_ERRORES_CONFIGURACION: dict[str, str] = {
+    ErrorConfiguracion.BACKUP: "No se pudo hacer el backup. El detalle quedó en "
+    "el log de la app; se reintenta al abrirla.",
+}
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def configuracion(
-    request: Request, service: ServiceDep, edit: str | None = None, aviso: str = ""
+    request: Request,
+    service: ServiceDep,
+    edit: str | None = None,
+    aviso: str = "",
+    error: str = "",
 ):
     editando = repo.get_emisor(service.conn, edit) if edit else None
-    avisos = {
-        "guardado": "Emisor guardado.",
-        "backup": "Configuración de backups guardada.",
-        "activado": "Emisor activo actualizado.",
-    }
     return _pagina_configuracion(
         request,
         service,
         editando=editando,
-        aviso=avisos.get(aviso),
+        aviso=_AVISOS_CONFIGURACION.get(aviso),
+        error=_ERRORES_CONFIGURACION.get(error),
     )
 
 
@@ -1379,7 +1512,7 @@ async def guardar_emisor(
             service,
             editando=existente,
             error="Datos inválidos: el ambiente sale del perfil activo y no se envía",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         pvs = _parse_puntos_venta_form(puntos_venta)
@@ -1390,7 +1523,7 @@ async def guardar_emisor(
             editando=existente,
             error="Datos inválidos: los puntos de venta deben ser números"
             " separados por coma",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         if emisor_id:
@@ -1418,7 +1551,7 @@ async def guardar_emisor(
             service,
             editando=existente,
             error=f"Datos inválidos: {detalles}",
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     try:
         if emisor_id:
@@ -1431,9 +1564,12 @@ async def guardar_emisor(
             service,
             editando=existente,
             error=str(exc),
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    return RedirectResponse("/configuracion?aviso=guardado", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.GUARDADO}",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
 
 
 @router.post("/ui/emisores/{emisor_id}/activar")
@@ -1441,8 +1577,11 @@ def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
     try:
         service.activate_emisor(emisor_id)
     except ServiceError:
-        return RedirectResponse("/configuracion", status_code=303)
-    return RedirectResponse("/configuracion?aviso=activado", status_code=303)
+        return RedirectResponse("/configuracion", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.ACTIVADO}",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
 
 
 @router.post("/ui/configuracion/backup", response_class=HTMLResponse)
@@ -1460,10 +1599,111 @@ def guardar_backup(
     except ValidationError as exc:
         detalles = "; ".join(e["msg"] for e in exc.errors())
         return _pagina_configuracion(
-            request, service, error=f"Datos inválidos: {detalles}", status_code=422
+            request,
+            service,
+            error=f"Datos inválidos: {detalles}",
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     service.update_backup_settings(payload)
-    return RedirectResponse("/configuracion?aviso=backup", status_code=303)
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.BACKUP}",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
+
+
+@router.post("/ui/configuracion/backup/identidad", response_class=HTMLResponse)
+def crear_identidad_maquina(request: Request, service: ServiceDep):
+    try:
+        service.create_machine_identity()
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.IDENTIDAD}#backups",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
+
+
+@router.post("/ui/configuracion/backup/esta-maquina", response_class=HTMLResponse)
+def agregar_esta_maquina(request: Request, service: ServiceDep):
+    try:
+        service.add_this_machine(nombre_del_equipo())
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
+
+
+@router.post("/ui/configuracion/backup/maquinas", response_class=HTMLResponse)
+def agregar_maquina(
+    request: Request,
+    service: ServiceDep,
+    nombre: str = Form(""),
+    clave: str = Form(""),
+):
+    try:
+        service.add_backup_machine(nombre, clave)
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            backup=_contexto_backups(service, form_nombre=nombre, form_clave=clave),
+        )
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
+
+
+@router.post("/ui/configuracion/backup/maquinas/quitar", response_class=HTMLResponse)
+def quitar_maquina(request: Request, service: ServiceDep, clave: str = Form("")):
+    try:
+        service.remove_backup_machine(clave)
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+    return RedirectResponse(
+        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
+
+
+@router.post("/ui/configuracion/backup/ahora", response_class=HTMLResponse)
+def hacer_backup_ahora(request: Request, service: ServiceDep):
+    """Lo mismo que ``POST /backup/seed``: corre el backup ya (con S3 si hay
+    bucket) y vuelve a Configuración con el resultado."""
+    try:
+        estado = service.run_seed_backup_now()
+    except ServiceError as exc:
+        return _pagina_configuracion(
+            request, service, error=str(exc), status_code=HTTPStatus.CONFLICT
+        )
+    if estado.status is SeedBackupStatus.OK:
+        return RedirectResponse(
+            f"/configuracion?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
+            status_code=HTTPStatus.SEE_OTHER,
+        )
+    return RedirectResponse(
+        f"/configuracion?error={ErrorConfiguracion.BACKUP}#backups",
+        status_code=HTTPStatus.SEE_OTHER,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1476,7 +1716,9 @@ def marcar_aviso_arca_leido(request: Request, event_id: str):
     """Oculta el aviso del banner; sigue en el desplegable mientras ARCA lo
     mande. Vuelve a la página desde la que se marcó."""
     mark_read(request.app.state.profile.paths.arca_events, event_id)
-    return RedirectResponse(_pagina_de_origen(request) or "/", status_code=303)
+    return RedirectResponse(
+        _pagina_de_origen(request) or "/", status_code=HTTPStatus.SEE_OTHER
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1501,7 +1743,7 @@ def pedir_cambiar_ambiente(request: Request, service: ServiceDep):
                 ),
                 "pending": False,
             },
-            status_code=500,
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
     if not is_launcher_supervised():
         return templates.TemplateResponse(
@@ -1514,7 +1756,7 @@ def pedir_cambiar_ambiente(request: Request, service: ServiceDep):
                 ),
                 "pending": False,
             },
-            status_code=422,
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     write_change_environment_request(profile.paths, profile.environment)
     # El ambiente del proceso NO cambia: solo el pedido en disco.

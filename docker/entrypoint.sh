@@ -24,6 +24,29 @@ mkdir -p /host "$HOME_DIR"
 # no puede mover el layout ni el puerto interno.
 ln -sfn /host/.env "$HOME_DIR/.env"
 
+# Identidad age de la máquina (<app-data>/age/key.txt, fuera de los
+# perfiles): es la clave que abre el seed cifrado, así que tiene que
+# sobrevivir a recrear el contenedor. Vive en el host (/host/age) como
+# data/ y backups/. A diferencia de secrets/ no se copia adentro: la app no
+# exige permisos estrictos para leerla y la crea ella misma.
+APP_DATA="$XDG_DATA_HOME/facturadorE"
+mkdir -p /host/age "$APP_DATA"
+if [ -d "$APP_DATA/age" ] && [ ! -L "$APP_DATA/age" ]; then
+    # Identidad creada adentro por una versión anterior: se lleva al host.
+    # Si el host ya tiene otra, no se pisa ni se borra la de adentro: queda
+    # al lado con otro nombre (es una clave privada; perderla puede dejar
+    # backups sin abrir).
+    if [ -f "$APP_DATA/age/key.txt" ]; then
+        if [ ! -e /host/age/key.txt ]; then
+            cp -p "$APP_DATA/age/key.txt" /host/age/key.txt
+        elif ! cmp -s "$APP_DATA/age/key.txt" /host/age/key.txt; then
+            cp -p "$APP_DATA/age/key.txt" "/host/age/key-contenedor-$(date +%Y%m%d%H%M%S).txt"
+        fi
+    fi
+    rm -rf "$APP_DATA/age"
+fi
+ln -sfn /host/age "$APP_DATA/age"
+
 # El ambiente decide QUÉ perfil se normaliza. Misma precedencia que la app:
 # ARCA_ENV del entorno gana; si no, el del .env del host. Si no hay ambiente
 # elegido, no se arma ningún perfil y la app falla con su mensaje claro.

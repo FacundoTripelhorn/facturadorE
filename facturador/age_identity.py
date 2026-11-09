@@ -1,0 +1,193 @@
+"""Identidad ``age`` de esta máquina (una sola para los dos ambientes).
+
+Vive en el app-data, fuera de los perfiles: ``<app-data>/age/key.txt``
+(``%LOCALAPPDATA%\\FacturadorE\\age\\key.txt`` en Windows). Con ella esta
+máquina puede abrir el seed de cualquier perfil que la tenga en su
+``recipients.txt``.
+
+La parte privada nunca sale del archivo: este módulo no la lee. La crea
+``age-keygen -o`` y la clave pública se obtiene con ``age-keygen -y``; Python
+solo ve la clave pública. No entra al seed, no sube a S3, no se loguea ni se
+muestra.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from .profile import ProfilePaths, machine_identity_path
+
+KEYGEN_BIN = "age-keygen"
+
+logger = logging.getLogger(__name__)
+
+# Clave pública X25519 nativa: "age1" + 58 caracteres bech32.
+_PUBLIC_KEY = re.compile(r"age1[02-9ac-hj-np-z]{58}")
+
+
+class AgeIdentityError(RuntimeError):
+    """No se pudo crear o leer la identidad. El mensaje nunca trae la clave
+    privada ni la salida de ``age-keygen``."""
+
+
+_BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+_BECH32_GEN = (0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
+
+
+def _bech32_checksum_ok(key: str) -> bool:
+    """Checksum bech32 (BIP-173) de una clave ``age1…`` ya en minúsculas.
+
+    age codifica las claves con bech32 (no bech32m): el polymod sobre el
+    HRP expandido más los datos tiene que dar 1. Una tecla cambiada o dos
+    caracteres invertidos lo rompen aunque el largo y el alfabeto sigan bien.
+    """
+    hrp, _, data = key.rpartition("1")
+    values = [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+    values += [_BECH32_CHARSET.index(c) for c in data]
+    chk = 1
+    for v in values:
+        top = chk >> 25
+        chk = (chk & 0x1FFFFFF) << 5 ^ v
+        for i, gen in enumerate(_BECH32_GEN):
+            if (top >> i) & 1:
+                chk ^= gen
+    return chk == 1
+
+
+def is_public_key(value: str) -> bool:
+    """¿Es una clave pública ``age1…`` nativa (X25519) con checksum válido?
+
+    Sin el checksum, una clave con un typo pasaba la validación, quedaba en
+    ``recipients.txt`` y age rechazaba ese recipient: ningún backup se podía
+    cifrar, ni para las máquinas que estaban bien.
+    """
+    key = value.strip().lower()
+    return _PUBLIC_KEY.fullmatch(key) is not None and _bech32_checksum_ok(key)
+
+
+def _keygen(keygen_bin: str) -> str:
+    found = shutil.which(keygen_bin)
+    if found is None:
+        raise AgeIdentityError(
+            "No se encontró age-keygen. Viene con el instalador de "
+            "FacturadorE; fuera del instalador hay que instalar age."
+        )
+    return found
+
+
+def _restringir(path: Path, mode: int) -> None:
+    """chmod best-effort. En un bind mount de Docker Desktop sobre Windows el
+    filesystem no acepta permisos POSIX: ahí se sigue (age-keygen ya escribe
+    la identidad con 600) en vez de dejar la máquina sin identidad. En un
+    disco local el chmod del dueño no falla, así que nada cambia."""
+    if sys.platform == "win32":
+        return
+    try:
+        path.chmod(mode)
+    except OSError:
+        logger.warning(
+            "El filesystem no acepta permisos POSIX; la identidad age queda "
+            "con los permisos que asigne el host."
+        )
+
+
+class MachineIdentity:
+    """Identidad ``age`` de la máquina en un path fijo."""
+
+    def __init__(self, path: Path, *, keygen_bin: str = KEYGEN_BIN) -> None:
+        self._path = path
+        self._keygen_bin = keygen_bin
+
+    @classmethod
+    def for_profile(cls, paths: ProfilePaths) -> MachineIdentity:
+        return cls(machine_identity_path(paths))
+
+    @property
+    def path(self) -> Path:
+        return self._path
+
+    def exists(self) -> bool:
+        return self._path.is_file()
+
+    def public_key(self) -> str | None:
+        """La clave pública, o None si la máquina todavía no tiene identidad."""
+        if not self.exists():
+            return None
+        try:
+            completed = subprocess.run(
+                [_keygen(self._keygen_bin), "-y", str(self._path)],
+                check=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=30,
+            )
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            OSError,
+        ) as exc:
+            raise AgeIdentityError(
+                "No se pudo leer la identidad de esta máquina."
+            ) from exc
+        lines = completed.stdout.decode("ascii", errors="replace").split()
+        if len(lines) != 1 or not is_public_key(lines[0]):
+            raise AgeIdentityError(
+                "La identidad de esta máquina no tiene el formato esperado."
+            )
+        return lines[0].lower()
+
+    def create(self) -> str:
+        """Crea la identidad si no existe y devuelve la clave pública.
+
+        Si ya existe no se pisa (ni aunque otro proceso la cree a la vez):
+        se genera en un temporal del mismo directorio y se enlaza al destino
+        con ``os.link``, que falla si el destino ya está.
+        """
+        keygen = _keygen(self._keygen_bin)
+        folder = self._path.parent
+        folder.mkdir(parents=True, exist_ok=True)
+        _restringir(folder, 0o700)
+        if not self.exists():
+            with tempfile.TemporaryDirectory(dir=folder) as tmp:
+                tmp_key = Path(tmp) / self._path.name
+                try:
+                    # -o escribe la identidad con permisos 600; la clave
+                    # pública sale por stderr, que se descarta.
+                    subprocess.run(
+                        [keygen, "-o", str(tmp_key)],
+                        check=True,
+                        capture_output=True,
+                        stdin=subprocess.DEVNULL,
+                        timeout=30,
+                    )
+                except (
+                    subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired,
+                    OSError,
+                ) as exc:
+                    raise AgeIdentityError(
+                        "age-keygen no pudo crear la identidad de esta máquina."
+                    ) from exc
+                _restringir(tmp_key, 0o600)
+                try:
+                    os.link(tmp_key, self._path)
+                except FileExistsError:
+                    pass  # otro proceso la creó primero: queda la suya
+                except OSError as exc:
+                    raise AgeIdentityError(
+                        "No se pudo guardar la identidad de esta máquina."
+                    ) from exc
+        key = self.public_key()
+        if key is None:
+            raise AgeIdentityError("No se pudo guardar la identidad de esta máquina.")
+        return key
+
+    def __repr__(self) -> str:
+        return "MachineIdentity(...)"
