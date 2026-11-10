@@ -19,6 +19,7 @@ from ...service import (
     ServiceError,
     StaleRegistryError,
 )
+from ..constants import REVISAR, Accion, AvisoInicio, AvisoRegistro, Pagina
 from ._comun import (
     _catchup_aviso,
     templates,
@@ -41,9 +42,9 @@ def _ir_a_factura(inv: sqlite3.Row | None, sufijo: str = "") -> RedirectResponse
     una factura real de este registro, y si no hay fila se va al listado.
     """
     if inv is None:
-        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.COMPROBANTES, status_code=HTTPStatus.SEE_OTHER)
     return RedirectResponse(
-        f"/facturas/{inv['id']}{sufijo}", status_code=HTTPStatus.SEE_OTHER
+        f"{Pagina.FACTURAS}/{inv['id']}{sufijo}", status_code=HTTPStatus.SEE_OTHER
     )
 
 
@@ -59,7 +60,7 @@ def revisar(
     estado ya tiene historia y se ve en el detalle."""
     inv = _factura_o_redirect(service, invoice_id)
     if inv is None:
-        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.COMPROBANTES, status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] != InvoiceStatus.DRAFT:
         return _ir_a_factura(inv)
     return _pagina_revisar(
@@ -98,9 +99,9 @@ def detalle(request: Request, service: ServiceDep, invoice_id: str):
     Reconcilia 'unknown' al mirarlo (lazy, igual que la API JSON)."""
     inv = _factura_o_redirect(service, invoice_id, reconcile=True)
     if inv is None:
-        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.COMPROBANTES, status_code=HTTPStatus.SEE_OTHER)
     if inv["status"] == InvoiceStatus.DRAFT:
-        return _ir_a_factura(inv, "/revisar")
+        return _ir_a_factura(inv, REVISAR)
     return templates.TemplateResponse(
         request,
         "detalle.html",
@@ -135,7 +136,7 @@ def autorizar(
     try:
         autorizada = service.authorize(invoice_id, force_desync=force)
     except NotFoundError:
-        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.COMPROBANTES, status_code=HTTPStatus.SEE_OTHER)
     except ServiceError as exc:
         inv = _factura_o_redirect(service, invoice_id)
         if inv is not None and inv["status"] == InvoiceStatus.DRAFT:
@@ -153,7 +154,7 @@ def autorizar(
     return _ir_a_factura(autorizada)
 
 
-@router.post("/ui/registry/catch-up")
+@router.post(Accion.CATCH_UP)
 def catch_up_ui(
     request: Request,
     service: ServiceDep,
@@ -177,14 +178,16 @@ def catch_up_ui(
         from urllib.parse import quote
 
         return RedirectResponse(
-            f"/comprobantes?error={quote(str(exc), safe='')}",
+            f"{Pagina.COMPROBANTES}?error={quote(str(exc), safe='')}",
             status_code=HTTPStatus.SEE_OTHER,
         )
     inv = _factura_o_redirect(service, invoice_id) if invoice_id else None
     if inv is not None:
-        return _ir_a_factura(inv, f"/revisar?aviso=catchup&n={report.inserted}")
+        return _ir_a_factura(
+            inv, f"{REVISAR}?aviso={AvisoRegistro.CATCHUP}&n={report.inserted}"
+        )
     return RedirectResponse(
-        f"/comprobantes?aviso=catchup&n={report.inserted}",
+        f"{Pagina.COMPROBANTES}?aviso={AvisoRegistro.CATCHUP}&n={report.inserted}",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -194,8 +197,11 @@ def descartar(request: Request, service: ServiceDep, invoice_id: str):
     try:
         service.delete_draft(invoice_id)
     except NotFoundError:
-        return RedirectResponse("/comprobantes", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.COMPROBANTES, status_code=HTTPStatus.SEE_OTHER)
     except ServiceError:
         # Enviada/no descartable: el detalle explica el estado real.
         return _ir_a_factura(_factura_o_redirect(service, invoice_id))
-    return RedirectResponse("/?aviso=descartado", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"{Pagina.INICIO}?aviso={AvisoInicio.DESCARTADO}",
+        status_code=HTTPStatus.SEE_OTHER,
+    )

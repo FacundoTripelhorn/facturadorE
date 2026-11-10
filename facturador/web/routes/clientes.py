@@ -22,6 +22,7 @@ from ...schemas import (
 from ...service import (
     ServiceError,
 )
+from ..constants import Accion, Pagina
 from ._comun import (
     templates,
 )
@@ -74,13 +75,13 @@ def _pagina_clientes(
     )
 
 
-@router.get("/clientes", response_class=HTMLResponse)
+@router.get(Pagina.CLIENTES, response_class=HTMLResponse)
 def clientes(request: Request, service: ServiceDep, edit: str | None = None):
     editando = repo.get_client(service.conn, edit) if edit else None
     return _pagina_clientes(request, service, editando=editando)
 
 
-@router.post("/ui/clientes", response_class=HTMLResponse)
+@router.post(Accion.CLIENTES, response_class=HTMLResponse)
 def guardar_cliente(
     request: Request,
     service: ServiceDep,
@@ -123,4 +124,4 @@ def guardar_cliente(
             error=str(exc),
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
-    return RedirectResponse("/clientes", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(Pagina.CLIENTES, status_code=HTTPStatus.SEE_OTHER)

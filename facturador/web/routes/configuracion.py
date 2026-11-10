@@ -24,6 +24,7 @@ from ..constants import (
     AvisoConfiguracion,
     ErrorConfiguracion,
     EstadoBackupUI,
+    Pagina,
 )
 from ._comun import (
     templates,
@@ -158,7 +159,7 @@ _ERRORES_CONFIGURACION: dict[str, str] = {
 }
 
 
-@router.get("/configuracion", response_class=HTMLResponse)
+@router.get(Pagina.CONFIGURACION, response_class=HTMLResponse)
 def configuracion(
     request: Request,
     service: ServiceDep,

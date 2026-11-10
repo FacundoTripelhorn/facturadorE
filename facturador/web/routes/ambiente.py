@@ -12,6 +12,7 @@ from ...launcher.switch import (
     is_launcher_supervised,
     write_change_environment_request,
 )
+from ..constants import Accion
 from ._comun import (
     templates,
 )
@@ -19,7 +20,7 @@ from ._comun import (
 router = APIRouter()
 
 
-@router.post("/ui/cambiar-ambiente", response_class=HTMLResponse)
+@router.post(Accion.CAMBIAR_AMBIENTE, response_class=HTMLResponse)
 def pedir_cambiar_ambiente(request: Request, service: ServiceDep):
     """Pide al launcher un reinicio: no muta ambiente, clientes ARCA ni DB."""
     profile = request.app.state.profile

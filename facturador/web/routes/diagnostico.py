@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from ...api.deps import ServiceDep
 from ...diagnostics import diagnosticar_arca, diagnosticar_perfil, peor_nivel
+from ..constants import Pagina
 from ._comun import (
     templates,
 )
@@ -14,7 +15,7 @@ from ._comun import (
 router = APIRouter()
 
 
-@router.get("/diagnostico", response_class=HTMLResponse)
+@router.get(Pagina.DIAGNOSTICO, response_class=HTMLResponse)
 def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
     """¿Se puede emitir con este perfil? Los chequeos locales corren siempre;
     los de ARCA solo con ``?arca=1`` (botón), porque pueden tardar."""

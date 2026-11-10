@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from ... import repo
 from ...api.deps import ServiceDep
 from ...resumen import MESES, resumir
-from ..constants import TabComprobantes
+from ..constants import Pagina, TabComprobantes
 from ..grafico import grafico_por_mes
 from ._comun import (
     TAB_FILTERS,
@@ -23,7 +23,7 @@ from ._comun import (
 router = APIRouter()
 
 
-@router.get("/comprobantes", response_class=HTMLResponse)
+@router.get(Pagina.COMPROBANTES, response_class=HTMLResponse)
 def comprobantes(
     request: Request,
     service: ServiceDep,

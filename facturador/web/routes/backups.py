@@ -24,6 +24,7 @@ from ...settings import (
 from ..constants import (
     AvisoConfiguracion,
     ErrorConfiguracion,
+    Pagina,
 )
 from .configuracion import (
     _contexto_backups,
@@ -55,7 +56,7 @@ def guardar_backup(
         )
     service.update_backup_settings(payload)
     return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.BACKUP}",
+        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.BACKUP}",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -72,7 +73,7 @@ def crear_identidad_maquina(request: Request, service: ServiceDep):
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.IDENTIDAD}#backups",
+        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.IDENTIDAD}#backups",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -89,7 +90,7 @@ def agregar_esta_maquina(request: Request, service: ServiceDep):
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA}#backups",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -112,7 +113,7 @@ def agregar_maquina(
             backup=_contexto_backups(service, form_nombre=nombre, form_clave=clave),
         )
     return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA}#backups",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -129,7 +130,7 @@ def quitar_maquina(request: Request, service: ServiceDep, clave: str = Form(""))
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
+        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -146,10 +147,10 @@ def hacer_backup_ahora(request: Request, service: ServiceDep):
         )
     if estado.status is SeedBackupStatus.OK:
         return RedirectResponse(
-            f"/configuracion?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
+            f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
             status_code=HTTPStatus.SEE_OTHER,
         )
     return RedirectResponse(
-        f"/configuracion?error={ErrorConfiguracion.BACKUP}#backups",
+        f"{Pagina.CONFIGURACION}?error={ErrorConfiguracion.BACKUP}#backups",
         status_code=HTTPStatus.SEE_OTHER,
     )

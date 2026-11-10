@@ -30,7 +30,7 @@ from ...settings import (
     get_active_emisor_id,
 )
 from ...setup import SetupState, reconcile_setup_state
-from ..constants import AvisoSetup
+from ..constants import AvisoSetup, Pagina
 from ._comun import (
     _parse_puntos_venta_form,
     templates,
@@ -102,7 +102,7 @@ def _pagina_setup(
     )
 
 
-@router.get("/setup", response_class=HTMLResponse)
+@router.get(Pagina.SETUP, response_class=HTMLResponse)
 def setup_pagina(request: Request, service: ServiceDep, aviso: str = ""):
     """Onboarding por perfil: certificado, emisor y punto de venta."""
     return _pagina_setup(request, service, aviso=AvisoSetup.desde_query(aviso))
@@ -167,7 +167,7 @@ async def instalar_certificado_setup(
 
     reconcile_setup_state(profile, service.conn)
     return RedirectResponse(
-        f"/setup?aviso={AvisoSetup.INSTALADO}", status_code=HTTPStatus.SEE_OTHER
+        f"{Pagina.SETUP}?aviso={AvisoSetup.INSTALADO}", status_code=HTTPStatus.SEE_OTHER
     )
 
 
@@ -187,7 +187,7 @@ async def guardar_emisor_setup(
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.EMISOR_REQUIRED:
-        return RedirectResponse("/setup", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.SETUP, status_code=HTTPStatus.SEE_OTHER)
 
     onboarding_row = _emisor_onboarding_row(service.conn, service.config.env)
     if onboarding_row is not None:
@@ -300,7 +300,9 @@ async def guardar_emisor_setup(
         # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
     aviso = AvisoSetup.LISTO if new_state is SetupState.READY else AvisoSetup.EMISOR
-    return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"{Pagina.SETUP}?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER
+    )
 
 
 @router.post("/ui/setup/punto-venta", response_class=HTMLResponse)
@@ -313,7 +315,7 @@ async def guardar_punto_venta_setup(
     profile = request.app.state.profile
     state = reconcile_setup_state(profile, service.conn)
     if state is not SetupState.POINT_OF_SALE_REQUIRED:
-        return RedirectResponse("/setup", status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(Pagina.SETUP, status_code=HTTPStatus.SEE_OTHER)
 
     emisor_row = _emisor_onboarding_row(service.conn, service.config.env)
     if emisor_row is None:
@@ -382,4 +384,6 @@ async def guardar_punto_venta_setup(
     aviso = (
         AvisoSetup.LISTO if new_state is SetupState.READY else AvisoSetup.PUNTO_VENTA
     )
-    return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"{Pagina.SETUP}?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER
+    )

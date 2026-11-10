@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from ...arca.events import mark_read
+from ..constants import Pagina
 from ._comun import (
     _pagina_de_origen,
 )
@@ -21,5 +22,5 @@ def marcar_aviso_arca_leido(request: Request, event_id: str):
     mande. Vuelve a la página desde la que se marcó."""
     mark_read(request.app.state.profile.paths.arca_events, event_id)
     return RedirectResponse(
-        _pagina_de_origen(request) or "/", status_code=HTTPStatus.SEE_OTHER
+        _pagina_de_origen(request) or Pagina.INICIO, status_code=HTTPStatus.SEE_OTHER
     )

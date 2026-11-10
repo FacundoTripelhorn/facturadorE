@@ -22,6 +22,7 @@ from ...schemas import (
 from ...service import (
     ServiceError,
 )
+from ..constants import Accion, Pagina
 from ..numeros import parse_importe
 from ._comun import (
     AVISOS,
@@ -61,7 +62,7 @@ def _contexto_form(service, error: str | None = None, aviso: str | None = None):
     }
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get(Pagina.INICIO, response_class=HTMLResponse)
 def home(request: Request, service: ServiceDep, aviso: str = ""):
     return templates.TemplateResponse(
         request, "home.html", _contexto_form(service, aviso=AVISOS.get(aviso))
@@ -74,7 +75,7 @@ def _detalles_validacion(exc: ValidationError) -> str:
     return "; ".join(str(e["msg"]).removeprefix("Value error, ") for e in exc.errors())
 
 
-@router.post("/ui/facturas")
+@router.post(Accion.FACTURAS)
 def generar_borrador(
     request: Request,
     service: ServiceDep,
@@ -134,5 +135,5 @@ def generar_borrador(
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     return RedirectResponse(
-        f"/facturas/{draft['id']}/revisar", status_code=HTTPStatus.SEE_OTHER
+        f"{Pagina.FACTURAS}/{draft['id']}/revisar", status_code=HTTPStatus.SEE_OTHER
     )

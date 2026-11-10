@@ -29,7 +29,14 @@ from ...launcher.switch import (
     is_launcher_supervised,
 )
 from ...orden_pago import identidad_receptor
-from ..constants import TabComprobantes
+from ..constants import (
+    REVISAR,
+    Accion,
+    AvisoInicio,
+    AvisoRegistro,
+    Pagina,
+    TabComprobantes,
+)
 from ..numeros import formato_importe
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -96,7 +103,7 @@ def _pagina_de_origen(request: Request) -> str | None:
     if (
         parsed.scheme in ("", "http")
         and parsed.path
-        and not parsed.path.startswith("/ui/")
+        and not parsed.path.startswith(Accion.PREFIJO)
         and parsed.netloc in ("", request.url.netloc)
     ):
         href = parsed.path
@@ -107,22 +114,22 @@ def _pagina_de_origen(request: Request) -> str | None:
 
 
 def _recovery_from_ui_path(path: str) -> str:
-    if path == "/ui/facturas":
-        return "/"
-    if path == "/ui/clientes":
-        return "/clientes"
-    if path.startswith("/ui/setup/"):
-        return "/setup"
-    if path.startswith("/ui/emisores") or path.startswith("/ui/configuracion/"):
-        return "/configuracion"
-    if path == "/ui/cambiar-ambiente":
-        return "/"
-    if path == "/ui/registry/catch-up":
-        return "/comprobantes"
+    if path == Accion.FACTURAS:
+        return Pagina.INICIO
+    if path == Accion.CLIENTES:
+        return Pagina.CLIENTES
+    if path.startswith(Accion.SETUP):
+        return Pagina.SETUP
+    if path.startswith(Accion.EMISORES) or path.startswith(Accion.CONFIGURACION):
+        return Pagina.CONFIGURACION
+    if path == Accion.CAMBIAR_AMBIENTE:
+        return Pagina.INICIO
+    if path == Accion.CATCH_UP:
+        return Pagina.COMPROBANTES
     m = re.fullmatch(r"/ui/facturas/([^/]+)/(?:authorize|descartar)", path)
     if m:
-        return f"/facturas/{m.group(1)}/revisar"
-    return "/"
+        return f"{Pagina.FACTURAS}/{m.group(1)}{REVISAR}"
+    return Pagina.INICIO
 
 
 async def csrf_rejected_handler(
@@ -136,7 +143,7 @@ async def csrf_rejected_handler(
     """
     if not isinstance(exc, CsrfRejected):
         raise exc
-    if request.url.path.startswith("/ui/"):
+    if request.url.path.startswith(Accion.PREFIJO):
         return templates.TemplateResponse(
             request,
             "csrf_error.html",
@@ -227,13 +234,13 @@ TAB_LABELS: dict[TabComprobantes, str] = {
     TabComprobantes.ATENCION: "Atención",
 }
 
-AVISOS = {
-    "descartado": "Borrador descartado; no se envió nada a ARCA.",
+AVISOS: dict[str, str] = {
+    AvisoInicio.DESCARTADO: "Borrador descartado; no se envió nada a ARCA.",
 }
 
 
 def _catchup_aviso(aviso: str, n: str) -> str | None:
-    if aviso != "catchup":
+    if aviso != AvisoRegistro.CATCHUP:
         return None
     if n:
         return f"Registro sincronizado desde ARCA: {n} comprobantes."

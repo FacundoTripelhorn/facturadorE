@@ -23,6 +23,7 @@ from ...service import (
     NotFoundError,
     ServiceError,
 )
+from ..constants import Pagina
 from ..numeros import parse_importe
 from ._comun import (
     templates,
@@ -90,7 +91,7 @@ def _pagina_constatacion(
     )
 
 
-@router.get("/constatacion", response_class=HTMLResponse)
+@router.get(Pagina.CONSTATACION, response_class=HTMLResponse)
 def constatacion(
     request: Request, service: ServiceDep, invoice_id: str = "", modo: str = ""
 ):
