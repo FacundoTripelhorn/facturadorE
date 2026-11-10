@@ -154,6 +154,24 @@ class ArcaUnavailableError(ServiceError):
     pass
 
 
+def _punto_de_venta(habilitados: Sequence[int], pedido: int | None) -> int:
+    """El único punto de venta del emisor, o el pedido si tiene varios."""
+    if len(habilitados) == 1:
+        pv = habilitados[0]
+    elif pedido is not None:
+        pv = pedido
+    else:
+        raise DomainError(
+            "Indicar punto de venta: el emisor activo tiene más de uno habilitado"
+        )
+    if pv not in habilitados:
+        raise DomainError(
+            f"Punto de venta {pv} no está habilitado para este emisor"
+            f" ({', '.join(str(p) for p in habilitados)})"
+        )
+    return pv
+
+
 class InvoiceService:
     def __init__(
         self,
@@ -442,6 +460,42 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     def create_invoice(self, payload: InvoiceCreate) -> sqlite3.Row:
+        """Crea el borrador de una Factura E. Cada paso valida lo suyo y
+        corta con su propio error; el orden importa (ver cada paso)."""
+        settings = self._emisor_para_emitir()
+        # Identidad fiscal ANTES de cualquier WSFEX: get_param /
+        # get_ctz también llevan Auth{Token,Sign,Cuit} del cert vivo.
+        cuit_emisor = self._resolve_fiscal_cuit()
+        client = self._cliente_para_factura(payload.client_id)
+
+        fecha_cbte = payload.fecha_cbte or dt.date.today().strftime("%Y%m%d")
+        fecha_pago = payload.fecha_pago or fecha_cbte
+        moneda_id = payload.moneda_id or client["moneda_default"]
+        descripcion = payload.descripcion or client["descripcion_default"]
+
+        self._validate_code("moneda", moneda_id, "moneda_id")
+        self._validate_code("pais", client["pais_dst"], "pais_dst")
+        self._validate_code("cuit_pais", client["cuit_pais"], "cuit_pais")
+
+        ctz = self._cotizacion(moneda_id, payload.moneda_ctz)
+        items = self._items_de_factura(payload, descripcion)
+        pv = _punto_de_venta(settings.emisor.puntos_venta, payload.punto_venta)
+
+        data = self._datos_borrador(
+            payload,
+            settings=settings,
+            client=client,
+            cuit_emisor=cuit_emisor,
+            pv=pv,
+            fecha_cbte=fecha_cbte,
+            fecha_pago=fecha_pago,
+            moneda_id=moneda_id,
+            ctz=ctz,
+        )
+        return repo.create_invoice(self.conn, data, items)
+
+    def _emisor_para_emitir(self) -> Settings:
+        """Settings con un emisor activo y completo, o ConflictError."""
         # Sin datos de emisor no se emite: el PDF del comprobante los
         # necesita y la UI dirige a Configuración a completarlos.
         settings = self.get_settings()
@@ -454,48 +508,46 @@ class InvoiceService:
             raise ConflictError(
                 "No hay emisor activo para emitir; elegir uno en Configuración."
             )
-        # Identidad fiscal ANTES de cualquier WSFEX: get_param /
-        # get_ctz también llevan Auth{Token,Sign,Cuit} del cert vivo.
-        cuit_emisor = self._resolve_fiscal_cuit()
+        return settings
 
-        if payload.client_id is not None:
-            client = repo.get_client(self.conn, payload.client_id)
+    def _cliente_para_factura(self, client_id: str | None) -> sqlite3.Row:
+        """El cliente pedido, o el default si no se pidió ninguno."""
+        if client_id is not None:
+            client = repo.get_client(self.conn, client_id)
             if client is None:
-                raise NotFoundError(f"Cliente {payload.client_id} no existe")
-        else:
-            client = repo.get_default_client(self.conn)
-            if client is None:
-                raise ConflictError(
-                    "No hay cliente default; indicar client_id o marcar uno"
-                )
+                raise NotFoundError(f"Cliente {client_id} no existe")
+            return client
+        client = repo.get_default_client(self.conn)
+        if client is None:
+            raise ConflictError(
+                "No hay cliente default; indicar client_id o marcar uno"
+            )
+        return client
 
-        fecha_cbte = payload.fecha_cbte or dt.date.today().strftime("%Y%m%d")
-        fecha_pago = payload.fecha_pago or fecha_cbte
-        moneda_id = payload.moneda_id or client["moneda_default"]
-        descripcion = payload.descripcion or client["descripcion_default"]
-
-        self._validate_code("moneda", moneda_id, "moneda_id")
-        self._validate_code("pais", client["pais_dst"], "pais_dst")
-        self._validate_code("cuit_pais", client["cuit_pais"], "cuit_pais")
-
-        if payload.moneda_ctz is not None:
-            ctz = payload.moneda_ctz
+    def _cotizacion(self, moneda_id: str, pedida: Decimal | None) -> Decimal:
+        """La cotización del request, 1 para pesos, o la de ARCA para la
+        fecha de emisión (nunca una propia, §0). Validada al formato WSFEX."""
+        if pedida is not None:
+            ctz = pedida
         elif moneda_id == "PES":
             ctz = Decimal(1)
         else:
-            # Cotización de ARCA para la fecha de emisión, nunca propia (§0).
             try:
                 ctz, _ = self.wsfex.get_ctz(moneda_id)
             except (WsfexError, httpx.HTTPError) as exc:
                 raise ArcaUnavailableError(
                     f"No se pudo obtener la cotización {moneda_id} de ARCA: {exc}"
                 ) from exc
-
         try:
-            ctz = validar_importe(ctz, MONEDA_CTZ)
+            return validar_importe(ctz, MONEDA_CTZ)
         except ImporteFueraDeFormato as exc:
             raise DomainError(str(exc)) from None
 
+    def _items_de_factura(
+        self, payload: InvoiceCreate, descripcion: str | None
+    ) -> list[dict[str, Any]]:
+        """Los ítems del request, o una línea con el total (patrón §0.1).
+        La suma tiene que dar exactamente imp_total."""
         items: list[dict[str, Any]]
         if payload.items:
             items = []
@@ -545,23 +597,24 @@ class InvoiceService:
             raise DomainError(
                 f"imp_total {payload.imp_total} != suma de items {total_items}"
             )
+        return items
 
-        pvs = settings.emisor.puntos_venta
-        if len(pvs) == 1:
-            pv = pvs[0]
-        elif payload.punto_venta is not None:
-            pv = payload.punto_venta
-        else:
-            raise DomainError(
-                "Indicar punto de venta: el emisor activo tiene más de uno habilitado"
-            )
-        if pv not in pvs:
-            raise DomainError(
-                f"Punto de venta {pv} no está habilitado para este emisor"
-                f" ({', '.join(str(p) for p in pvs)})"
-            )
-
-        data = {
+    def _datos_borrador(
+        self,
+        payload: InvoiceCreate,
+        *,
+        settings: Settings,
+        client: sqlite3.Row,
+        cuit_emisor: str,
+        pv: int,
+        fecha_cbte: str,
+        fecha_pago: str,
+        moneda_id: str,
+        ctz: Decimal,
+    ) -> dict[str, Any]:
+        """La fila del borrador con los snapshots de cliente, emisor y
+        parámetros: el comprobante queda fijo aunque después cambien."""
+        return {
             "emisor_id": settings.emisor.id,
             "client_id": client["id"],
             "cbte_tipo": CBTE_TIPO_FACTURA_E,
@@ -610,7 +663,6 @@ class InvoiceService:
             # request, y después se valida en cada acceso por id.
             "environment": self.config.env,
         }
-        return repo.create_invoice(self.conn, data, items)
 
     def _check_invoice_profile(self, inv: sqlite3.Row) -> None:
         """Rechaza el acceso a comprobantes de OTRO perfil.
