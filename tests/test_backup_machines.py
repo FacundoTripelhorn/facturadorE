@@ -305,7 +305,9 @@ def test_pagina_sin_identidad_ofrece_crearla(backups):
 def test_el_nombre_de_otra_maquina_arranca_vacio(backups, monkeypatch):
     # Casi siempre se pega la clave de OTRA PC: con el nombre de esta como
     # default era fácil guardarla con el nombre equivocado.
-    monkeypatch.setattr("facturador.web.routes.nombre_del_equipo", lambda: "ESTA-PC")
+    monkeypatch.setattr(
+        "facturador.web.routes.backups.nombre_del_equipo", lambda: "ESTA-PC"
+    )
     r = backups.get("/configuracion")
     assert r.status_code == 200
     campo = re.search(r'id="maquina_nombre"[^>]*value="([^"]*)"', r.text)

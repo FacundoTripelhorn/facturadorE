@@ -1,5 +1,6 @@
-"""Valores fijos de la UI web: clases de badge, estados que muestra la
-pantalla de backups y claves de los avisos/errores que viajan en la URL.
+"""Valores fijos de la UI web: rutas de las páginas y acciones, clases de
+badge, estados que muestra la pantalla de backups y claves de los
+avisos/errores que viajan en la URL.
 
 Son StrEnum: cada miembro ES su texto, así que entra igual en un
 f-string de URL, en una plantilla o como clave de un dict que después se
@@ -9,6 +10,37 @@ consulta con el string que llega en el query param.
 from __future__ import annotations
 
 from enum import Enum, StrEnum
+
+
+class Pagina(StrEnum):
+    """Rutas GET de las páginas del frontend."""
+
+    INICIO = "/"
+    FACTURAS = "/facturas"
+    COMPROBANTES = "/comprobantes"
+    CLIENTES = "/clientes"
+    SETUP = "/setup"
+    CONFIGURACION = "/configuracion"
+    CONSTATACION = "/constatacion"
+    DIAGNOSTICO = "/diagnostico"
+
+
+# Sufijo de la página de revisión de un borrador: /facturas/<id>/revisar.
+REVISAR = "/revisar"
+
+
+class Accion(StrEnum):
+    """Rutas POST ``/ui/…`` que se nombran en más de un lugar (handler y
+    página de recuperación del rechazo CSRF)."""
+
+    PREFIJO = "/ui/"
+    FACTURAS = "/ui/facturas"
+    CLIENTES = "/ui/clientes"
+    EMISORES = "/ui/emisores"
+    SETUP = "/ui/setup/"
+    CONFIGURACION = "/ui/configuracion/"
+    CAMBIAR_AMBIENTE = "/ui/cambiar-ambiente"
+    CATCH_UP = "/ui/registry/catch-up"
 
 
 class Badge(StrEnum):
@@ -45,8 +77,56 @@ class AvisoConfiguracion(StrEnum):
     BACKUP_HECHO = "backup_hecho"
 
 
+class AvisoInicio(StrEnum):
+    """``/?aviso=<clave>``."""
+
+    DESCARTADO = "descartado"
+
+
+class AvisoRegistro(StrEnum):
+    """``?aviso=<clave>`` en ``/comprobantes`` y en la revisión, después del
+    catch-up desde ARCA."""
+
+    CATCHUP = "catchup"
+
+
 class ErrorConfiguracion(StrEnum):
     """``/configuracion?error=<clave>`` cuando la acción falló después del
     redirect (el detalle queda en el log, no en la URL)."""
 
     BACKUP = "backup"
+
+
+class TabComprobantes(StrEnum):
+    """Solapas de ``/comprobantes`` (``?estado=<valor>``)."""
+
+    TODAS = "todas"
+    BORRADORES = "borradores"
+    AUTORIZADAS = "autorizadas"
+    ATENCION = "atencion"
+
+    @classmethod
+    def desde_query(cls, valor: str) -> TabComprobantes:
+        """La solapa pedida; una desconocida (link viejo o tipeado) es TODAS."""
+        try:
+            return cls(valor)
+        except ValueError:
+            return cls.TODAS
+
+
+class AvisoSetup(StrEnum):
+    """``/setup?aviso=<valor>``: qué paso del onboarding se acaba de completar."""
+
+    INSTALADO = "instalado"
+    EMISOR = "emisor"
+    PUNTO_VENTA = "punto_venta"
+    LISTO = "listo"
+
+    @classmethod
+    def desde_query(cls, valor: str) -> AvisoSetup | None:
+        """El aviso pedido, o None. Un texto cualquiera en la URL no se
+        muestra: un link armado no puede poner mensajes en la app."""
+        try:
+            return cls(valor)
+        except ValueError:
+            return None

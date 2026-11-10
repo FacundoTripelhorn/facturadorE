@@ -33,7 +33,7 @@
 {% elif aviso == "listo" %}
 <div class="panel ok"><div><strong>Configuración inicial completa.</strong>
   <a href="/">Ir a Emitir</a>.</div></div>
-{% elif aviso %}<div class="panel ok"><div>{{ aviso }}</div></div>{% endif %}
+{% endif %}
 {% if error %}<div class="panel error"><div>{{ error }}</div></div>{% endif %}
 
 <section class="card">

@@ -6,6 +6,8 @@ read-only (qué se envió, estado, CAE, PDF). Nada viaja a ARCA sin pasar
 por la revisión; descartar un borrador no tiene efecto impositivo.
 """
 
+import re
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -687,7 +689,13 @@ def test_comprobantes_filtra_por_tab(api, arca):
     assert f"/facturas/{autorizada_id}" in autorizadas.text  # número → detalle
     assert "Revisar" not in autorizadas.text
 
-    assert api.get("/comprobantes?estado=inventado").status_code == 200  # cae en todas
+    inventada = api.get("/comprobantes?estado=inventado")
+    assert inventada.status_code == 200  # cae en todas
+    actual = re.search(
+        r'href="/comprobantes\?estado=(\w+)"\s+aria-current', inventada.text
+    )
+    assert actual is not None
+    assert actual.group(1) == "todas"
 
 
 # --- escaping (checklist §2.1.1 punto 4, aplicado al HTML) ---
@@ -1209,6 +1217,14 @@ def test_setup_pagina_identifica_ambiente_y_formulario(tmp_path, arca):
     assert 'name="clave"' in r.text
     assert str(tmp_path) not in r.text
     assert "BEGIN PRIVATE KEY" not in r.text
+
+
+def test_setup_no_muestra_un_aviso_inventado_en_la_url(tmp_path, arca):
+    # Un link armado no puede poner un mensaje propio en la app.
+    client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
+    r = client.get("/setup?aviso=Tu%20certificado%20vencio%2C%20llama%20al%200800")
+    assert r.status_code == 200
+    assert "Tu certificado vencio" not in r.text
 
 
 def test_setup_instala_certificado_y_muestra_metadata(
