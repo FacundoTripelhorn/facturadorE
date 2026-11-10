@@ -6,6 +6,8 @@ read-only (qué se envió, estado, CAE, PDF). Nada viaja a ARCA sin pasar
 por la revisión; descartar un borrador no tiene efecto impositivo.
 """
 
+import re
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -687,7 +689,13 @@ def test_comprobantes_filtra_por_tab(api, arca):
     assert f"/facturas/{autorizada_id}" in autorizadas.text  # número → detalle
     assert "Revisar" not in autorizadas.text
 
-    assert api.get("/comprobantes?estado=inventado").status_code == 200  # cae en todas
+    inventada = api.get("/comprobantes?estado=inventado")
+    assert inventada.status_code == 200  # cae en todas
+    actual = re.search(
+        r'href="/comprobantes\?estado=(\w+)"\s+aria-current', inventada.text
+    )
+    assert actual is not None
+    assert actual.group(1) == "todas"
 
 
 # --- escaping (checklist §2.1.1 punto 4, aplicado al HTML) ---

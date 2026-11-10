@@ -50,3 +50,20 @@ class ErrorConfiguracion(StrEnum):
     redirect (el detalle queda en el log, no en la URL)."""
 
     BACKUP = "backup"
+
+
+class TabComprobantes(StrEnum):
+    """Solapas de ``/comprobantes`` (``?estado=<valor>``)."""
+
+    TODAS = "todas"
+    BORRADORES = "borradores"
+    AUTORIZADAS = "autorizadas"
+    ATENCION = "atencion"
+
+    @classmethod
+    def desde_query(cls, valor: str) -> TabComprobantes:
+        """La solapa pedida; una desconocida (link viejo o tipeado) es TODAS."""
+        try:
+            return cls(valor)
+        except ValueError:
+            return cls.TODAS

@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from ... import repo
 from ...api.deps import ServiceDep
 from ...resumen import MESES, resumir
+from ..constants import TabComprobantes
 from ..grafico import grafico_por_mes
 from ._comun import (
     TAB_FILTERS,
@@ -26,13 +27,12 @@ router = APIRouter()
 def comprobantes(
     request: Request,
     service: ServiceDep,
-    estado: str = "todas",
+    estado: str = TabComprobantes.TODAS,
     aviso: str = "",
     n: str = "",
     error: str = "",
 ):
-    if estado not in TAB_FILTERS:
-        estado = "todas"
+    tab = TabComprobantes.desde_query(estado)
     counts = repo.count_invoices_by_status(service.conn)
     tab_counts = {
         tab: (
@@ -48,13 +48,13 @@ def comprobantes(
         {
             "tabs": TAB_LABELS,
             "tab_counts": tab_counts,
-            "estado": estado,
+            "estado": tab,
             "aviso": _catchup_aviso(aviso, n),
             "error": error or None,
             # Las facturas de una orden de pago se eligen en esta solapa.
-            "seleccion_orden": estado == "autorizadas",
+            "seleccion_orden": tab is TabComprobantes.AUTORIZADAS,
             "facturas": repo.list_invoices(
-                service.conn, limit=50, offset=0, statuses=TAB_FILTERS[estado]
+                service.conn, limit=50, offset=0, statuses=TAB_FILTERS[tab]
             ),
         },
     )

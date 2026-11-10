@@ -29,6 +29,7 @@ from ...launcher.switch import (
     is_launcher_supervised,
 )
 from ...orden_pago import identidad_receptor
+from ..constants import TabComprobantes
 from ..numeros import formato_importe
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -208,22 +209,22 @@ def _fecha_iso_a_arca(fecha: str | None) -> str | None:
 
 
 # Tabs de /comprobantes: cada una agrupa los estados que le corresponden.
-TAB_FILTERS: dict[str, tuple[InvoiceStatus, ...] | None] = {
-    "todas": None,
-    "borradores": (InvoiceStatus.DRAFT,),
-    "autorizadas": (InvoiceStatus.AUTHORIZED,),
-    "atencion": (
+TAB_FILTERS: dict[TabComprobantes, tuple[InvoiceStatus, ...] | None] = {
+    TabComprobantes.TODAS: None,
+    TabComprobantes.BORRADORES: (InvoiceStatus.DRAFT,),
+    TabComprobantes.AUTORIZADAS: (InvoiceStatus.AUTHORIZED,),
+    TabComprobantes.ATENCION: (
         InvoiceStatus.SUBMITTING,
         InvoiceStatus.UNKNOWN,
         InvoiceStatus.REJECTED,
     ),
 }
 
-TAB_LABELS = {
-    "todas": "Todas",
-    "borradores": "Borradores",
-    "autorizadas": "Autorizadas",
-    "atencion": "Atención",
+TAB_LABELS: dict[TabComprobantes, str] = {
+    TabComprobantes.TODAS: "Todas",
+    TabComprobantes.BORRADORES: "Borradores",
+    TabComprobantes.AUTORIZADAS: "Autorizadas",
+    TabComprobantes.ATENCION: "Atención",
 }
 
 AVISOS = {
