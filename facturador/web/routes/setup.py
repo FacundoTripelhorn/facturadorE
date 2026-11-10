@@ -30,6 +30,7 @@ from ...settings import (
     get_active_emisor_id,
 )
 from ...setup import SetupState, reconcile_setup_state
+from ..constants import AvisoSetup
 from ._comun import (
     _parse_puntos_venta_form,
     templates,
@@ -74,7 +75,7 @@ def _pagina_setup(
     cert_meta: CertificateMetadata | None = None,
     emisor_editando=None,
     error: str | None = None,
-    aviso: str | None = None,
+    aviso: AvisoSetup | None = None,
     status_code: int = HTTPStatus.OK,
 ):
     profile = request.app.state.profile
@@ -104,13 +105,7 @@ def _pagina_setup(
 @router.get("/setup", response_class=HTMLResponse)
 def setup_pagina(request: Request, service: ServiceDep, aviso: str = ""):
     """Onboarding por perfil: certificado, emisor y punto de venta."""
-    avisos = {
-        "instalado": "instalado",
-        "emisor": "emisor",
-        "punto_venta": "punto_venta",
-        "listo": "listo",
-    }
-    return _pagina_setup(request, service, aviso=avisos.get(aviso, aviso or None))
+    return _pagina_setup(request, service, aviso=AvisoSetup.desde_query(aviso))
 
 
 @router.post("/ui/setup/certificado", response_class=HTMLResponse)
@@ -171,7 +166,9 @@ async def instalar_certificado_setup(
         )
 
     reconcile_setup_state(profile, service.conn)
-    return RedirectResponse("/setup?aviso=instalado", status_code=HTTPStatus.SEE_OTHER)
+    return RedirectResponse(
+        f"/setup?aviso={AvisoSetup.INSTALADO}", status_code=HTTPStatus.SEE_OTHER
+    )
 
 
 @router.post("/ui/setup/emisor", response_class=HTMLResponse)
@@ -302,7 +299,7 @@ async def guardar_emisor_setup(
     if new_state is SetupState.READY and state is not SetupState.READY:
         # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
-    aviso = "listo" if new_state is SetupState.READY else "emisor"
+    aviso = AvisoSetup.LISTO if new_state is SetupState.READY else AvisoSetup.EMISOR
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)
 
 
@@ -382,5 +379,7 @@ async def guardar_punto_venta_setup(
     if new_state is SetupState.READY and state is not SetupState.READY:
         # Fin de onboarding (/setup is setup-guard exempt).
         service.notify_seed_backup("onboarding_completed")
-    aviso = "listo" if new_state is SetupState.READY else "punto_venta"
+    aviso = (
+        AvisoSetup.LISTO if new_state is SetupState.READY else AvisoSetup.PUNTO_VENTA
+    )
     return RedirectResponse(f"/setup?aviso={aviso}", status_code=HTTPStatus.SEE_OTHER)

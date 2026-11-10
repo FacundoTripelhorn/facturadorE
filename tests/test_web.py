@@ -1219,6 +1219,14 @@ def test_setup_pagina_identifica_ambiente_y_formulario(tmp_path, arca):
     assert "BEGIN PRIVATE KEY" not in r.text
 
 
+def test_setup_no_muestra_un_aviso_inventado_en_la_url(tmp_path, arca):
+    # Un link armado no puede poner un mensaje propio en la app.
+    client, _ = _client_sin_certificados(tmp_path, arca, seed=False)
+    r = client.get("/setup?aviso=Tu%20certificado%20vencio%2C%20llama%20al%200800")
+    assert r.status_code == 200
+    assert "Tu certificado vencio" not in r.text
+
+
 def test_setup_instala_certificado_y_muestra_metadata(
     tmp_path, test_cert_and_key, arca
 ):

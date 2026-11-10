@@ -67,3 +67,21 @@ class TabComprobantes(StrEnum):
             return cls(valor)
         except ValueError:
             return cls.TODAS
+
+
+class AvisoSetup(StrEnum):
+    """``/setup?aviso=<valor>``: qué paso del onboarding se acaba de completar."""
+
+    INSTALADO = "instalado"
+    EMISOR = "emisor"
+    PUNTO_VENTA = "punto_venta"
+    LISTO = "listo"
+
+    @classmethod
+    def desde_query(cls, valor: str) -> AvisoSetup | None:
+        """El aviso pedido, o None. Un texto cualquiera en la URL no se
+        muestra: un link armado no puede poner mensajes en la app."""
+        try:
+            return cls(valor)
+        except ValueError:
+            return None
