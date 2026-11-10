@@ -1,31 +1,23 @@
-"""Configuración: emisores y backups (settings de dominio en la DB, no en el .env)."""
+"""Configuración: la página y cómo se arma (emisores y backups en la misma
+pantalla; settings de dominio en la DB, no en el .env). Las acciones viven en
+``emisores.py`` y ``backups.py`` y vuelven a esta página con
+``_pagina_configuracion``."""
 
 from __future__ import annotations
 
 import datetime as dt
 from http import HTTPStatus
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import ValidationError
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
 
 from ... import repo
 from ...api.deps import ServiceDep
-from ...backup_machines import nombre_del_equipo
-from ...diagnostics import diagnosticar_arca, diagnosticar_perfil, peor_nivel
-from ...schemas import (
-    BackupSettingsIn,
-    EmisorCreateIn,
-    EmisorUpdateIn,
-)
 from ...seed_backup_sync import BackupDestination, SeedBackupState, SeedBackupStatus
 from ...service import (
     DomainError,
-    ServiceError,
 )
 from ...settings import (
-    BACKUP_PREFIX_DEFAULT,
-    CONDICION_IVA_DEFAULT,
     get_active_emisor_id,
 )
 from ..constants import (
@@ -34,7 +26,6 @@ from ..constants import (
     EstadoBackupUI,
 )
 from ._comun import (
-    _parse_puntos_venta_form,
     templates,
 )
 
@@ -148,27 +139,6 @@ def _pagina_configuracion(
     )
 
 
-@router.get("/diagnostico", response_class=HTMLResponse)
-def diagnostico(request: Request, service: ServiceDep, arca: bool = False):
-    """¿Se puede emitir con este perfil? Los chequeos locales corren siempre;
-    los de ARCA solo con ``?arca=1`` (botón), porque pueden tardar."""
-    profile = request.app.state.profile
-    # ARCA primero: cada respuesta actualiza los avisos guardados, que el
-    # chequeo local lee después.
-    remotos = diagnosticar_arca(profile, service.conn, service.wsfex) if arca else None
-    locales = diagnosticar_perfil(profile, service.conn)
-    return templates.TemplateResponse(
-        request,
-        "diagnostico.html",
-        {
-            "locales": locales,
-            "remotos": remotos,
-            "arca_verificado": arca,
-            "nivel": peor_nivel(locales + (remotos or [])),
-        },
-    )
-
-
 _AVISOS_CONFIGURACION: dict[str, str] = {
     AvisoConfiguracion.GUARDADO: "Emisor guardado.",
     AvisoConfiguracion.BACKUP: "Configuración de backups guardada.",
@@ -203,218 +173,4 @@ def configuracion(
         editando=editando,
         aviso=_AVISOS_CONFIGURACION.get(aviso),
         error=_ERRORES_CONFIGURACION.get(error),
-    )
-
-
-@router.post("/ui/emisores", response_class=HTMLResponse)
-async def guardar_emisor(
-    request: Request,
-    service: ServiceDep,
-    emisor_id: str = Form(""),
-    razon_social: str = Form(""),
-    domicilio: str = Form(""),
-    iibb: str = Form(""),
-    inicio_actividades: str = Form(""),
-    condicion_iva: str = Form(CONDICION_IVA_DEFAULT),
-    puntos_venta: str = Form("1"),
-):
-    existente = repo.get_emisor(service.conn, emisor_id) if emisor_id else None
-    form = await request.form()
-    if "ambiente" in form:
-        return _pagina_configuracion(
-            request,
-            service,
-            editando=existente,
-            error="Datos inválidos: el ambiente sale del perfil activo y no se envía",
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    try:
-        pvs = _parse_puntos_venta_form(puntos_venta)
-    except ValueError:
-        return _pagina_configuracion(
-            request,
-            service,
-            editando=existente,
-            error="Datos inválidos: los puntos de venta deben ser números"
-            " separados por coma",
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    try:
-        if emisor_id:
-            update_payload = EmisorUpdateIn(
-                razon_social=razon_social,
-                domicilio=domicilio,
-                iibb=iibb,
-                inicio_actividades=inicio_actividades,
-                condicion_iva=condicion_iva,
-                puntos_venta=pvs,
-            )
-        else:
-            create_payload = EmisorCreateIn(
-                razon_social=razon_social,
-                domicilio=domicilio,
-                iibb=iibb,
-                inicio_actividades=inicio_actividades,
-                condicion_iva=condicion_iva,
-                puntos_venta=pvs,
-            )
-    except ValidationError as exc:
-        detalles = "; ".join(e["msg"] for e in exc.errors())
-        return _pagina_configuracion(
-            request,
-            service,
-            editando=existente,
-            error=f"Datos inválidos: {detalles}",
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    try:
-        if emisor_id:
-            service.update_emisor(emisor_id, update_payload)
-        else:
-            service.create_emisor(create_payload)
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request,
-            service,
-            editando=existente,
-            error=str(exc),
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.GUARDADO}",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/emisores/{emisor_id}/activar")
-def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
-    try:
-        service.activate_emisor(emisor_id)
-    except ServiceError:
-        return RedirectResponse("/configuracion", status_code=HTTPStatus.SEE_OTHER)
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.ACTIVADO}",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup", response_class=HTMLResponse)
-def guardar_backup(
-    request: Request,
-    service: ServiceDep,
-    backup_s3_bucket: str = Form(""),
-    backup_s3_prefix: str = Form(BACKUP_PREFIX_DEFAULT),
-):
-    try:
-        payload = BackupSettingsIn(
-            backup_s3_bucket=backup_s3_bucket,
-            backup_s3_prefix=backup_s3_prefix,
-        )
-    except ValidationError as exc:
-        detalles = "; ".join(e["msg"] for e in exc.errors())
-        return _pagina_configuracion(
-            request,
-            service,
-            error=f"Datos inválidos: {detalles}",
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    service.update_backup_settings(payload)
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.BACKUP}",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup/identidad", response_class=HTMLResponse)
-def crear_identidad_maquina(request: Request, service: ServiceDep):
-    try:
-        service.create_machine_identity()
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request,
-            service,
-            error=str(exc),
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.IDENTIDAD}#backups",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup/esta-maquina", response_class=HTMLResponse)
-def agregar_esta_maquina(request: Request, service: ServiceDep):
-    try:
-        service.add_this_machine(nombre_del_equipo())
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request,
-            service,
-            error=str(exc),
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup/maquinas", response_class=HTMLResponse)
-def agregar_maquina(
-    request: Request,
-    service: ServiceDep,
-    nombre: str = Form(""),
-    clave: str = Form(""),
-):
-    try:
-        service.add_backup_machine(nombre, clave)
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request,
-            service,
-            error=str(exc),
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-            backup=_contexto_backups(service, form_nombre=nombre, form_clave=clave),
-        )
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA}#backups",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup/maquinas/quitar", response_class=HTMLResponse)
-def quitar_maquina(request: Request, service: ServiceDep, clave: str = Form("")):
-    try:
-        service.remove_backup_machine(clave)
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request,
-            service,
-            error=str(exc),
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-        )
-    return RedirectResponse(
-        f"/configuracion?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
-        status_code=HTTPStatus.SEE_OTHER,
-    )
-
-
-@router.post("/ui/configuracion/backup/ahora", response_class=HTMLResponse)
-def hacer_backup_ahora(request: Request, service: ServiceDep):
-    """Lo mismo que ``POST /backup/seed``: corre el backup ya (con S3 si hay
-    bucket) y vuelve a Configuración con el resultado."""
-    try:
-        estado = service.run_seed_backup_now()
-    except ServiceError as exc:
-        return _pagina_configuracion(
-            request, service, error=str(exc), status_code=HTTPStatus.CONFLICT
-        )
-    if estado.status is SeedBackupStatus.OK:
-        return RedirectResponse(
-            f"/configuracion?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
-            status_code=HTTPStatus.SEE_OTHER,
-        )
-    return RedirectResponse(
-        f"/configuracion?error={ErrorConfiguracion.BACKUP}#backups",
-        status_code=HTTPStatus.SEE_OTHER,
     )

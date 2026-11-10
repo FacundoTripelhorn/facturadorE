@@ -306,7 +306,7 @@ def test_el_nombre_de_otra_maquina_arranca_vacio(backups, monkeypatch):
     # Casi siempre se pega la clave de OTRA PC: con el nombre de esta como
     # default era fácil guardarla con el nombre equivocado.
     monkeypatch.setattr(
-        "facturador.web.routes.configuracion.nombre_del_equipo", lambda: "ESTA-PC"
+        "facturador.web.routes.backups.nombre_del_equipo", lambda: "ESTA-PC"
     )
     r = backups.get("/configuracion")
     assert r.status_code == 200
