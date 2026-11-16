@@ -5,11 +5,10 @@ SOAP web services. A local app for one user: Python 3.12, one FastAPI process
 (JSON API plus a Jinja/HTMX UI), SQLite, PDFs with fpdf2. It ships as a
 Windows installer, with Docker as the alternative runtime.
 
-## Commands
+## More commands
 
-`just check`, `just fix`, `just test` and `just build` (the Docker image) are
-described in the shared rules below. The tests need `age` and `age-keygen` on
-the PATH. This project also has:
+Here `just build` builds the Docker image, and `just test` needs `age` and
+`age-keygen` on the PATH.
 
 | Do this | Command |
 |---|---|
