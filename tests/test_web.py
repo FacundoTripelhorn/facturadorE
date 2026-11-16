@@ -1061,7 +1061,7 @@ def test_seleccion_punto_venta_al_emitir(api, arca):
     assert factura["punto_venta"] == 3
 
 
-# --- identidad de ambiente persistente (ADR 0001) ---
+# --- identidad de ambiente persistente (design.md §2.5) ---
 
 _PAGINAS_NORMALES = (
     "/",
@@ -1590,7 +1590,7 @@ def test_setup_retoma_paso_tras_reinicio(tmp_path, test_cert_and_key, arca):
     assert "Certificado instalado" in client2.get("/setup").text
 
 
-# --- cambio de ambiente por reinicio (ADR 0001) ---
+# --- cambio de ambiente por reinicio (design.md §2.5) ---
 
 
 def test_cambiar_ambiente_solo_con_launcher(monkeypatch, api):

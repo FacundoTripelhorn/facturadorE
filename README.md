@@ -51,8 +51,8 @@ no hace falta instalar dos copias ni administrar dos directorios a mano.
 
 Cambiar de ambiente **reinicia** el backend con el otro perfil: no hay cambio
 en caliente dentro del mismo proceso. El ambiente activo se ve siempre en la
-app (badge). Contrato completo:
-[`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
+app (badge). Contrato completo: [`docs/design.md`](docs/design.md),
+§2.5, "Contrato de ambientes".
 
 Guías paso a paso (trámites en ARCA, certificados y verificación):
 

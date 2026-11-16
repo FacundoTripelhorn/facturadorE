@@ -1,0 +1,10 @@
+# Settings read by agents, the shared CI check and the portfolio review.
+# Format: project.example.yml in agent-standards.
+key: FAC
+language: es-AR
+tracker: linear
+status: active
+package_manager: uv
+version_file: pyproject.toml
+release: package
+default_branch: master

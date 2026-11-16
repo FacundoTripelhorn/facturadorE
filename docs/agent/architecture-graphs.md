@@ -4,10 +4,9 @@ Curated Mermaid diagrams for **orientation and architectural intent**. They are
 **navigation aids only** — not a substitute for reading the code.
 
 **Authoritative sources:** implementation under `facturador/`, tests under
-`tests/`, [`docs/design.md`](../design.md), and
-[`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md)
-(environment/profile contract). When a diagram disagrees with those, trust the
-code, design doc, and ADR.
+`tests/` and [`docs/design.md`](../design.md) (its §2.5 holds the
+environment/profile contract). When a diagram disagrees with those, trust the
+code and the design doc.
 
 For file-level navigation, see [`repo-map.md`](repo-map.md). For commands and
 constraints, see [`AGENTS.md`](../../AGENTS.md). For verification scopes by task,
@@ -415,6 +414,4 @@ Never run two instances emitting in parallel.
 
 - [`repo-map.md`](repo-map.md) — where code lives by task type
 - [`docs/design.md`](../design.md) — authoritative architecture and domain rules
-- [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md)
-  — authoritative environment/profile contract (launcher-selected isolated profiles)
 - [`AGENTS.md`](../../AGENTS.md) — agent contract, commands, security rules

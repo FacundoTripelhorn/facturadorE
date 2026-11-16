@@ -713,7 +713,7 @@ def _decide_change_environment(
         )
         return None
 
-    # Invariante ADR 0001: apagar el actual ANTES de arrancar el otro. Con
+    # Invariante de design.md §2.5: apagar el actual ANTES de arrancar el otro. Con
     # ventana, el progreso "Cambiando a …" aparece ya, mientras se cierra.
     print(
         f"Deteniendo {supervisor.plan.profile.display_name} "

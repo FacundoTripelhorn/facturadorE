@@ -1,20 +1,20 @@
 """Configuración de arranque del facturador.
 
-Regla central (design.md §2.1.1 punto 1, reforzada por ADR 0001): TODO se
+Regla central (design.md §2.1.1 punto 1 y §2.5): TODO se
 deriva de un único ambiente ``ArcaEnvironment`` que se INYECTA una sola vez
 en el arranque. Las URLs de WSAA/WSFEX y los paths de runtime salen
 del mismo perfil, por lo que es imposible por construcción usar el
 certificado de homologación contra producción o viceversa. No existen
 overrides por URL, y ningún módulo de la app lee ``ARCA_ENV`` por su cuenta:
 el único punto de lectura es ``resolve_boot_environment()`` en el arranque
-(hasta que el launcher de ADR 0001 pase a ser quien elige el ambiente).
+(hasta que el launcher pase a ser quien elige el ambiente).
 
 Resolución de configuración (única, sin fallbacks al directorio de trabajo):
 
 1. ``FACTURADOR_HOME`` (default ``~/facturador``; en Docker, ``/facturador``
    fijado por ENV en el Dockerfile) contiene SOLO el ``.env`` de bootstrap.
    Los archivos de runtime ya no viven ahí: cada ambiente tiene su perfil
-   aislado bajo el app-data del SO (ADR 0001) y ``ProfilePaths``
+   aislado bajo el app-data del SO (design.md §2.5) y ``ProfilePaths``
    es la única fuente de esos paths (DB, certs, PDFs, TA cache, logs,
    backups, onboarding).
 2. El ``.env`` se lee SOLO de ``<home>/.env`` — nunca del CWD — y es el
@@ -66,8 +66,8 @@ BOOTSTRAP_ENV = f"""\
 # Bootstrap del facturador. El resto de la configuración (datos del emisor,
 # punto de venta, backups) se edita desde la app, en la página Configuración.
 
-# Ambiente ARCA: homo | prod. SIN default: descomentar y elegir uno (ADR
-# 0001). Deriva URLs de WSAA/WSFEX y qué perfil aislado (con su par
+# Ambiente ARCA: homo | prod. SIN default: descomentar y elegir uno
+# (design.md §2.5). Deriva URLs de WSAA/WSFEX y qué perfil aislado (con su par
 # cert/key en secrets/cert.{{crt,key}}) se usa. Único flag: no hay overrides.
 #ARCA_ENV=homo
 

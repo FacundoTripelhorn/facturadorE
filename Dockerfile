@@ -29,7 +29,7 @@ RUN chmod +x /entrypoint.sh
 # host sí es configurable, vía FACTURADOR_PORT en el shell del host; compose
 # lo propaga como FACTURADOR_PUBLIC_PORT para la allowlist Host/Origin
 # cuando el mapping no es 8399:8399.
-# XDG_DATA_HOME fija dónde resuelve la app las raíces de perfil (ADR 0001 /
+# XDG_DATA_HOME fija dónde resuelve la app las raíces de perfil (design.md §2.5 /
 # ProfilePaths) para que el entrypoint y la app coincidan sin depender del $HOME
 # del usuario del contenedor.
 ENV FACTURADOR_HOME=/facturador \

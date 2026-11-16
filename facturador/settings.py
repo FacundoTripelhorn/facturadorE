@@ -7,7 +7,7 @@ de la DB. En el ``.env`` de bootstrap queda SOLO lo que no puede vivir
 en la DB: ``ARCA_ENV`` (deriva el pareo cert/URL, design.md §2.1.1 punto 1)
 y ``FACTURADOR_PORT``.
 
-El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (ADR 0001): la
+El emisor es una entidad (tabla ``emisores``) LOCAL al perfil (design.md §2.5): la
 DB entera pertenece a un solo ambiente, así que acá no se
 selecciona ni filtra por ambiente. Un perfil puede tener varios emisores
 (una sola identidad fiscal: el CUIT del certificado del perfil, sellado

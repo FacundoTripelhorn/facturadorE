@@ -11,25 +11,25 @@ For project constraints and the expected agent response format, see
 
 ## Default verification order
 
-Run from the repo root after `uv sync`. **Always use this order** when you
-need full confidence (or before opening a PR):
+Run from the repo root. **Always use this order** when you need full
+confidence (or before opening a PR):
 
 | Step | Command | When required |
 |------|---------|---------------|
-| 1 | `uv run ruff check .` or `./scripts/agent/lint.sh` | Any Python change |
-| 2 | `uv run ruff format --check .` (also run by `./scripts/agent/lint.sh`; fix with `uv run ruff format .`) | Any Python change |
-| 3 | `uv run mypy` or `./scripts/agent/typecheck.sh` | Any Python change |
-| 4 | `uv run pytest` or `./scripts/agent/test.sh` | Any behavior change |
+| 1 | `just check` (ruff check, ruff format check, mypy; fix with `just fix`) | Any Python change |
+| 2 | `just test` (pytest; needs `age` and `age-keygen` on the PATH) | Any behavior change |
+| 3 | `just build` (Docker image) | `Dockerfile`, `docker-compose.yml` or `docker/entrypoint.sh` change |
 
-**Helper scripts** under `scripts/agent/` wrap the same `uv` commands so agents
-do not need to guess tooling. Run `./scripts/agent/doctor.sh` for a full
-environment check: Python and `uv` versions, `uv sync`, then lint (ruff check
-and format check), typecheck, and tests in order.
+`just doctor` is a full environment check: Python and `uv` versions,
+`uv sync --locked`, then `just check` and `just test`.
 
-CI runs `uv sync --frozen` then the same four steps in
-`.github/workflows/ci.yml` (`checks` job). A separate `docker` job runs
-`docker build -t facturador:ci .` — add that locally only when `Dockerfile`,
-`docker-compose.yml`, or `docker/entrypoint.sh` change.
+CI runs the same recipes in `.github/workflows/ci.yml` (`check`, `test` and
+`build` jobs), plus the shared `standards` job and the Windows workflow.
+
+Offline work without real ARCA credentials: tests use a test profile root
+(`EnvironmentProfile.for_testing` and the fixtures in `tests/conftest.py`) and
+the in-process ARCA fake. On Cursor Cloud the environment may already run
+`uv sync` on boot.
 
 **Docs-only changes** (markdown under `docs/`, `README.md`, `AGENTS.md`) do not
 need lint, types, or tests unless you edited embedded commands or code samples.
@@ -139,7 +139,7 @@ still pending before merge.
 ### What to include
 
 1. **Which command** — exact invocation (e.g. `uv run pytest tests/test_web.py`,
-   `./scripts/agent/doctor.sh`, `docker build -t facturador:ci .`).
+   `just doctor`, `just build`).
 2. **Status** — from the table above.
 3. **Outcome** — pass count, error snippet, or skip reason.
 4. **Residual risk** — only when Not run, Skipped, or Blocked (e.g. "schema

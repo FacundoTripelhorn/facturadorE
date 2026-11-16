@@ -43,7 +43,7 @@ def _setup_logging(config: Config) -> None:
 
 
 def main() -> None:
-    # ADR 0001: el ambiente se resuelve UNA vez acá y viaja
+    # design.md §2.5: el ambiente se resuelve UNA vez acá y viaja
     # inyectado; ningún otro módulo vuelve a leer ARCA_ENV.
     profile = resolve_boot_profile()
     config = load_config(profile)

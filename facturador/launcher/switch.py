@@ -1,4 +1,4 @@
-"""Pedido de cambio de ambiente (ADR 0001).
+"""Pedido de cambio de ambiente (design.md §2.5).
 
 El backend no muta el ambiente en proceso: solo escribe un archivo de pedido
 en el perfil corriente. El launcher lo detecta, muestra el chooser y — si el

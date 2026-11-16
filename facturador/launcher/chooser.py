@@ -1,4 +1,4 @@
-"""Chooser de ambiente del launcher (ADR 0001).
+"""Chooser de ambiente del launcher (design.md §2.5).
 
 Pantalla previa al supervisor: Homologación o Producción en lenguaje de
 negocio. No expone perfiles, directorios, Docker ni variables de entorno.

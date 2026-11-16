@@ -8,7 +8,7 @@ puede deshacer: cada CAE emitido queda registrado en ARCA a nombre del emisor.
 punta ([`setup-homologacion.md`](setup-homologacion.md)). El código no cambia
 entre ambientes; producción es un trámite de certificado + elegir **Producción**
 en el launcher (perfil aislado, sin segunda instalación). Contrato:
-[`adr/0001-perfiles-de-ambiente-aislados.md`](adr/0001-perfiles-de-ambiente-aislados.md).
+[`design.md`](design.md), §2.5, "Contrato de ambientes".
 
 ## 1. Certificado de producción
 

@@ -60,7 +60,7 @@ def create_app(
 ) -> FastAPI:
     """Construye la app contra UN perfil de ambiente explícito e inmutable.
 
-    ADR 0001: el ambiente se decide antes de crear FastAPI, SQLite
+    design.md §2.5: el ambiente se decide antes de crear FastAPI, SQLite
     y los clientes ARCA, y no existe forma de cambiarlo después (perfil y
     Config son frozen; no hay endpoint ni setter). URLs de ARCA, certificados
     y paths derivan todos del perfil vía Config/ProfilePaths.

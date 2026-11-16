@@ -18,8 +18,8 @@ Before broad repo search or exploratory greps, read:
 
 - Python 3.12, FastAPI + HTMX, SQLite, fpdf2 PDFs (pure Python); single process, no workers.
 - Dev: `uv sync` then `uv run python -m facturador.launcher` (binds `127.0.0.1:8399`).
-- Verify: `uv run ruff check .` → `uv run mypy` → `uv run pytest`.
-- Runtime data lives in launcher-selected isolated profiles (ADR 0001), not in the repo.
+- Verify: `just check` → `just test` (see the verification matrix).
+- Runtime data lives in launcher-selected isolated profiles (`docs/design.md` §2.5), not in the repo.
 - Domain design: [`docs/design.md`](docs/design.md).
 
 End every task with **Summary / Changed files / Verification / Remaining risks** (see AGENTS.md).

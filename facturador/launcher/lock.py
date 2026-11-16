@@ -1,4 +1,4 @@
-"""Lock de perfil del launcher (ADR 0001).
+"""Lock de perfil del launcher (design.md §2.5).
 
 Evita dos launchers (y por tanto dos backends) sobre el mismo perfil SQLite.
 El lock es por perfil: Homologación y Producción pueden coexistir.

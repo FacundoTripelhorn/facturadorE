@@ -11,7 +11,7 @@ at hand, treat it as a real bug.
 For commands, constraints, and the expected agent response format, see
 [`AGENTS.md`](../../AGENTS.md). For architecture diagrams, see
 [`architecture-graphs.md`](architecture-graphs.md). Environment/profile
-contract: [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md).
+contract: [`docs/design.md`](../design.md), §2.5, "Contrato de ambientes".
 
 ---
 
@@ -224,7 +224,7 @@ Multi-machine use is via **restore from S3**, not live replication
 WSAA/WSFEX clients inside a running backend does not switch environments
 in-process. “Cambiar ambiente” stops the current backend and starts another.
 
-**Expected.** ADR 0001 invariant: one backend process = one immutable
+**Expected.** Environment contract invariant (`docs/design.md` §2.5): one backend process = one immutable
 environment + one profile. The launcher orchestrates restart-based switching.
 There is one FacturadorE app — not two installations — with two isolated
 profiles.

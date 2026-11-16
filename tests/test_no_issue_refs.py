@@ -108,8 +108,8 @@ def test_el_repo_no_menciona_ids_de_issues():
                 rel = path.relative_to(_ROOT)
                 hallazgos.append(f"{rel}:{nro}: {linea.strip()[:100]}")
     assert not hallazgos, (
-        "Referencias a issues del proyecto en el repo (ver AGENTS.md, "
-        "'Writing code, comments and docs'):\n" + "\n".join(hallazgos)
+        "Referencias a issues del proyecto en el repo (ver "
+        "docs/agent/rules/code.md, 'Issue references'):\n" + "\n".join(hallazgos)
     )
 
 

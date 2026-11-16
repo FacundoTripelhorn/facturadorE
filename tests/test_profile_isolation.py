@@ -1,4 +1,4 @@
-"""Aislamiento entre perfiles Homologación / Producción (ADR 0001).
+"""Aislamiento entre perfiles Homologación / Producción (design.md §2.5).
 
 Suite de integración: dos perfiles temporales bajo un app-data aislado,
 apps reales con ARCA simulado, y asserts de que datos y artefactos de
