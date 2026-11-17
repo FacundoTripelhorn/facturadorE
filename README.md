@@ -34,6 +34,10 @@ Qué incluye:
 - **macOS / desarrollo:** **Docker Desktop**, o bien **Python ≥ 3.12** +
   [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
   nada más que `uv sync`: se genera con fpdf2 en Python puro.
+- **Desarrollo:** **[just](https://just.systems) 1.59.0**, la misma versión
+  que usa CI (`just check`, `just test`…): `uv tool install rust-just==1.59.0`
+  en cualquier sistema, o `winget install Casey.Just --version 1.59.0` en
+  Windows.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.

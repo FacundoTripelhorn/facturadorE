@@ -1,6 +1,6 @@
 # Workflow
 
-<!-- agent-standards v0.8 — synced from agent-standards. Edit it there, not here. -->
+<!-- agent-standards v0.9 — synced from agent-standards. Edit it there, not here. -->
 
 Read before creating a branch, committing, opening a PR, writing in an issue
 or making a release.
@@ -52,9 +52,16 @@ or making a release.
 
 - Versions follow SemVer (`MAJOR.MINOR.PATCH`). While the major version is
   0, a breaking change bumps the minor version.
-- The version is written in one place: the file named by `version_file` in
-  `project.yml`. Nothing else states it; code that needs it reads it from
-  there or from the installed package metadata.
+- Each project's version is written only in the file named by `version_file`
+  in `project.yml`; code reads it from that file or package metadata.
+  Shared-copy headers (`AGENTS.md` block, `docs/agent/rules/`) identify the
+  agent-standards release line (`MAJOR.MINOR`) separately. `standards-sync`
+  renders it from its package metadata; it is never edited by hand. A patch
+  release of agent-standards changes only the check, never the rules.
+- The shared copies change only through `standards-sync`, never by hand.
+  Updating a repository to a new agent-standards release is one PR: move the
+  action's pin to the new commit, then run
+  `uvx --from git+https://github.com/FacundoTripelhorn/agent-standards@<sha> standards-sync` with that commit.
 - A release is a PR whose issue asks for it: it changes only the version,
   and after it merges the owner tags that commit `v<version>`. CI checks that
   the tag matches `version_file`.

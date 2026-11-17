@@ -64,7 +64,7 @@ Here `just build` builds the Docker image, and `just test` needs `age` and
 | `SECURITY.md` | How to report a vulnerability. |
 | `.cursor/rules/` | Pointers for Cursor to this file and `docs/agent/`. |
 
-<!-- agent-standards:base v0.8 — synced from agent-standards. Edit it there, not here. -->
+<!-- agent-standards:base v0.9 — synced from agent-standards. Edit it there, not here. -->
 ## Shared rules
 
 These rules apply to all of the owner's repositories. The project sections

@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: FacundoTripelhorn/agent-standards@071969e4223fb96f5b44df294a52b04a7fc5a6c3 # v0.8.0
+      - uses: FacundoTripelhorn/agent-standards@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
         with:
           mode: warn
 
@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: just check
 
@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       # age/age-keygen: el seed se cifra a recipients; los tests
       # ejercitan round-trip real (sin loguear plaintext/secretos).
@@ -78,5 +78,5 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
       - run: just build

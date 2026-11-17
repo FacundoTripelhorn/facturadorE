@@ -1,5 +1,7 @@
 # Size and complexity thresholds
 
+<!-- agent-standards v0.9 — synced from agent-standards. Edit it there, not here. -->
+
 Each limit is the default of the standard linter for that language, so the
 rule an agent reads in `code.md` matches what the linter reports, and
 nobody has to defend a number we made up.

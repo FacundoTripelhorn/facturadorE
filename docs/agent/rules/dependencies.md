@@ -1,6 +1,6 @@
 # Dependencies
 
-<!-- agent-standards v0.8 — synced from agent-standards. Edit it there, not here. -->
+<!-- agent-standards v0.9 — synced from agent-standards. Edit it there, not here. -->
 
 Read before adding, removing or upgrading a dependency. Adding or removing
 one needs the owner's approval first (shared rules, "Ask the owner first").
@@ -57,3 +57,6 @@ Development-only tools go in the dev group (`[dependency-groups] dev`,
   comment: `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1`.
   A tag such as `@v4` can be moved to different code by whoever controls the
   action; a SHA cannot. Dependabot updates both the SHA and the comment.
+- A tool CI downloads instead of installing through an action (gitleaks,
+  `just`) is pinned to an exact release and checked against a sha256 stored
+  in the repository before it runs; a mismatch fails the step.
