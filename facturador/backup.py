@@ -1,4 +1,4 @@
-"""Backup cifrado del seed de UN perfil (design.md §2.5, ADR 0001).
+"""Backup cifrado del seed de UN perfil (design.md §2.5).
 
 ARCA es el ledger autoritativo. Este módulo respalda solo el **seed** de
 configuración que ARCA no puede reproducir (emisores, CUIT fiscal, ambiente,

@@ -1,4 +1,4 @@
-"""Cambio de ambiente por reinicio (ADR 0001)."""
+"""Cambio de ambiente por reinicio (design.md §2.5)."""
 
 from __future__ import annotations
 

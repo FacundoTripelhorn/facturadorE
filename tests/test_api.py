@@ -592,7 +592,7 @@ def test_listado_arca_no_colisiona_con_get_por_id(api, arca):
     assert "last_cmp" in r.json()
 
 
-# --- vínculo factura ↔ perfil (ADR 0001) ---
+# --- vínculo factura ↔ perfil (design.md §2.5) ---
 
 
 def test_el_ambiente_de_la_factura_sale_del_perfil_no_del_request(api, arca):

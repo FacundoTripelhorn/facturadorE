@@ -19,6 +19,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        # Los majors quedan fuera del grupo: cada uno es su propio PR
+        # (docs/agent/rules/dependencies.md).
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "docker"
     directory: "/"

@@ -34,6 +34,10 @@ Qué incluye:
 - **macOS / desarrollo:** **Docker Desktop**, o bien **Python ≥ 3.12** +
   [uv](https://docs.astral.sh/uv/) para correr sin Docker. El PDF no necesita
   nada más que `uv sync`: se genera con fpdf2 en Python puro.
+- **Desarrollo:** **[just](https://just.systems) 1.59.0**, la misma versión
+  que usa CI (`just check`, `just test`…): `uv tool install rust-just==1.59.0`
+  en cualquier sistema, o `winget install Casey.Just --version 1.59.0` en
+  Windows.
 - **Certificado ARCA** autorizado al servicio `wsfex` (ver más abajo).
 - **Reloj sincronizado** (NTP): el WSAA rechaza pedidos con clock skew. macOS y
   la mayoría de las distros Linux lo traen activo por defecto.
@@ -51,8 +55,8 @@ no hace falta instalar dos copias ni administrar dos directorios a mano.
 
 Cambiar de ambiente **reinicia** el backend con el otro perfil: no hay cambio
 en caliente dentro del mismo proceso. El ambiente activo se ve siempre en la
-app (badge). Contrato completo:
-[`docs/adr/0001-perfiles-de-ambiente-aislados.md`](docs/adr/0001-perfiles-de-ambiente-aislados.md).
+app (badge). Contrato completo: [`docs/design.md`](docs/design.md),
+§2.5, "Contrato de ambientes".
 
 Guías paso a paso (trámites en ARCA, certificados y verificación):
 

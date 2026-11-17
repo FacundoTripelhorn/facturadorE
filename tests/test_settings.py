@@ -1,5 +1,5 @@
 """Settings de dominio: viven en la DB. El emisor es una entidad (tabla
-emisores) LOCAL al perfil (ADR 0001): la DB entera es de un solo
+emisores) LOCAL al perfil (design.md §2.5): la DB entera es de un solo
 ambiente y la selección activa es una única clave, sin sufijo de ambiente."""
 
 import dataclasses

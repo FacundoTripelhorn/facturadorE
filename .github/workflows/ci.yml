@@ -1,4 +1,6 @@
-# CI mínimo: lint + types + tests + build de la imagen.
+# CI mínimo: el check compartido, lint + types, tests y build de la imagen.
+# Cada job corre una receta de `just`: lo que pasa en tu máquina es lo que
+# corre acá (docs/agent/rules/ci.md).
 #
 # Deliberadamente NO corre contract tests contra homologación (design.md
 # §2.5): eso requeriría subir el certificado fiscal a un runner externo.
@@ -10,6 +12,7 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ["v*"]  # el job standards controla que el tag coincida con pyproject.toml
   pull_request:
 
 # Token de solo lectura para todos los jobs. Las actions van fijadas a un
@@ -18,11 +21,41 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  checks:
+  standards:
+    # Check compartido de agent-standards: project.yml, título del PR, tamaño
+    # de archivos y funciones, supresiones, actions fijadas, tag de release y
+    # secretos (gitleaks sobre TODO el historial: el repo es público). Los
+    # falsos positivos conocidos de gitleaks siguen en .gitleaks.toml.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: FacundoTripelhorn/agent-standards@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
+        with:
+          mode: warn
+
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: just check
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       # age/age-keygen: el seed se cifra a recipients; los tests
       # ejercitan round-trip real (sin loguear plaintext/secretos).
@@ -36,33 +69,14 @@ jobs:
           sudo install -m 755 /tmp/age/age /tmp/age/age-keygen /usr/local/bin/
           age --version
           age-keygen --version
-      - run: uv sync --frozen
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run mypy
-      - run: uv run pytest -q
+      - run: just test
 
-  docker:
+  build:
     # La imagen es el runtime real (design.md §2.5); un Dockerfile roto se
     # detectaría recién al levantar la app si no se buildea acá.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: docker build -t facturador:ci .
-
-  secrets:
-    # Escanea TODO el historial (no solo el diff del PR): el repo es público
-    # y un secreto en cualquier commit queda expuesto. Falsos positivos
-    # conocidos en .gitleaks.toml.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Instalar gitleaks
-        run: |
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
-      - name: gitleaks
-        run: /tmp/gitleaks git --no-banner --redact --verbose .
+      - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
+      - run: just build

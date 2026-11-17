@@ -1,6 +1,6 @@
 #!/bin/sh
 # Normaliza el bind mount del host (montado en /host) al layout de perfiles
-# aislados que espera la app (ADR 0001).
+# aislados que espera la app (design.md §2.5).
 #
 # Por qué no se apuntan los perfiles directo a /host: los bind mounts de
 # Docker Desktop no tienen semántica POSIX confiable (Windows expone todo

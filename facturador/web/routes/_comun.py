@@ -44,7 +44,7 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 def _ambiente_en_contexto(request: Request) -> dict[str, object]:
-    """Identidad de ambiente visible en toda la UI (ADR 0001).
+    """Identidad de ambiente visible en toda la UI (design.md §2.5).
 
     Solo lenguaje de negocio (Homologación / Producción) y el código corto;
     nunca paths de perfil, certificados ni secretos. Cambio de ambiente: ``launcher``

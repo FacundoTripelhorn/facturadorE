@@ -117,7 +117,7 @@ flowchart TB
 
 **Data flow (happy path):** UI or JSON API → `InvoiceService` → `repo/` (SQLite) ↔ `arca/wsfex` (SOAP) → PDF on authorize.
 
-**Environments:** one launcher, two hidden profiles (Homologación / Producción), one immutable environment per backend process ([ADR 0001](../adr/0001-perfiles-de-ambiente-aislados.md)).
+**Environments:** one launcher, two hidden profiles (Homologación / Producción), one immutable environment per backend process (`docs/design.md`, §2.5, "Contrato de ambientes").
 
 ## Start here by task type
 
@@ -209,7 +209,7 @@ backups exclude `data/pdfs/`.
 ### Emisor entity / multi-emisor
 
 Use this section for work on **alta de emisores** (each emisor with its own
-puntos de venta). Emisores are **local to the active profile** (ADR 0001): the DB belongs to one environment, so there is no per-emisor
+puntos de venta). Emisores are **local to the active profile** (design.md §2.5): the DB belongs to one environment, so there is no per-emisor
 environment selector in the API/UI. Do not grep the whole tree — the
 split between `emisores` and global backup `settings` is easy to miss.
 
@@ -313,6 +313,4 @@ Run from repo root: `uv run pytest`. CI mirrors lint/types/tests in `.github/wor
 
 - [`AGENTS.md`](../../AGENTS.md) — agent contract, commands, security rules
 - [`docs/design.md`](../design.md) — authoritative architecture reference
-- [`docs/adr/0001-perfiles-de-ambiente-aislados.md`](../adr/0001-perfiles-de-ambiente-aislados.md)
-  — environment/profile contract
 - [`README.md`](../../README.md) — user-facing overview (one app, two environments)

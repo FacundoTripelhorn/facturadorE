@@ -658,7 +658,7 @@ class InvoiceService:
             "emisor_inicio_actividades": settings.emisor.inicio_actividades,
             # Contrato de render; el registry despacha por versión.
             "pdf_render_version": PDF_RENDER_VERSION,
-            # Auditoría inmutable (ADR 0001): el ambiente del
+            # Auditoría inmutable (design.md §2.5): el ambiente del
             # comprobante sale SIEMPRE del perfil corriente, nunca del
             # request, y después se valida en cada acceso por id.
             "environment": self.config.env,

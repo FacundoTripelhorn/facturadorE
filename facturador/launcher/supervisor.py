@@ -1,4 +1,4 @@
-"""Supervisor de proceso del launcher (ADR 0001).
+"""Supervisor de proceso del launcher (design.md §2.5).
 
 Arranca un backend ligado a un único perfil, espera ``GET /health``, y apaga el
 hijo sin dejarlo huérfano. El lock de perfil evita un segundo backend

@@ -8,7 +8,7 @@ homologación no valen nada.
 FacturadorE es **una sola app**: Homologación y Producción son dos opciones del
 launcher, cada una con estado aislado. No hace falta una segunda instalación.
 Para el pasaje a producción, ver [`setup-produccion.md`](setup-produccion.md).
-Contrato de ambientes: [`adr/0001-perfiles-de-ambiente-aislados.md`](adr/0001-perfiles-de-ambiente-aislados.md).
+Contrato de ambientes: [`design.md`](design.md), §2.5, "Contrato de ambientes".
 
 ## Requisitos previos
 

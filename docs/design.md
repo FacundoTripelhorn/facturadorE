@@ -313,7 +313,69 @@ El backend repite todas las validaciones (solo autorizadas, un solo cliente, nú
 
 Fundamento: el uso es 1 emisión/semana, un solo usuario, desde su propia computadora. Publicar la app en internet agregaría todo lo que NO queremos: gestión de TLS, capa de autenticación, superficie de ataque sobre un servicio que custodia la clave fiscal, y costo/operación de un VPS (un servicio externo más). Con `localhost` la única conexión de red es **saliente** hacia ARCA — la app no escucha para nadie más. Esto elimina de raíz clases enteras de riesgo.
 
-**Ambientes (DECIDIDO — [ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md)):** una sola app FacturadorE con dos opciones de negocio (**Homologación** / **Producción**). El launcher elige el ambiente; cada uno mapea a un **perfil interno oculto** (app-data del SO) con su propia SQLite, certificados, PDFs, caches WSAA/params, logs, onboarding y backups. Un proceso backend = un ambiente inmutable + un perfil. Cambiar de ambiente **detiene** el backend y arranca otro; **no hay hot switching**. **Un CUIT fiscal por perfil**: se deriva del certificado validado, se sella en `settings.fiscal_cuit`, se usa en toda llamada ARCA, se snapshotéa en `invoices.cuit_emisor`, y un cert o config de emisor con otro CUIT se rechaza (cambiar de contribuyente = perfil nuevo o reset; sin migración automática). Las rutas de perfil no se exponen en la UI normal.
+**Ambientes (DECIDIDO):** una sola app FacturadorE con dos opciones de negocio (**Homologación** / **Producción**). El launcher elige el ambiente; cada uno mapea a un **perfil interno oculto** (app-data del SO) con su propia SQLite, certificados, PDFs, caches WSAA/params, logs, onboarding y backups. Un proceso backend = un ambiente inmutable + un perfil. Cambiar de ambiente **detiene** el backend y arranca otro; **no hay hot switching**. **Un CUIT fiscal por perfil**: se deriva del certificado validado, se sella en `settings.fiscal_cuit`, se usa en toda llamada ARCA, se snapshotéa en `invoices.cuit_emisor`, y un cert o config de emisor con otro CUIT se rechaza (cambiar de contribuyente = perfil nuevo o reset; sin migración automática). Las rutas de perfil no se exponen en la UI normal.
+
+**Contrato de ambientes.** Esta es la fuente única del contrato; si otro documento lo contradice, vale esta sección.
+
+1. El launcher ofrece Homologación y Producción como elecciones de negocio; no expone perfiles, directorios, Docker ni variables de entorno.
+2. Cada ambiente mapea a un perfil interno oculto, resuelto desde el directorio de datos de aplicación del sistema operativo.
+3. Un proceso backend = un ambiente inmutable + un perfil, fijados antes de construir FastAPI, SQLite y los clientes ARCA.
+4. Cambiar de ambiente **detiene** el backend actual y **arranca** uno nuevo (reinicio orquestado por el launcher).
+5. No hay hot switching de clientes ARCA, certificados, base de datos ni ambiente dentro de un backend corriendo.
+6. Cada perfil es dueño exclusivo de su SQLite, certificados, cache de PDFs, cache de TA del WSAA, cache de parámetros de ARCA, logs, estado de onboarding y backups.
+7. Un CUIT fiscal por perfil (el del certificado): sello en `settings.fiscal_cuit`, snapshot en `invoices.cuit_emisor`, y rechazo de certificados o configuración de emisor con otro CUIT.
+8. El ambiente activo está siempre visible en la app (badge, título, health y diagnóstico).
+
+Alternativas descartadas, para no volver a decidirlas:
+
+- **Hot switching en proceso.** Exige invalidar de forma atómica TA cache, cache de parámetros, numeración, PDFs y estado de UI; un solo olvido cruza homologación con producción. Un reinicio cuesta segundos para ~1 factura por semana.
+- **Ambiente por configuración compartida** (`ARCA_ENV` en un `.env` común y un `secrets/` con ambos pares): mantiene los dos mundos en el mismo home y hace de editar un archivo el mecanismo de cambio.
+- **Ambiente como atributo de cada emisor en una sola DB:** mezcla filas de los dos ambientes y obliga a filtrar en cada consulta. `invoices.environment` queda solo como dato de auditoría, validado contra el perfil corriente.
+
+```mermaid
+flowchart TB
+  USER["Usuario"] --> CHOICE
+
+  subgraph launcher["Launcher FacturadorE"]
+    CHOICE{"Elegir ambiente<br/>(lenguaje de negocio)"}
+    SUP["Supervisor de proceso<br/>start · stop · readiness"]
+    CHOICE -->|"Homologación"| SUP
+    CHOICE -->|"Producción"| SUP
+  end
+
+  SUP -->|"arranca UN backend con el perfil<br/>del ambiente elegido, inmutable"| APP
+
+  subgraph backend["Proceso backend (uvicorn) — ambiente fijo de por vida"]
+    APP["FastAPI + InvoiceService<br/>badge de ambiente visible"]
+  end
+
+  subgraph profiles["Perfiles internos ocultos (app-data del SO) — 1 CUIT cada uno"]
+    SEL["Perfil del ambiente ELEGIDO<br/>(homologación o producción)<br/>SQLite · certs · PDFs<br/>TA cache · params cache<br/>logs · onboarding · backups"]
+    OTHER["Perfil del OTRO ambiente<br/>(mismo contenido, intacto)"]
+  end
+
+  APP -->|"lee/escribe SOLO su perfil"| SEL
+  APP -.-x|"nunca"| OTHER
+  APP -->|"HTTPS saliente<br/>(URLs derivadas del ambiente elegido)"| ARCA["ARCA WSAA + WSFEX<br/>homo o prod, según perfil"]
+```
+
+Cambio de ambiente (siempre por reinicio):
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant L as Launcher
+  participant BH as Backend (perfil homo)
+  participant BP as Backend (perfil prod)
+
+  U->>BH: "Cambiar ambiente"
+  BH->>L: pedir reinicio con otro ambiente
+  L->>BH: stop limpio
+  BH-->>L: proceso terminado
+  L->>BP: start con perfil producción
+  BP-->>L: ready (health check)
+  L->>U: reabrir la app (badge: Producción)
+```
 
 Componentes:
 
@@ -401,7 +463,7 @@ Componentes:
    - El TA del WSAA (12 h de vida) probablemente se pida fresco en cada emisión — el cache sigue siendo necesario para reintentos dentro de la misma sesión, pero no hace falta nada sofisticado.
    - El refresh del cache de parámetros puede ser lazy (al momento de emitir, si `fetched_at` > 24 h) en lugar de un job programado.
 3. **Clientes: hoy 1, el modelo debe soportar N.** Se agrega entidad `clients` (ver §2.2). La factura referencia un cliente pero **snapshotea** sus datos al crear el borrador (razón social, domicilio, id impositivo, país, CUIT país): el comprobante queda inmutable aunque el cliente se edite después. El frontend precarga el cliente habitual como default. Lo mismo aplica al emisor: se guardan `emisor_id` (trazabilidad) y los campos de encabezado/CUIT en la fila de `invoices`; el PDF no relee la tabla `emisores`. El snapshot de render se completa con las descripciones resueltas de `arca_params` (país, CUIT país, moneda, U. Medida) y `pdf_render_version`, que viven en la factura/ítems; regenerar el PDF no consulta emisores, clients, settings ni el cache de params. Esos campos viven en el **baseline** (`schema.sql` / migración v1): no hay DBs desplegadas que requieran un ALTER/migración v2.
-4. **Ambientes: perfiles aislados elegidos por launcher ([ADR 0001](adr/0001-perfiles-de-ambiente-aislados.md), implementado).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` compartido y el ambiente por emisor.
+4. **Ambientes: perfiles aislados elegidos por launcher (§2.5, Contrato de ambientes; implementado).** Un backend corre contra exactamente un ambiente inmutable y un perfil oculto (DB, certificados, caches, logs, onboarding y backups propios; un CUIT fiscal por perfil). Cambiar de ambiente reinicia el backend; el hot switching queda rechazado. Reemplaza la selección por `ARCA_ENV` en `.env` compartido y el ambiente por emisor.
 
 **Siguen abiertas:**
 

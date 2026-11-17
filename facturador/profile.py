@@ -1,4 +1,4 @@
-"""Perfiles de ambiente aislados (ADR 0001).
+"""Perfiles de ambiente aislados (design.md §2.5).
 
 Cada ambiente fiscal (homologación / producción) mapea a un perfil interno con
 su propia raíz en el app-data del sistema operativo. ``EnvironmentProfile``

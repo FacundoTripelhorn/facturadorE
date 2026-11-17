@@ -54,7 +54,7 @@ def resolve_launch_profile(
     *,
     app_data_root: Path | None = None,
 ) -> EnvironmentProfile:
-    """Perfil oculto del ambiente seleccionado (ADR 0001)."""
+    """Perfil oculto del ambiente seleccionado (design.md §2.5)."""
     return EnvironmentProfile.resolve(environment, app_data_root=app_data_root)
 
 

@@ -10,7 +10,7 @@ import enum
 
 
 class ArcaEnvironment(enum.StrEnum):
-    """Ambiente fiscal ARCA (ADR 0001).
+    """Ambiente fiscal ARCA (design.md §2.5).
 
     StrEnum: el valor TEXT entra sin conversión en ``invoices.environment``
     y en el JSON de la API. Un perfil aislado corresponde a exactamente uno.

@@ -11,7 +11,7 @@ CREATE TABLE settings (
 );
 
 -- Emisores (la app es dueña de su configuración): la entidad es el emisor,
--- LOCAL al perfil (ADR 0001) — la DB entera pertenece a un solo
+-- LOCAL al perfil (design.md §2.5) — la DB entera pertenece a un solo
 -- ambiente. Un perfil puede tener varios emisores (una identidad fiscal:
 -- el CUIT del certificado, sellado en settings.fiscal_cuit );
 -- la app opera con el activo explícito (clave única active_emisor_id en
@@ -118,7 +118,7 @@ CREATE TABLE invoices (
     -- desplegadas que migrar — NO agregar una migración v2/ALTER solo
     -- por estas columnas de snapshot de render.
     pdf_render_version INTEGER NOT NULL DEFAULT 1,
-    -- Auditoría inmutable (ADR 0001): sello del perfil al crear,
+    -- Auditoría inmutable (design.md §2.5): sello del perfil al crear,
     -- validado contra el perfil corriente en cada acceso por id.
     environment        TEXT NOT NULL,
     created_at         TEXT NOT NULL,
