@@ -915,10 +915,10 @@ def _engranaje(html: str) -> str:
     return html[inicio : html.index("</details>", inicio)]
 
 
-def test_nav_tres_items_y_el_resto_bajo_el_engranaje(api):
+def test_nav_cuatro_items_y_el_resto_bajo_el_engranaje(api):
     html = api.get("/").text
     nav = html[html.index('<nav class="principal"') : html.index("</nav>")]
-    for ruta in ("/", "/comprobantes", "/constatacion"):
+    for ruta in ("/", "/comprobantes", "/orden-de-pago/nueva", "/constatacion"):
         assert f'href="{ruta}"' in nav
     engranaje = _engranaje(html)
     assert 'aria-label="Más opciones"' in engranaje

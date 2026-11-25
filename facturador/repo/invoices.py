@@ -127,6 +127,20 @@ def list_authorized_in_year(
     ).fetchall()
 
 
+def list_authorized_for_client(
+    conn: sqlite3.Connection, client_id: str
+) -> list[sqlite3.Row]:
+    """Autorizadas del cliente, más las que no tienen ``client_id`` (las
+    reconstruidas desde ARCA, que el llamador filtra por receptor); la más
+    nueva primero."""
+    return conn.execute(
+        "SELECT * FROM invoices"
+        " WHERE status = ? AND (client_id = ? OR client_id IS NULL)"
+        " ORDER BY cbte_nro DESC, punto_venta DESC",
+        (InvoiceStatus.AUTHORIZED, client_id),
+    ).fetchall()
+
+
 def authorized_years(conn: sqlite3.Connection, environment: str) -> list[int]:
     """Años con al menos un autorizado en el ambiente, del más reciente al
     más viejo."""

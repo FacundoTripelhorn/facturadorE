@@ -15,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from ..orden_pago import RutaOrdenPago
 from ..setup import SetupState, SetupStateProvider, is_ready
 
 # Destino del onboarding. Query opcional para diagnóstico.
@@ -94,7 +95,7 @@ def is_html_ui_route(method: str, path: str) -> bool:
         return True
     # Solo la pantalla: las descargas responden JSON (las lee el script de
     # descarga y muestra el error), nunca una redirección a HTML.
-    if method == "GET" and path == "/orden-de-pago":
+    if method == "GET" and path in (RutaOrdenPago.PANTALLA, RutaOrdenPago.NUEVA):
         return True
     return False
 

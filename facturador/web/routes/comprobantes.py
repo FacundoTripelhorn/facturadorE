@@ -51,8 +51,6 @@ def comprobantes(
             "estado": tab,
             "aviso": _catchup_aviso(aviso, n),
             "error": error or None,
-            # Las facturas de una orden de pago se eligen en esta solapa.
-            "seleccion_orden": tab is TabComprobantes.AUTORIZADAS,
             "facturas": repo.list_invoices(
                 service.conn, limit=50, offset=0, statuses=TAB_FILTERS[tab]
             ),

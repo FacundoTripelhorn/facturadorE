@@ -5,7 +5,7 @@
 <div class="panel error">
   <div>
     <strong>No se puede armar la orden de pago.</strong> {{ error }}
-    <p><a href="/comprobantes?estado=autorizadas">Volver a Comprobantes</a></p>
+    <p><a href="/orden-de-pago/nueva">Volver a elegir las facturas</a></p>
   </div>
 </div>
 {% endif %}
@@ -44,6 +44,7 @@
     <button type="submit" aria-label="Unir facturas E">Unir</button>
     <span class="nota">Se descarga un solo PDF con las facturas en orden de número.</span>
   </form>
+  <p class="nota nota-orden"><a href="/orden-de-pago/nueva{% if cliente_id %}?cliente={{ cliente_id | urlencode }}{% for id in ids %}&amp;ids={{ id | urlencode }}{% endfor %}{% endif %}">Cambiar las facturas de la orden</a></p>
 </section>
 
 <section class="card">
