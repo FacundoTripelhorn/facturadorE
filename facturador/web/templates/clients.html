@@ -4,7 +4,28 @@
 {% if error %}<div class="panel error">{{ error }}</div>{% endif %}
 
 <section class="card">
-  <h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
+  <h2>Clientes</h2>
+  {% if not clientes %}
+  <p class="vacio">Sin clientes todavía.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Razón social</th><th>País</th><th class="oculta-movil">ID impositivo</th><th></th></tr></thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr>
+        <td>{{ c["razon_social"] }}{% if c["is_default"] %} ★{% endif %}</td>
+        <td class="num">{{ c["pais_dst"] }}</td>
+        <td class="oculta-movil">{{ c["id_impositivo"] }}</td>
+        <td><a href="/clientes?edit={{ c['id'] }}">Editar</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<details class="card form-colapsable" id="form-cliente"{% if editando or error %} open{% endif %}>
+  <summary><h2>{% if editando %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2></summary>
   <div class="cuerpo">
   <form method="post" action="/ui/clientes">
     {% include "_csrf_field.html" %}
@@ -12,7 +33,7 @@
     <div class="fila">
       <div>
         <label for="razon_social">Razón social</label>
-        <input id="razon_social" name="razon_social" required
+        <input id="razon_social" name="razon_social" required{% if editando %} autofocus{% endif %}
                value="{{ editando['razon_social'] if editando else '' }}">
       </div>
       <div>
@@ -95,27 +116,6 @@
     {% if editando %}<a href="/clientes" style="margin-left:1rem">Cancelar</a>{% endif %}
   </form>
   </div>
-</section>
-
-<section class="card">
-  <h2>Clientes</h2>
-  {% if not clientes %}
-  <p class="vacio">Sin clientes todavía.</p>
-  {% else %}
-  <table>
-    <thead><tr><th>Razón social</th><th>País</th><th class="oculta-movil">ID impositivo</th><th></th></tr></thead>
-    <tbody>
-      {% for c in clientes %}
-      <tr>
-        <td>{{ c["razon_social"] }}{% if c["is_default"] %} ★{% endif %}</td>
-        <td class="num">{{ c["pais_dst"] }}</td>
-        <td class="oculta-movil">{{ c["id_impositivo"] }}</td>
-        <td><a href="/clientes?edit={{ c['id'] }}">Editar</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</section>
+</details>
 
 {% endblock %}
