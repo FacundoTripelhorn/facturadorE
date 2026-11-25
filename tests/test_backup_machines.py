@@ -293,13 +293,15 @@ def _post(client, path, data=None):
 
 
 def test_pagina_sin_identidad_ofrece_crearla(backups):
-    r = backups.get("/configuracion")
+    r = backups.get("/configuracion?tab=backup")
     assert r.status_code == 200
     assert "Crear identidad de esta máquina" in r.text
-    assert "Todavía no hay máquinas con acceso" in r.text
     assert "Hacer backup ahora" not in r.text
     assert "passphrase" not in r.text
-    assert "con las claves públicas" in r.text
+    maquinas = backups.get("/configuracion?tab=maquinas")
+    assert "Todavía no hay máquinas con acceso" in maquinas.text
+    s3 = backups.get("/configuracion?tab=s3")
+    assert "con las claves públicas" in s3.text
 
 
 def test_el_nombre_de_otra_maquina_arranca_vacio(backups, monkeypatch):
@@ -308,7 +310,7 @@ def test_el_nombre_de_otra_maquina_arranca_vacio(backups, monkeypatch):
     monkeypatch.setattr(
         "facturador.web.routes.backups.nombre_del_equipo", lambda: "ESTA-PC"
     )
-    r = backups.get("/configuracion")
+    r = backups.get("/configuracion?tab=maquinas")
     assert r.status_code == 200
     campo = re.search(r'id="maquina_nombre"[^>]*value="([^"]*)"', r.text)
     assert campo is not None
@@ -348,7 +350,8 @@ def test_crear_agregar_y_hacer_backup_sin_terminal(backups):
     assert r.status_code == 200
     assert "Máquina agregada." in r.text
     assert "Esta máquina no puede restaurar" not in r.text
-    assert "Esta máquina</span>" in r.text
+    maquinas = backups.get("/configuracion?tab=maquinas")
+    assert "Esta máquina</span>" in maquinas.text
     assert backups.corridas == ["backup"]  # un solo backup por cambio
     texto = recipients_path(backups.paths).read_text(encoding="utf-8")
     assert texto.endswith(f"{clave}\n")
@@ -388,7 +391,7 @@ def test_backup_previo_sin_destino_guardado_no_dice_donde_quedo(backups):
         backups.conn,
         {STATUS_KEY: "ok", LAST_SUCCESS_KEY: "2026-09-20T10:00:00+00:00"},
     )
-    r = backups.get("/configuracion")
+    r = backups.get("/configuracion?tab=backup")
     assert "Al día" in r.text
     assert "Último backup: 20/09/2026" in r.text
     assert "solo en esta máquina" not in r.text
@@ -473,7 +476,7 @@ def test_quitar_la_de_esta_maquina_avisa_que_deja_de_poder_restaurar(backups):
     backups.app.state.service.machine_identity = Fija(Path("no-se-usa"))
     recipients_path(backups.paths).parent.mkdir(parents=True, exist_ok=True)
     recipients_path(backups.paths).write_text(f"{KEY_A}\n{KEY_B}\n", encoding="utf-8")
-    r = backups.get("/configuracion")
+    r = backups.get("/configuracion?tab=maquinas")
     assert "Es la clave de esta máquina" in r.text
     assert r.text.count("¿Quitar esta máquina?") == 1  # la otra fila
 
@@ -481,7 +484,7 @@ def test_quitar_la_de_esta_maquina_avisa_que_deja_de_poder_restaurar(backups):
 def test_lista_rota_se_muestra_sin_romper_la_pagina(backups):
     recipients_path(backups.paths).parent.mkdir(parents=True, exist_ok=True)
     recipients_path(backups.paths).write_text("esto-no-es-age\n", encoding="utf-8")
-    r = backups.get("/configuracion")
+    r = backups.get("/configuracion?tab=maquinas")
     assert r.status_code == 200
     assert "se esperaba una clave" in r.text
 
@@ -503,7 +506,7 @@ def test_la_clave_privada_no_aparece_en_http_logs_seed_ni_s3(backups, caplog):
         ),
         _post(backups, "/ui/configuracion/backup/ahora"),
         _post(backups, "/ui/configuracion/backup/maquinas/quitar", {"clave": KEY_A}),
-        backups.get("/configuracion"),
+        backups.get("/configuracion?tab=backup"),
         backups.get("/diagnostico"),
         backups.get("/backup/seed"),
         backups.post("/backup/seed"),

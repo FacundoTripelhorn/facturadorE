@@ -1,5 +1,6 @@
-"""Configuración → Backups: bucket S3, identidad de esta máquina, máquinas
-con acceso y backup a demanda."""
+"""Configuración → Backup, Máquinas con acceso y S3: identidad de esta
+máquina, máquinas con acceso, bucket S3 y backup a demanda. Cada acción
+vuelve a la solapa donde está su formulario."""
 
 from __future__ import annotations
 
@@ -24,11 +25,12 @@ from ...settings import (
 from ..constants import (
     AvisoConfiguracion,
     ErrorConfiguracion,
-    Pagina,
+    TabConfiguracion,
 )
 from .configuracion import (
     _contexto_backups,
     _pagina_configuracion,
+    url_configuracion,
 )
 
 router = APIRouter()
@@ -53,10 +55,11 @@ def guardar_backup(
             service,
             error=f"Datos inválidos: {detalles}",
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            tab=TabConfiguracion.S3,
         )
     service.update_backup_settings(payload)
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.BACKUP}",
+        url_configuracion(TabConfiguracion.S3, aviso=AvisoConfiguracion.BACKUP),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -71,9 +74,12 @@ def crear_identidad_maquina(request: Request, service: ServiceDep):
             service,
             error=str(exc),
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            tab=TabConfiguracion.BACKUP,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.IDENTIDAD}#backups",
+        url_configuracion(
+            TabConfiguracion.BACKUP, aviso=AvisoConfiguracion.IDENTIDAD, ancla=True
+        ),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -88,9 +94,12 @@ def agregar_esta_maquina(request: Request, service: ServiceDep):
             service,
             error=str(exc),
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            tab=TabConfiguracion.BACKUP,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        url_configuracion(
+            TabConfiguracion.BACKUP, aviso=AvisoConfiguracion.MAQUINA, ancla=True
+        ),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -111,9 +120,10 @@ def agregar_maquina(
             error=str(exc),
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             backup=_contexto_backups(service, form_nombre=nombre, form_clave=clave),
+            tab=TabConfiguracion.MAQUINAS,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA}#backups",
+        url_configuracion(TabConfiguracion.MAQUINAS, aviso=AvisoConfiguracion.MAQUINA),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -128,9 +138,12 @@ def quitar_maquina(request: Request, service: ServiceDep, clave: str = Form(""))
             service,
             error=str(exc),
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            tab=TabConfiguracion.MAQUINAS,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.MAQUINA_QUITADA}#backups",
+        url_configuracion(
+            TabConfiguracion.MAQUINAS, aviso=AvisoConfiguracion.MAQUINA_QUITADA
+        ),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -143,14 +156,24 @@ def hacer_backup_ahora(request: Request, service: ServiceDep):
         estado = service.run_seed_backup_now()
     except ServiceError as exc:
         return _pagina_configuracion(
-            request, service, error=str(exc), status_code=HTTPStatus.CONFLICT
+            request,
+            service,
+            error=str(exc),
+            status_code=HTTPStatus.CONFLICT,
+            tab=TabConfiguracion.BACKUP,
         )
     if estado.status is SeedBackupStatus.OK:
         return RedirectResponse(
-            f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.BACKUP_HECHO}#backups",
+            url_configuracion(
+                TabConfiguracion.BACKUP,
+                aviso=AvisoConfiguracion.BACKUP_HECHO,
+                ancla=True,
+            ),
             status_code=HTTPStatus.SEE_OTHER,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?error={ErrorConfiguracion.BACKUP}#backups",
+        url_configuracion(
+            TabConfiguracion.BACKUP, error=ErrorConfiguracion.BACKUP, ancla=True
+        ),
         status_code=HTTPStatus.SEE_OTHER,
     )

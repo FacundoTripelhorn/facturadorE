@@ -1,0 +1,57 @@
+<section class="card backups">
+  <h2>Máquinas con acceso al backup</h2>
+  {% if backup.error_maquinas %}
+  <div class="cuerpo">
+    <div class="panel error"><div>{{ backup.error_maquinas }}</div></div>
+  </div>
+  {% elif backup.maquinas %}
+  <div class="tabla-scroll">
+    <table class="maquinas">
+      <thead><tr><th>Nombre</th><th>Clave</th><th></th></tr></thead>
+      <tbody>
+        {% for m in backup.maquinas %}
+        <tr>
+          <td>{{ m.nombre or "Sin nombre" }}
+            {% if m.clave == backup.clave_propia %}<span class="badge neutro">Esta máquina</span>{% endif %}</td>
+          <td><span class="clave-age" title="{{ m.clave }}">{{ m.clave_corta }}</span></td>
+          <td>
+            {% if backup.maquinas | length > 1 %}
+            <form method="post" action="/ui/configuracion/backup/maquinas/quitar"
+                  onsubmit="return confirm('{% if m.clave == backup.clave_propia %}Es la clave de esta máquina: después del próximo backup no va a poder restaurarlo. ¿Quitarla igual?{% else %}¿Quitar esta máquina? Después del próximo backup no va a poder restaurarlo.{% endif %}')">
+              {% include "_csrf_field.html" %}
+              <input type="hidden" name="clave" value="{{ m.clave }}">
+              <button type="submit" class="secundario">Quitar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="vacio">Todavía no hay máquinas con acceso: sin ninguna, el backup no se puede cifrar.</p>
+  {% endif %}
+  <div class="cuerpo">
+    <form method="post" action="/ui/configuracion/backup/maquinas">
+      {% include "_csrf_field.html" %}
+      <div class="fila">
+        <div>
+          <label for="maquina_nombre">Nombre</label>
+          <input id="maquina_nombre" name="nombre" maxlength="80"
+                 value="{{ backup.form_nombre }}">
+        </div>
+        <div class="clave-nueva">
+          <label for="maquina_clave">Clave pública</label>
+          <input id="maquina_clave" name="clave" class="clave-age" required
+                 placeholder="age1…" autocomplete="off" spellcheck="false"
+                 value="{{ backup.form_clave }}">
+        </div>
+      </div>
+      <p class="nota">La clave pública de otra PC aparece en su Configuración →
+      Backups, en «Esta máquina». La lista de esta PC es la que manda: cada
+      backup reemplaza la del bucket.</p>
+      <button type="submit">Agregar máquina</button>
+    </form>
+  </div>
+</section>
