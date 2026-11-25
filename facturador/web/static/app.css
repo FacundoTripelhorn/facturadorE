@@ -581,3 +581,25 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .fila > div.clave-nueva { flex: 2; }
 table.maquinas .badge { margin-left: .4rem; }
 table.maquinas form { margin: 0; text-align: right; }
+
+/* ---- Formulario colapsable (inicio) ---- */
+.form-colapsable > summary {
+  list-style: none; cursor: pointer; background: var(--superficie-sutil);
+  display: flex; align-items: center; gap: .6rem; padding: 1rem 1.5rem;
+}
+.form-colapsable > summary::-webkit-details-marker { display: none; }
+.form-colapsable > summary::before {
+  content: "▸"; color: var(--tinta-suave); font-size: .85rem;
+  transition: transform .15s ease;
+}
+.form-colapsable[open] > summary::before { transform: rotate(90deg); }
+.form-colapsable[open] > summary { border-bottom: 1px solid var(--borde); }
+.form-colapsable > summary:hover { background: var(--superficie-hover); }
+.form-colapsable > summary:focus-visible {
+  outline: 2px solid var(--acento); outline-offset: -2px;
+}
+.form-colapsable > summary h2 { margin: 0; font-size: .95rem; font-weight: 700; }
+@media (max-width: 640px) {
+  .form-colapsable > summary { padding: 1rem; }
+}
+/* ---- Formulario colapsable (fin) ---- */
