@@ -23,13 +23,14 @@ from ...settings import (
 from ..constants import (
     Accion,
     AvisoConfiguracion,
-    Pagina,
+    TabConfiguracion,
 )
 from ._comun import (
     _parse_puntos_venta_form,
 )
 from .configuracion import (
     _pagina_configuracion,
+    url_configuracion,
 )
 
 router = APIRouter()
@@ -110,7 +111,7 @@ async def guardar_emisor(
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
         )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.GUARDADO}",
+        url_configuracion(TabConfiguracion.EMISORES, aviso=AvisoConfiguracion.GUARDADO),
         status_code=HTTPStatus.SEE_OTHER,
     )
 
@@ -120,8 +121,11 @@ def activar_emisor(request: Request, service: ServiceDep, emisor_id: str):
     try:
         service.activate_emisor(emisor_id)
     except ServiceError:
-        return RedirectResponse(Pagina.CONFIGURACION, status_code=HTTPStatus.SEE_OTHER)
+        return RedirectResponse(
+            url_configuracion(TabConfiguracion.EMISORES),
+            status_code=HTTPStatus.SEE_OTHER,
+        )
     return RedirectResponse(
-        f"{Pagina.CONFIGURACION}?aviso={AvisoConfiguracion.ACTIVADO}",
+        url_configuracion(TabConfiguracion.EMISORES, aviso=AvisoConfiguracion.ACTIVADO),
         status_code=HTTPStatus.SEE_OTHER,
     )

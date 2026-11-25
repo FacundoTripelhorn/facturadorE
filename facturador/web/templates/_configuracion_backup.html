@@ -1,0 +1,53 @@
+<section class="card backups" id="{{ ANCLA_BACKUPS }}">
+  <h2>Backups <span class="sub">seed de configuración, cifrado en esta máquina</span></h2>
+
+  <h3 class="seccion">Estado</h3>
+  <div class="cuerpo">
+    <p class="estado-backup">
+      <span class="badge {{ backup.estado.badge }}">{{ backup.estado.titulo }}</span>
+      {{ backup.estado.detalle }}
+    </p>
+    {% if backup.maquinas %}
+    <form method="post" action="/ui/configuracion/backup/ahora">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Hacer backup ahora</button>
+    </form>
+    {% else %}
+    <p class="nota">Agregá al menos una máquina con acceso para poder hacer el backup.</p>
+    {% endif %}
+  </div>
+
+  <h3 class="seccion">Esta máquina</h3>
+  <div class="cuerpo">
+    {% if backup.error_identidad %}
+    <div class="panel error"><div>{{ backup.error_identidad }}</div></div>
+    {% elif not backup.clave_propia %}
+    <p>Esta máquina todavía no tiene identidad de backup. Con ella puede
+    abrir el backup de los perfiles que la tengan en su lista de máquinas con
+    acceso. Es una sola para los dos ambientes y la parte privada no sale de
+    esta máquina.</p>
+    <form method="post" action="/ui/configuracion/backup/identidad">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Crear identidad de esta máquina</button>
+    </form>
+    {% else %}
+    <label for="clave_propia">Clave pública de esta máquina</label>
+    <div class="copiar-clave">
+      <input id="clave_propia" class="clave-age" readonly
+             value="{{ backup.clave_propia }}">
+      <button type="button" class="secundario" data-copiar="clave_propia">Copiar</button>
+    </div>
+    <p class="nota">Para darle acceso al backup de otra PC, pegá esta clave en
+    Configuración → Backups de esa PC. Es pública: se puede copiar sin riesgo.</p>
+    {% if not backup.propia_en_lista %}
+    <div class="panel aviso">
+      <div>Esta máquina no puede restaurar el backup de este ambiente.</div>
+    </div>
+    <form method="post" action="/ui/configuracion/backup/esta-maquina">
+      {% include "_csrf_field.html" %}
+      <button type="submit">Agregar esta máquina</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+</section>

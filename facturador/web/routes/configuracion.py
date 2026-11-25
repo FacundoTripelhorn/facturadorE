@@ -1,12 +1,13 @@
-"""Configuración: la página y cómo se arma (emisores y backups en la misma
-pantalla; settings de dominio en la DB, no en el .env). Las acciones viven en
-``emisores.py`` y ``backups.py`` y vuelven a esta página con
-``_pagina_configuracion``."""
+"""Configuración: la página y cómo se arma (emisores y backups en cuatro
+solapas, elegidas por ``?tab=``; settings de dominio en la DB, no en el
+.env). Las acciones viven en ``emisores.py`` y ``backups.py`` y vuelven a la
+solapa de origen con ``_pagina_configuracion`` o ``url_configuracion``."""
 
 from __future__ import annotations
 
 import datetime as dt
 from http import HTTPStatus
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -21,16 +22,51 @@ from ...settings import (
     get_active_emisor_id,
 )
 from ..constants import (
+    ANCLA_BACKUPS,
+    TITULOS_TAB_CONFIGURACION,
     AvisoConfiguracion,
+    ClaveConfiguracion,
     ErrorConfiguracion,
     EstadoBackupUI,
     Pagina,
+    TabConfiguracion,
 )
 from ._comun import (
     templates,
 )
 
 router = APIRouter()
+
+
+def url_configuracion(
+    tab: TabConfiguracion,
+    *,
+    aviso: AvisoConfiguracion | None = None,
+    error: ErrorConfiguracion | None = None,
+    edit: str | None = None,
+    ancla: bool = False,
+) -> str:
+    """URL de una solapa de Configuración, con el aviso o error que viaja en
+    el redirect. Se arma solo con miembros de los enums (más el id de un
+    emisor que existe), nunca con texto crudo del request. Con ``ancla`` la
+    solapa Backup lleva al fragmento de su tarjeta."""
+    params: dict[str, str] = {ClaveConfiguracion.TAB: tab}
+    if edit:
+        params[ClaveConfiguracion.EDIT] = edit
+    if aviso:
+        params[ClaveConfiguracion.AVISO] = aviso
+    if error:
+        params[ClaveConfiguracion.ERROR] = error
+    url = f"{Pagina.CONFIGURACION}?{urlencode(params)}"
+    if ancla and tab is TabConfiguracion.BACKUP:
+        url += f"#{ANCLA_BACKUPS}"
+    return url
+
+
+templates.env.globals["url_configuracion"] = url_configuracion
+templates.env.globals["TabConfiguracion"] = TabConfiguracion
+templates.env.globals["TITULOS_TAB_CONFIGURACION"] = TITULOS_TAB_CONFIGURACION
+templates.env.globals["ANCLA_BACKUPS"] = ANCLA_BACKUPS
 
 
 def _fecha_backup(iso: str | None) -> str | None:
@@ -122,6 +158,7 @@ def _pagina_configuracion(
     aviso: str | None = None,
     status_code: int = HTTPStatus.OK,
     backup: dict[str, object] | None = None,
+    tab: TabConfiguracion = TabConfiguracion.EMISORES,
 ):
     activo_id = get_active_emisor_id(service.conn)
     return templates.TemplateResponse(
@@ -135,6 +172,7 @@ def _pagina_configuracion(
             "error": error,
             "aviso": aviso,
             "backup": backup or _contexto_backups(service),
+            "tab": tab,
         },
         status_code=status_code,
     )
@@ -166,12 +204,18 @@ def configuracion(
     edit: str | None = None,
     aviso: str = "",
     error: str = "",
+    tab: str = "",
 ):
     editando = repo.get_emisor(service.conn, edit) if edit else None
+    # Editar un emisor siempre abre Emisores, con el formulario cargado.
+    solapa = (
+        TabConfiguracion.EMISORES if editando else (TabConfiguracion.desde_query(tab))
+    )
     return _pagina_configuracion(
         request,
         service,
         editando=editando,
+        tab=solapa,
         aviso=_AVISOS_CONFIGURACION.get(aviso),
         error=_ERRORES_CONFIGURACION.get(error),
     )

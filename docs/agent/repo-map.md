@@ -179,7 +179,7 @@ OpenAPI is served by FastAPI at `/docs` when the app is running.
 | Styles (single stylesheet: tokens, base, components, page tweaks; no `<style>` in templates) | `facturador/web/static/app.css` |
 | Invoice flow partials | `_datos_factura.html`, `revisar.html`, `detalle.html` |
 | Clients page | `clients.html` |
-| Settings page | `configuracion.html` |
+| Settings page: four tabs chosen by `?tab=` (`TabConfiguracion`: emisores, backup, maquinas, s3; unknown or missing falls back to emisores; each action redirects back to its tab with `url_configuracion`) | `configuracion.html` (shell and tab bar), `_configuracion_emisores.html`, `_configuracion_backup.html`, `_configuracion_maquinas.html`, `_configuracion_s3.html`, `tests/test_web_configuracion_tabs.py` |
 | Invoice list | `comprobantes.html`, `_listado.html` |
 | Orden de pago del banco (Comprobantes → Autorizadas → tildar → une Facturas E + invoices de la recaudadora con pypdf; nada subido se guarda) | `facturador/orden_pago.py` (nombres, normalización, unión), `InvoiceService.*orden_pago*` en `facturador/service.py`, `facturador/web/orden_pago.py`, `facturador/api/upload_limit.py` (tope 413 + sin spool a disco), `orden_pago.html`, `_descarga_pdf.html` (también para `<form>`), `tests/test_orden_pago.py` |
 | Billing summary (Comprobantes → Resumen: authorized totals per month, client and currency, server-side SVG chart) | `facturador/resumen.py`, `facturador/web/grafico.py`, `resumen.html`, `_vistas_comprobantes.html`, `tests/test_resumen.py` |
@@ -222,7 +222,7 @@ split between `emisores` and global backup `settings` is easy to miss.
 | Schema (`emisores`, `settings`) | `facturador/schema.sql` (baseline v1) |
 | Schema migrations + FK pragma | `facturador/migrations/`, `facturador/db.py` |
 | Migration / integrity tests | `tests/test_migrations.py` |
-| Config UI | `facturador/web/routes/configuracion.py` (page), `emisores.py`, `backups.py` (actions), `configuracion.html` |
+| Config UI | `facturador/web/routes/configuracion.py` (page), `emisores.py`, `backups.py` (actions), `configuracion.html` and its `_configuracion_*.html` tab partials |
 | Runtime emisor resolution | `facturador/service.py` / `load_settings(conn)` |
 | Tests | `tests/test_settings.py` |
 
@@ -260,7 +260,7 @@ which one operates; PV selection when more than one is enabled. See
 | S3 seed adapter (`seed.age` + `recipients.txt`) | `facturador/s3_seed.py`, `tests/test_s3_seed.py` |
 | Profile diagnostics page | `facturador/diagnostics.py`, `facturador/web/templates/diagnostico.html`, `tests/test_diagnostics.py` |
 | Seed backup trigger / retry state | `facturador/seed_backup_sync.py`, `facturador/api/backup.py`, `tests/test_seed_backup_sync.py` |
-| Configuración → Backups: this machine's age identity (`<app-data>/age/key.txt`, private part never read), machines with access (`recipients.txt` add/remove keeping comments), "Hacer backup ahora" | `facturador/age_identity.py`, `facturador/backup_machines.py`, `facturador/service.py`, `facturador/web/routes/backups.py`, `facturador/web/routes/configuracion.py`, `configuracion.html`, `tests/test_backup_machines.py` |
+| Configuración → Backups: this machine's age identity (`<app-data>/age/key.txt`, private part never read), machines with access (`recipients.txt` add/remove keeping comments), "Hacer backup ahora" | `facturador/age_identity.py`, `facturador/backup_machines.py`, `facturador/service.py`, `facturador/web/routes/backups.py`, `facturador/web/routes/configuracion.py`, `configuracion.html` and `_configuracion_backup.html` / `_configuracion_maquinas.html` / `_configuracion_s3.html`, `tests/test_backup_machines.py`, `tests/test_web_configuracion_tabs.py` |
 | Rebuild from ARCA / catch-up | `facturador/reconstruct.py`, `facturador/seed_import.py`, `facturador/restore.py`, `facturador/launcher/restore_flow.py`, `facturador/api/registry.py` |
 | Gap vs error (WSFEX 1521) | [`docs/wsfex-gap-vs-error.md`](../wsfex-gap-vs-error.md) |
 | Restore CLI (seed + rebuild) | `facturador/restore.py` (`python -m facturador.restore`) |

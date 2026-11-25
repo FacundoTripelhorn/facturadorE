@@ -1,0 +1,25 @@
+<section class="card backups">
+  <h2>Bucket S3 <span class="sub">opcional</span></h2>
+  <div class="cuerpo">
+  <form method="post" action="/ui/configuracion/backup">
+    {% include "_csrf_field.html" %}
+    <div class="fila">
+      <div>
+        <label for="backup_s3_bucket">Bucket S3</label>
+        <input id="backup_s3_bucket" name="backup_s3_bucket"
+               placeholder="vacío = el backup queda solo local"
+               value="{{ s.backup_s3_bucket }}">
+      </div>
+      <div>
+        <label for="backup_s3_prefix">Prefijo en el bucket</label>
+        <input id="backup_s3_prefix" name="backup_s3_prefix"
+               value="{{ s.backup_s3_prefix }}">
+      </div>
+    </div>
+    <p class="nota">El backup se cifra en esta máquina con las claves públicas
+    de las máquinas con acceso: solo ellas pueden abrirlo. El bucket recibe el
+    archivo ya cifrado.</p>
+    <button type="submit">Guardar backups</button>
+  </form>
+  </div>
+</section>

@@ -284,7 +284,7 @@ button.pildora-env:focus-visible {
   border-bottom: 1px solid var(--borde); background: var(--superficie-sutil);
   display: flex; align-items: baseline; gap: .6rem;
 }
-.card > h2 .sub { color: var(--tinta-suave); font-weight: 450; font-size: .85rem; }
+.card > h2 .sub, .form-colapsable > summary h2 .sub { color: var(--tinta-suave); font-weight: 450; font-size: .85rem; }
 .card .cuerpo { padding: 1.25rem 1.5rem 1.5rem; }
 @media (max-width: 640px) {
   .card .cuerpo { padding: 1rem; }
@@ -603,3 +603,13 @@ table.maquinas form { margin: 0; text-align: right; }
   .form-colapsable > summary { padding: 1rem; }
 }
 /* ---- Formulario colapsable (fin) ---- */
+
+/* ==== Configuración: solapas (inicio) ==== */
+.form-colapsable > summary h2 .sub { margin-left: .4rem; }
+.tabs-configuracion { margin-bottom: 1rem; overflow-x: auto; flex-wrap: nowrap;
+                      border: 1px solid var(--borde); border-radius: 8px; }
+.tabs-configuracion a { white-space: nowrap; }
+@media (max-width: 640px) {
+  .tabs-configuracion { padding-left: .5rem; padding-right: .5rem; }
+}
+/* ==== Configuración: solapas (fin) ==== */

@@ -97,6 +97,46 @@ class ErrorConfiguracion(StrEnum):
     BACKUP = "backup"
 
 
+class TabConfiguracion(StrEnum):
+    """Solapas de ``/configuracion`` (``?tab=<valor>``)."""
+
+    EMISORES = "emisores"
+    BACKUP = "backup"
+    MAQUINAS = "maquinas"
+    S3 = "s3"
+
+    @classmethod
+    def desde_query(cls, valor: str) -> TabConfiguracion:
+        """La solapa pedida; una ausente o desconocida (link viejo o armado a
+        mano) es EMISORES. El valor de la URL nunca llega a un redirect sin
+        pasar por acá."""
+        try:
+            return cls(valor)
+        except ValueError:
+            return cls.EMISORES
+
+
+TITULOS_TAB_CONFIGURACION: dict[TabConfiguracion, str] = {
+    TabConfiguracion.EMISORES: "Emisores",
+    TabConfiguracion.BACKUP: "Backup",
+    TabConfiguracion.MAQUINAS: "Máquinas con acceso",
+    TabConfiguracion.S3: "S3",
+}
+
+
+class ClaveConfiguracion(StrEnum):
+    """Claves del query string de ``/configuracion``."""
+
+    TAB = "tab"
+    EDIT = "edit"
+    AVISO = "aviso"
+    ERROR = "error"
+
+
+# Id (y fragmento de URL) de la tarjeta de la solapa Backup.
+ANCLA_BACKUPS = "backups"
+
+
 class TabComprobantes(StrEnum):
     """Solapas de ``/comprobantes`` (``?estado=<valor>``)."""
 
