@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - run: just check
 
   test:
@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: FacundoTripelhorn/agent-standards/setup-just@18286187ac1a26df973ada1a1f0dccd00daf6f5f # v0.9.0
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       # age/age-keygen: el seed se cifra a recipients; los tests
       # ejercitan round-trip real (sin loguear plaintext/secretos).
       # Binario oficial del release (versión y checksum fijos): el paquete
