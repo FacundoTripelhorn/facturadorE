@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="panel error">
+  <div>{{ error }}</div>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2>Orden de pago <span class="sub">Paso 1 de 2: elegir el cliente</span></h2>
+  {% if not clientes %}
+  <div class="cuerpo">
+    <p class="vacio">No hay clientes cargados. <a href="/clientes">Crear el primero</a> para armar una orden de pago.</p>
+  </div>
+  {% else %}
+  <form class="cuerpo" method="get" action="/orden-de-pago/nueva">
+    <label for="cliente">Cliente</label>
+    <div class="selector-cliente">
+      <select id="cliente" name="cliente" required aria-describedby="ayuda-cliente">
+        <option value=""{% if not preseleccionado_id %} selected{% endif %}>Elegí un cliente</option>
+        {% for c in clientes %}
+        <option value="{{ c['id'] }}"{% if c['id'] == preseleccionado_id %} selected{% endif %}>{{ c["razon_social"] }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Ver facturas</button>
+    </div>
+    <p class="nota" id="ayuda-cliente">Una orden de pago es de un solo cliente: primero se elige el cliente y después sus facturas autorizadas.</p>
+  </form>
+  {% endif %}
+</section>
+
+{% if cliente %}
+<section class="card">
+  <h2>Facturas autorizadas <span class="sub">Paso 2 de 2: {{ cliente["razon_social"] }}</span></h2>
+  {% if not facturas %}
+  <p class="vacio">Este cliente todavía no tiene facturas autorizadas.</p>
+  {% else %}
+  <form method="get" action="/orden-de-pago" id="form-orden" data-max="{{ max_facturas }}">
+    <div class="barra-orden">
+      <button type="submit" id="armar-orden"{% if not marcadas %} disabled{% endif %}>
+        Armar orden de pago (<span id="conteo-orden" class="num">{{ marcadas | length }}</span>)
+      </button>
+      <span class="nota" id="aviso-orden" role="status"></span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="facturas-orden">
+        <thead>
+          <tr>
+            <th class="col-elegir"><span class="solo-lectores">Elegir para la orden de pago</span></th>
+            <th>Fecha</th><th>Comprobante</th><th class="num">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in facturas %}
+          {% set numero = "%05d"|format(f["punto_venta"]) ~ "-" ~ "%08d"|format(f["cbte_nro"]) %}
+          <tr>
+            <td class="col-elegir">
+              <input type="checkbox" name="ids" value="{{ f['id'] }}"
+                     data-cliente="{{ f['client_id'] or '' }}"
+                     data-receptor="{{ receptores[f['id']] }}"
+                     {% if f["id"] in marcadas %}checked{% endif %}
+                     aria-label="Elegir {{ numero }}">
+            </td>
+            <td class="num">{{ f["fecha_cbte"] | fecha }}</td>
+            <td class="num"><a href="/facturas/{{ f['id'] }}">{{ numero }}</a></td>
+            <td class="num">{{ f["moneda_id"] | moneda }} {{ f["imp_total"] | importe }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nota nota-orden">Una orden admite hasta {{ max_facturas }} facturas.</p>
+  </form>
+  <script>
+  (function () {
+    var form = document.getElementById("form-orden");
+    var boton = document.getElementById("armar-orden");
+    var conteo = document.getElementById("conteo-orden");
+    var aviso = document.getElementById("aviso-orden");
+    var max = parseInt(form.getAttribute("data-max"), 10);
+
+    // Misma regla que facturador/orden_pago.py::mismo_cliente (el backend la
+    // repite): un solo client_id y, si alguna factura no lo tiene (reconstruida
+    // desde ARCA), además el mismo receptor en el snapshot de todas.
+    function actualizar() {
+      var elegidas = form.querySelectorAll("input[name=ids]:checked");
+      var n = elegidas.length;
+      var ids = {}, receptores = {}, sinId = false;
+      elegidas.forEach(function (c) {
+        var id = c.getAttribute("data-cliente");
+        if (id) { ids[id] = true; } else { sinId = true; }
+        receptores[c.getAttribute("data-receptor")] = true;
+      });
+      var mezcla = Object.keys(ids).length > 1 ||
+        (sinId && Object.keys(receptores).length > 1);
+      var demasiadas = n > max;
+      conteo.textContent = n;
+      boton.disabled = n === 0 || demasiadas || mezcla;
+      aviso.textContent = mezcla ? "Elegí facturas de un solo cliente"
+        : demasiadas ? "Elegí hasta " + max + " facturas" : "";
+    }
+
+    form.addEventListener("change", actualizar);
+    actualizar();
+  })();
+  </script>
+  {% endif %}
+</section>
+{% endif %}
+
+{% endblock %}

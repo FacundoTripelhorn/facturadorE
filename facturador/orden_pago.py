@@ -20,6 +20,7 @@ import sqlite3
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
@@ -29,6 +30,16 @@ from pypdf.errors import PdfReadError
 # (ver ``facturador.api.app``), así que lo subido no toca el disco.
 MAX_PDF_BYTES = 10 * 1024 * 1024
 MAX_UPLOAD_BYTES = 30 * 1024 * 1024
+
+
+class RutaOrdenPago(StrEnum):
+    """Rutas de la orden de pago del banco (pantallas y descargas)."""
+
+    PANTALLA = "/orden-de-pago"
+    NUEVA = "/orden-de-pago/nueva"
+    FACTURAS_E = "/orden-de-pago/facturas-e"
+    RECAUDADORA = "/ui/orden-de-pago/recaudadora"
+
 
 _DIGITOS = re.compile(r"[0-9]+")
 # Lo que puede ir en el nombre del archivo como número de un invoice.
@@ -51,6 +62,13 @@ def _normalizar(texto: object) -> str:
     return " ".join(str(texto or "").split()).casefold()
 
 
+def _identidad(cuit_pais: object, id_impositivo: object, nombre: object) -> str:
+    impositivo = _normalizar(id_impositivo)
+    if impositivo:
+        return f"fiscal:{cuit_pais}:{impositivo}"
+    return f"nombre:{cuit_pais}:{_normalizar(nombre)}"
+
+
 def identidad_receptor(factura: sqlite3.Row) -> str:
     """Receptor según el snapshot de la factura, que ARCA también guarda.
 
@@ -58,10 +76,37 @@ def identidad_receptor(factura: sqlite3.Row) -> str:
     ARCA (que no tiene ``client_id``): CUIT país + ID impositivo, o el
     nombre si el cliente no tiene ID impositivo.
     """
-    impositivo = _normalizar(factura["id_impositivo"])
-    if impositivo:
-        return f"fiscal:{factura['cuit_pais_cliente']}:{impositivo}"
-    return f"nombre:{factura['cuit_pais_cliente']}:{_normalizar(factura['cliente'])}"
+    return _identidad(
+        factura["cuit_pais_cliente"], factura["id_impositivo"], factura["cliente"]
+    )
+
+
+def identidad_cliente(cliente: sqlite3.Row) -> str:
+    """Lo mismo que ``identidad_receptor``, con los datos actuales del cliente."""
+    return _identidad(
+        cliente["cuit_pais"], cliente["id_impositivo"], cliente["razon_social"]
+    )
+
+
+def facturas_del_cliente(
+    cliente: sqlite3.Row, candidatas: Sequence[sqlite3.Row]
+) -> list[sqlite3.Row]:
+    """Las ``candidatas`` que son del cliente, en el mismo orden.
+
+    Son suyas las que tienen su ``client_id``. Las reconstruidas desde ARCA
+    no tienen ``client_id``: cuentan como suyas si su receptor coincide con
+    el del cliente o con el de alguna factura que sí lleva su id. Las de
+    otro ``client_id`` nunca entran.
+    """
+    propias = [f for f in candidatas if f["client_id"] == cliente["id"]]
+    identidades = {identidad_cliente(cliente)}
+    identidades.update(identidad_receptor(f) for f in propias)
+    return [
+        f
+        for f in candidatas
+        if f["client_id"] == cliente["id"]
+        or (not f["client_id"] and identidad_receptor(f) in identidades)
+    ]
 
 
 def mismo_cliente(facturas: Sequence[sqlite3.Row]) -> bool:

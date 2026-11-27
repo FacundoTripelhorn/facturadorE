@@ -19,13 +19,14 @@ from fpdf import FPDF
 from pypdf import PdfReader, PdfWriter
 from starlette import formparsers
 
-from facturador import repo
 from facturador.api.setup_guard import is_html_ui_route, requires_ready_profile
 from facturador.migrations import MIGRATIONS, current_version, migrate
 from facturador.orden_pago import (
     MAX_UPLOAD_BYTES,
     OrdenPagoError,
     PdfSubido,
+    facturas_del_cliente,
+    identidad_cliente,
     identidad_receptor,
     mismo_cliente,
     nombre_facturas_e,
@@ -203,49 +204,6 @@ def _subir(api, ids, archivos, numeros, cuenta="recaudadora"):
     return api.post("/ui/orden-de-pago/recaudadora", data=form, files=files)
 
 
-# --- Comprobantes: selección ---------------------------------------------------
-
-
-def test_solapa_autorizadas_ofrece_checkbox_y_boton(api, tres_autorizadas):
-    borrador = _generar_borrador(api)
-    html = api.get("/comprobantes?estado=autorizadas").text
-
-    assert html.count('type="checkbox" name="ids"') == 3
-    for invoice_id in tres_autorizadas:
-        assert f'value="{invoice_id}"' in html
-    assert borrador not in html
-    assert 'id="armar-orden" disabled' in html
-    assert "Armar orden de pago (" in html
-    assert 'action="/orden-de-pago"' in html
-    assert "Elegí facturas de un solo cliente" in html  # aviso de mezcla (JS)
-
-
-def test_otras_solapas_no_tienen_seleccion(api, tres_autorizadas):
-    _generar_borrador(api)
-    for estado in ("todas", "borradores", "atencion"):
-        html = api.get(f"/comprobantes?estado={estado}").text
-        assert 'type="checkbox" name="ids"' not in html
-        assert "armar-orden" not in html
-
-
-def test_checkbox_lleva_el_cliente_para_detectar_mezcla(api, arca):
-    _crear_cliente_por_form(api)
-    _crear_cliente_por_form(api, **OTRO_CLIENTE)
-    uno = _autorizada(api)
-    otro = _autorizada(api, client_id=_client_id(api, "OTRO CLIENTE S.A."))
-
-    html = api.get("/comprobantes?estado=autorizadas").text
-
-    for invoice_id in (uno, otro):
-        factura = repo.get_invoice(api.conn, invoice_id)
-        assert f'data-cliente="{factura["client_id"]}"' in html
-        assert f'data-receptor="{identidad_receptor(factura)}"' in html
-    assert (
-        repo.get_invoice(api.conn, uno)["client_id"]
-        != repo.get_invoice(api.conn, otro)["client_id"]
-    )
-
-
 def _como_reconstruida(api, invoice_id: str) -> None:
     """Deja la factura como la deja el rebuild desde ARCA: sin client_id."""
     api.conn.execute("UPDATE invoices SET client_id = NULL WHERE id = ?", (invoice_id,))
@@ -259,9 +217,6 @@ def test_reconstruida_y_nueva_del_mismo_cliente_se_pueden_unir(api, arca):
     vieja = _autorizada(api)
     nueva = _autorizada(api)
     _como_reconstruida(api, vieja)
-
-    html = api.get("/comprobantes?estado=autorizadas").text
-    assert 'data-cliente=""' in html  # la reconstruida, sin id
 
     pagina = api.get(f"/orden-de-pago?ids={vieja}&ids={nueva}")
     assert pagina.status_code == 200, pagina.text
@@ -313,6 +268,56 @@ def _fila(client_id, cliente="ACME", id_impositivo="RUT 1", cuit_pais=1):
 )
 def test_mismo_cliente(facturas, esperado):
     assert mismo_cliente(facturas) is esperado
+
+
+def _cliente(client_id="c1", razon_social="ACME", id_impositivo="RUT 1", cuit_pais=1):
+    return {
+        "id": client_id,
+        "razon_social": razon_social,
+        "id_impositivo": id_impositivo,
+        "cuit_pais": cuit_pais,
+    }
+
+
+def _con_id(factura_id, client_id, **datos):
+    return {**_fila(client_id, **datos), "id": factura_id}
+
+
+def test_identidad_del_cliente_coincide_con_la_de_su_factura():
+    assert identidad_cliente(_cliente()) == identidad_receptor(_fila("c1"))
+    sin_impositivo = _cliente(id_impositivo="", razon_social="Acme ")
+    assert identidad_cliente(sin_impositivo) == identidad_receptor(
+        _fila("c1", "ACME", "")
+    )
+
+
+@pytest.mark.parametrize(
+    ("candidatas", "esperadas"),
+    [
+        # Solo las del cliente, en el mismo orden.
+        ([_con_id("a", "c1"), _con_id("b", "c2"), _con_id("c", "c1")], ["a", "c"]),
+        # Reconstruida con el mismo receptor: es del cliente.
+        ([_con_id("a", None), _con_id("b", "c1")], ["a", "b"]),
+        ([_con_id("a", ""), _con_id("b", "c1")], ["a", "b"]),
+        # Reconstruida de otro receptor: no.
+        ([_con_id("a", None, id_impositivo="RUT 2"), _con_id("b", "c1")], ["b"]),
+        ([_con_id("a", None, cuit_pais=2), _con_id("b", "c1")], ["b"]),
+        # Otro cliente con el mismo receptor: nunca, tiene su propio id.
+        ([_con_id("a", "c2"), _con_id("b", "c1")], ["b"]),
+        # Receptor del snapshot de una factura propia (el cliente se renombró).
+        (
+            [
+                _con_id("a", "c1", cliente="ACME VIEJO", id_impositivo="RUT 9"),
+                _con_id("b", None, cliente="ACME VIEJO", id_impositivo="RUT 9"),
+            ],
+            ["a", "b"],
+        ),
+        ([], []),
+    ],
+)
+def test_facturas_del_cliente(candidatas, esperadas):
+    elegidas = facturas_del_cliente(_cliente(), candidatas)
+    assert [f["id"] for f in elegidas] == esperadas
 
 
 # --- Pantalla "Orden de pago" -------------------------------------------------
@@ -587,6 +592,8 @@ def test_orden_de_pago_exige_perfil_listo():
     assert requires_ready_profile("POST", "/ui/orden-de-pago/recaudadora")
     # La pantalla redirige a /setup; las descargas responden JSON.
     assert is_html_ui_route("GET", "/orden-de-pago")
+    assert requires_ready_profile("GET", "/orden-de-pago/nueva")
+    assert is_html_ui_route("GET", "/orden-de-pago/nueva")
     assert not is_html_ui_route("GET", "/orden-de-pago/facturas-e")
     assert not is_html_ui_route("POST", "/ui/orden-de-pago/recaudadora")
 

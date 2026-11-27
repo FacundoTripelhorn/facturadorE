@@ -28,7 +28,6 @@ from ...diagnostics import Nivel
 from ...launcher.switch import (
     is_launcher_supervised,
 )
-from ...orden_pago import identidad_receptor
 from ..constants import (
     REVISAR,
     Accion,
@@ -185,7 +184,6 @@ templates.env.globals["NIVEL_BADGE"] = {
     Nivel.BLOQUEA: "error",
 }
 templates.env.globals["AUTHORIZED"] = InvoiceStatus.AUTHORIZED
-templates.env.globals["identidad_receptor"] = identidad_receptor
 templates.env.globals["DRAFT"] = InvoiceStatus.DRAFT
 templates.env.globals["UNKNOWN"] = InvoiceStatus.UNKNOWN
 # Presentación de moneda: DOL → USD etc.; hacia ARCA siempre viaja el código.

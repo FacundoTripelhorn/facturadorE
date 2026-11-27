@@ -613,3 +613,13 @@ table.maquinas form { margin: 0; text-align: right; }
   .tabs-configuracion { padding-left: .5rem; padding-right: .5rem; }
 }
 /* ==== Configuración: solapas (fin) ==== */
+
+/* ==== Orden de pago: elegir cliente y facturas (inicio) ==== */
+.selector-cliente { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
+.selector-cliente select { flex: 1; min-width: 14rem; max-width: 30rem; width: auto; }
+.selector-cliente button { margin: 0; }
+.card .nota-orden { margin: 0; padding: .9rem 1.5rem 1.25rem; }
+@media (max-width: 640px) {
+  .card .nota-orden { padding: .8rem 1rem 1rem; }
+}
+/* ==== Orden de pago: elegir cliente y facturas (fin) ==== */
